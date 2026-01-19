@@ -101,52 +101,80 @@
             'Amarillo': '#ffff33', 'Cian': '#33ffff', 'Magenta': '#ff33ff', 'Blanco': '#ffffff'
         };
 
-        document.getElementById('threshold').addEventListener('input', (e) => {
-            document.getElementById('thresholdValue').textContent = e.target.value;
-            actualizar();
-        });
+        let currentConfig = { threshold: 50, colorB: 'Rojo', colorG: 'Verde' };
 
-        function actualizar() {
-            fetch('/api/sensor/latest/RIEGO_001').then(r => r.json()).then(data => {
+        // Cargar configuración UNA SOLA VEZ al inicio
+        async function cargarConfiguracion() {
+            try {
+                const res = await fetch('/api/config/RIEGO_001');
+                const cfg = await res.json();
+                currentConfig.threshold = parseFloat(cfg.humidity_low_threshold);
+                currentConfig.colorB = cfg.humidity_low_color;
+                currentConfig.colorG = cfg.humidity_good_color;
+                
+                document.getElementById('threshold').value = currentConfig.threshold;
+                document.getElementById('thresholdValue').textContent = currentConfig.threshold;
+                document.getElementById('colorBaja').value = currentConfig.colorB;
+                document.getElementById('colorBuena').value = currentConfig.colorG;
+            } catch (e) {
+                console.log('Error cargando config');
+            }
+        }
+
+        // Actualizar SOLO sensores (sin tocar configuración)
+        async function actualizarSensores() {
+            try {
+                const res = await fetch('/api/sensor/latest/RIEGO_001');
+                const data = await res.json();
+                
                 document.getElementById('temp').textContent = parseFloat(data.temperature).toFixed(1);
                 document.getElementById('humidity').textContent = parseFloat(data.humidity).toFixed(1);
                 document.getElementById('rain').textContent = parseFloat(data.rain_level).toFixed(2);
                 document.getElementById('update').textContent = new Date().toLocaleTimeString();
 
-                fetch('/api/config/RIEGO_001').then(r => r.json()).then(cfg => {
-                    const threshold = parseFloat(cfg.humidity_low_threshold);
-                    const colorB = cfg.humidity_low_color;
-                    const colorG = cfg.humidity_good_color;
-                    
-                    document.getElementById('threshold').value = threshold;
-                    document.getElementById('thresholdValue').textContent = threshold;
-                    document.getElementById('colorBaja').value = colorB;
-                    document.getElementById('colorBuena').value = colorG;
-
-                    const color = parseFloat(data.humidity) < threshold ? colorMap[colorB] : colorMap[colorG];
-                    for (let i = 1; i <= 4; i++) {
-                        document.getElementById(`led${i}`).style.background = color;
-                        document.getElementById(`led${i}`).style.boxShadow = `0 0 20px ${color}`;
-                    }
-                });
-            });
+                // Usar configuración guardada para LEDs
+                const color = parseFloat(data.humidity) < currentConfig.threshold ? colorMap[currentConfig.colorB] : colorMap[currentConfig.colorG];
+                for (let i = 1; i <= 4; i++) {
+                    document.getElementById(`led${i}`).style.background = color;
+                    document.getElementById(`led${i}`).style.boxShadow = `0 0 20px ${color}`;
+                }
+            } catch (e) {
+                console.log('Error actualizando sensores');
+            }
         }
+
+        document.getElementById('threshold').addEventListener('input', (e) => {
+            document.getElementById('thresholdValue').textContent = e.target.value;
+            currentConfig.threshold = parseFloat(e.target.value);
+            actualizarSensores();
+        });
+
+        document.getElementById('colorBaja').addEventListener('change', (e) => {
+            currentConfig.colorB = e.target.value;
+            actualizarSensores();
+        });
+
+        document.getElementById('colorBuena').addEventListener('change', (e) => {
+            currentConfig.colorG = e.target.value;
+            actualizarSensores();
+        });
 
         async function guardar() {
             const res = await fetch('/api/config/RIEGO_001', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    humidity_low_threshold: parseFloat(document.getElementById('threshold').value),
-                    humidity_low_color: document.getElementById('colorBaja').value,
-                    humidity_good_color: document.getElementById('colorBuena').value
+                    humidity_low_threshold: currentConfig.threshold,
+                    humidity_low_color: currentConfig.colorB,
+                    humidity_good_color: currentConfig.colorG
                 })
             });
             if (res.ok) alert('✅ Guardado'); else alert('❌ Error');
         }
 
-        actualizar();
-        setInterval(actualizar, 5000);
+        cargarConfiguracion();
+        actualizarSensores();
+        setInterval(actualizarSensores, 5000);
     </script>
 </body>
 </html>
