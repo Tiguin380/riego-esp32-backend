@@ -1,7 +1,0 @@
-{
-  "services": {
-    "riego-esp32-backend": {
-      "source": "."
-    }
-  }
-}
