@@ -237,7 +237,7 @@
             margin: 0 5px;
             border: 2px solid #ddd;
             vertical-align: middle;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
         }
     </style>
 </head>
@@ -347,21 +347,27 @@
         document.getElementById('deviceCode').textContent = deviceCode;
 
         const colorMap = {
-            'Rojo': '#ff0000',
-            'Verde': '#00ff00',
-            'Azul': '#0000ff',
-            'Amarillo': '#ffff00',
-            'Cian': '#00ffff',
-            'Magenta': '#ff00ff',
+            'Rojo': '#ff3333',
+            'Verde': '#33ff33',
+            'Azul': '#3366ff',
+            'Amarillo': '#ffff33',
+            'Cian': '#33ffff',
+            'Magenta': '#ff33ff',
             'Blanco': '#ffffff'
         };
 
         document.getElementById('colorCritical').addEventListener('change', (e) => {
             document.getElementById('colorCriticalPreview').style.background = colorMap[e.target.value];
+            updateLEDPreview(parseFloat(document.getElementById('humidity').textContent), parseFloat(document.getElementById('humiditySlider').value), e.target.value, document.getElementById('colorLow').value);
         });
 
         document.getElementById('colorLow').addEventListener('change', (e) => {
             document.getElementById('colorLowPreview').style.background = colorMap[e.target.value];
+            updateLEDPreview(parseFloat(document.getElementById('humidity').textContent), parseFloat(document.getElementById('humiditySlider').value), document.getElementById('colorCritical').value, e.target.value);
+        });
+
+        document.getElementById('humiditySlider').addEventListener('change', (e) => {
+            updateLEDPreview(parseFloat(document.getElementById('humidity').textContent), parseFloat(e.target.value), document.getElementById('colorCritical').value, document.getElementById('colorLow').value);
         });
 
         document.getElementById('humiditySlider').addEventListener('input', (e) => {
@@ -417,10 +423,10 @@
         }
 
         function updateLEDPreview(humidity, threshold, colorBaja, colorBuena) {
-            const color = humidity < threshold ? colorMap[colorBaja] || '#ff0000' : colorMap[colorBuena] || '#00ff00';
+            const color = humidity < threshold ? colorMap[colorBaja] || '#ff3333' : colorMap[colorBuena] || '#33ff33';
             for (let i = 1; i <= 4; i++) {
                 document.getElementById(`led${i}`).style.background = color;
-                document.getElementById(`led${i}`).style.boxShadow = `0 0 15px ${color}`;
+                document.getElementById(`led${i}`).style.boxShadow = `0 0 25px ${color}, 0 0 40px ${color}`;
             }
         }
 
