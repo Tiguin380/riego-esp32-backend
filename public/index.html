@@ -368,15 +368,12 @@
             document.getElementById('humidityValue').textContent = e.target.value;
         });
 
-        async function loadSensorData() {
+        // Cargar configuración una sola vez
+        async function loadConfiguration() {
             try {
-                const response = await fetch(`/api/sensor/latest/${deviceCode}`);
+                const response = await fetch(`/api/config/${deviceCode}`);
                 if (!response.ok) return;
                 const data = await response.json();
-                
-                document.getElementById('temperature').textContent = parseFloat(data.temperature).toFixed(1);
-                document.getElementById('humidity').textContent = parseFloat(data.humidity).toFixed(1);
-                document.getElementById('rain').textContent = parseFloat(data.rain_level).toFixed(2);
                 
                 if (data.humidity_low_threshold) {
                     document.getElementById('humiditySlider').value = parseFloat(data.humidity_low_threshold);
@@ -390,8 +387,29 @@
                     document.getElementById('colorLow').value = data.humidity_good_color;
                     document.getElementById('colorLowPreview').style.background = colorMap[data.humidity_good_color] || '#00ff00';
                 }
+            } catch (error) {
+                console.error('Error cargando configuración:', error);
+            }
+        }
 
-                updateLEDPreview(parseFloat(data.humidity), parseFloat(data.humidity_low_threshold), data.humidity_low_color, data.humidity_good_color);
+        // Actualizar solo datos de sensores (sin tocar la configuración)
+        async function loadSensorData() {
+            try {
+                const response = await fetch(`/api/sensor/latest/${deviceCode}`);
+                if (!response.ok) return;
+                const data = await response.json();
+                
+                document.getElementById('temperature').textContent = parseFloat(data.temperature).toFixed(1);
+                document.getElementById('humidity').textContent = parseFloat(data.humidity).toFixed(1);
+                document.getElementById('rain').textContent = parseFloat(data.rain_level).toFixed(2);
+
+                // Obtener configuración guardada para mostrar LEDs correctamente
+                const configResponse = await fetch(`/api/config/${deviceCode}`);
+                if (configResponse.ok) {
+                    const configData = await configResponse.json();
+                    updateLEDPreview(parseFloat(data.humidity), parseFloat(configData.humidity_low_threshold), configData.humidity_low_color, configData.humidity_good_color);
+                }
+
                 document.getElementById('lastUpdate').textContent = new Date(data.created_at).toLocaleString();
             } catch (error) {
                 console.error('Error:', error);
@@ -445,6 +463,7 @@
             loadSensorData();
         }
 
+        loadConfiguration();
         loadSensorData();
         setInterval(loadSensorData, 5000);
     </script>
