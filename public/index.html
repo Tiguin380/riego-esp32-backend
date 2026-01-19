@@ -3,68 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Riego Automático</title>
+    <title>Riego Automatico</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background: #f0f0f0; padding: 20px; }
-        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { color: #333; margin-bottom: 30px; text-align: center; }
-        .sensor { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px; }
-        .card { background: #f9f9f9; padding: 15px; border-radius: 8px; border-left: 4px solid #4CAF50; }
-        .label { font-size: 12px; color: #666; text-transform: uppercase; }
-        .value { font-size: 24px; font-weight: bold; color: #333; margin: 10px 0; }
-        .unit { font-size: 14px; color: #999; }
-        .config { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; }
-        .config h2 { font-size: 18px; margin-bottom: 20px; color: #333; }
-        .control { margin-bottom: 15px; }
-        .control label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; }
-        input, select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
-        button { background: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; width: 100%; }
-        button:hover { background: #45a049; }
-        .leds { display: flex; gap: 10px; justify-content: center; margin: 15px 0; }
-        .led { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #ddd; box-shadow: 0 0 20px rgba(0,0,0,0.3); }
-        .status { text-align: center; margin-top: 10px; font-size: 12px; color: #666; }
+        body { font-family: Arial, sans-serif; background: #1a1a2e; color: #eee; padding: 20px; min-height: 100vh; }
+        .container { max-width: 700px; margin: 0 auto; }
+        h1 { color: #4CAF50; margin-bottom: 20px; text-align: center; font-size: 28px; }
+        .section { background: #16213e; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+        .section h2 { color: #4CAF50; font-size: 16px; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .sensor-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        .sensor-card { background: #0f3460; padding: 15px; border-radius: 8px; text-align: center; }
+        .sensor-label { font-size: 11px; color: #888; text-transform: uppercase; margin-bottom: 5px; }
+        .sensor-value { font-size: 32px; font-weight: bold; color: #4CAF50; }
+        .sensor-unit { font-size: 14px; color: #666; }
+        .leds-container { display: flex; justify-content: center; gap: 15px; margin: 20px 0; }
+        .led { width: 40px; height: 40px; border-radius: 50%; border: 3px solid #333; transition: all 0.3s; }
+        .control-row { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
+        .control-row label { flex: 1; color: #aaa; }
+        .control-row input, .control-row select { flex: 2; padding: 10px; border: none; border-radius: 6px; background: #0f3460; color: #fff; font-size: 14px; }
+        .control-row input[type="range"] { -webkit-appearance: none; height: 8px; }
+        .control-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: #4CAF50; border-radius: 50%; cursor: pointer; }
+        .btn-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 15px 0; }
+        .btn { padding: 12px 8px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 12px; transition: transform 0.1s, opacity 0.2s; }
+        .btn:hover { transform: scale(1.05); }
+        .btn:active { transform: scale(0.95); }
+        .btn-rojo { background: #ff3333; color: white; }
+        .btn-verde { background: #33cc33; color: white; }
+        .btn-azul { background: #3366ff; color: white; }
+        .btn-amarillo { background: #ffcc00; color: black; }
+        .btn-cian { background: #00cccc; color: black; }
+        .btn-magenta { background: #cc33cc; color: white; }
+        .btn-blanco { background: #ffffff; color: black; }
+        .btn-off { background: #333; color: #888; }
+        .btn-save { background: #4CAF50; color: white; width: 100%; padding: 15px; font-size: 16px; margin-top: 10px; }
+        .status { text-align: center; font-size: 12px; color: #666; margin-top: 15px; }
+        .status.online { color: #4CAF50; }
+        .status.offline { color: #ff3333; }
+        .current-color { text-align: center; padding: 10px; background: #0f3460; border-radius: 8px; margin: 10px 0; }
+        .current-color span { font-weight: bold; color: #4CAF50; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🌱 Riego Automático</h1>
+        <h1> Riego Automatico ESP32</h1>
         
-        <div class="sensor">
-            <div class="card">
-                <div class="label">Temperatura</div>
-                <div class="value" id="temp">--</div>
-                <div class="unit">°C</div>
-            </div>
-            <div class="card">
-                <div class="label">Humedad</div>
-                <div class="value" id="humidity">--</div>
-                <div class="unit">%</div>
-            </div>
-            <div class="card">
-                <div class="label">Lluvia</div>
-                <div class="value" id="rain">--</div>
-                <div class="unit">V</div>
-            </div>
-            <div class="card">
-                <div class="label">Estado LEDs</div>
-                <div class="leds">
-                    <div class="led" id="led1"></div>
-                    <div class="led" id="led2"></div>
-                    <div class="led" id="led3"></div>
-                    <div class="led" id="led4"></div>
+        <div class="section">
+            <h2> SENSORES EN TIEMPO REAL</h2>
+            <div class="sensor-grid">
+                <div class="sensor-card">
+                    <div class="sensor-label">Temperatura</div>
+                    <div class="sensor-value" id="temp">--</div>
+                    <div class="sensor-unit">C</div>
+                </div>
+                <div class="sensor-card">
+                    <div class="sensor-label">Humedad</div>
+                    <div class="sensor-value" id="humidity">--</div>
+                    <div class="sensor-unit">%</div>
+                </div>
+                <div class="sensor-card">
+                    <div class="sensor-label">Lluvia</div>
+                    <div class="sensor-value" id="rain">--</div>
+                    <div class="sensor-unit">V</div>
                 </div>
             </div>
         </div>
 
-        <div class="config">
-            <h2>⚙️ Configuración</h2>
-            <div class="control">
-                <label>Umbral Humedad Baja: <span id="thresholdValue">50</span>%</label>
-                <input type="range" id="threshold" min="30" max="80" value="50">
+        <div class="section">
+            <h2> CONTROL DE LEDS</h2>
+            <div class="leds-container">
+                <div class="led" id="led1"></div>
+                <div class="led" id="led2"></div>
+                <div class="led" id="led3"></div>
+                <div class="led" id="led4"></div>
             </div>
-            <div class="control">
-                <label>Color Humedad Baja</label>
+            <div class="current-color">Color actual: <span id="colorActual">--</span></div>
+            <div class="btn-grid">
+                <button class="btn btn-rojo" onclick="setColor('Rojo')">ROJO</button>
+                <button class="btn btn-verde" onclick="setColor('Verde')">VERDE</button>
+                <button class="btn btn-azul" onclick="setColor('Azul')">AZUL</button>
+                <button class="btn btn-amarillo" onclick="setColor('Amarillo')">AMARILLO</button>
+                <button class="btn btn-cian" onclick="setColor('Cian')">CIAN</button>
+                <button class="btn btn-magenta" onclick="setColor('Magenta')">MAGENTA</button>
+                <button class="btn btn-blanco" onclick="setColor('Blanco')">BLANCO</button>
+                <button class="btn btn-off" onclick="setColor('Off')">APAGAR</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2> CONFIGURACION AUTOMATICA</h2>
+            <div class="control-row">
+                <label>Umbral Humedad Baja:</label>
+                <input type="range" id="threshold" min="30" max="80" value="50">
+                <span id="thresholdValue" style="width:50px;text-align:right">50%</span>
+            </div>
+            <div class="control-row">
+                <label>Color si Humedad BAJA:</label>
                 <select id="colorBaja">
                     <option value="Rojo">Rojo</option>
                     <option value="Verde">Verde</option>
@@ -75,8 +108,8 @@
                     <option value="Blanco">Blanco</option>
                 </select>
             </div>
-            <div class="control">
-                <label>Color Humedad Buena</label>
+            <div class="control-row">
+                <label>Color si Humedad BUENA:</label>
                 <select id="colorBuena">
                     <option value="Rojo">Rojo</option>
                     <option value="Verde" selected>Verde</option>
@@ -87,41 +120,75 @@
                     <option value="Blanco">Blanco</option>
                 </select>
             </div>
-            <button onclick="guardar()">💾 Guardar Configuración</button>
+            <button class="btn btn-save" onclick="guardar()"> GUARDAR CONFIGURACION</button>
         </div>
 
-        <div class="status">
-            Última actualización: <span id="update">--</span>
-        </div>
+        <div class="status" id="status">Conectando...</div>
     </div>
 
     <script>
         const colorMap = {
             'Rojo': '#ff3333', 'Verde': '#33ff33', 'Azul': '#3366ff',
-            'Amarillo': '#ffff33', 'Cian': '#33ffff', 'Magenta': '#ff33ff', 'Blanco': '#ffffff'
+            'Amarillo': '#ffff00', 'Cian': '#00ffff', 'Magenta': '#ff00ff', 
+            'Blanco': '#ffffff', 'Off': '#222222'
         };
+        
+        let config = { threshold: 50, colorB: 'Rojo', colorG: 'Verde' };
+        let currentLedColor = 'Verde';
 
-        let currentConfig = { threshold: 50, colorB: 'Rojo', colorG: 'Verde' };
+        function updateLeds(color) {
+            const c = colorMap[color] || '#333';
+            for (let i = 1; i <= 4; i++) {
+                document.getElementById('led' + i).style.background = c;
+                document.getElementById('led' + i).style.boxShadow = '0 0 25px ' + c;
+            }
+            document.getElementById('colorActual').textContent = color;
+            document.getElementById('colorActual').style.color = c;
+        }
 
-        // Cargar configuración UNA SOLA VEZ al inicio
-        async function cargarConfiguracion() {
+        async function setColor(color) {
+            currentLedColor = color;
+            updateLeds(color);
+            
+            // Guardar en servidor para que ESP32 lo lea
+            try {
+                await fetch('/api/config/RIEGO_001', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        humidity_low_threshold: config.threshold,
+                        humidity_low_color: color,
+                        humidity_good_color: config.colorG
+                    })
+                });
+                document.getElementById('status').textContent = ' Color enviado: ' + color + ' - ' + new Date().toLocaleTimeString();
+                document.getElementById('status').className = 'status online';
+            } catch(e) {
+                document.getElementById('status').textContent = ' Error enviando color';
+                document.getElementById('status').className = 'status offline';
+            }
+        }
+
+        async function cargarConfig() {
             try {
                 const res = await fetch('/api/config/RIEGO_001');
                 const cfg = await res.json();
-                currentConfig.threshold = parseFloat(cfg.humidity_low_threshold);
-                currentConfig.colorB = cfg.humidity_low_color;
-                currentConfig.colorG = cfg.humidity_good_color;
+                config.threshold = parseFloat(cfg.humidity_low_threshold) || 50;
+                config.colorB = cfg.humidity_low_color || 'Rojo';
+                config.colorG = cfg.humidity_good_color || 'Verde';
                 
-                document.getElementById('threshold').value = currentConfig.threshold;
-                document.getElementById('thresholdValue').textContent = currentConfig.threshold;
-                document.getElementById('colorBaja').value = currentConfig.colorB;
-                document.getElementById('colorBuena').value = currentConfig.colorG;
-            } catch (e) {
+                document.getElementById('threshold').value = config.threshold;
+                document.getElementById('thresholdValue').textContent = config.threshold + '%';
+                document.getElementById('colorBaja').value = config.colorB;
+                document.getElementById('colorBuena').value = config.colorG;
+                
+                currentLedColor = config.colorB;
+                updateLeds(currentLedColor);
+            } catch(e) {
                 console.log('Error cargando config');
             }
         }
 
-        // Actualizar SOLO sensores (sin tocar configuración)
         async function actualizarSensores() {
             try {
                 const res = await fetch('/api/sensor/latest/RIEGO_001');
@@ -130,49 +197,50 @@
                 document.getElementById('temp').textContent = parseFloat(data.temperature).toFixed(1);
                 document.getElementById('humidity').textContent = parseFloat(data.humidity).toFixed(1);
                 document.getElementById('rain').textContent = parseFloat(data.rain_level).toFixed(2);
-                document.getElementById('update').textContent = new Date().toLocaleTimeString();
-
-                // Usar configuración guardada para LEDs
-                const color = parseFloat(data.humidity) < currentConfig.threshold ? colorMap[currentConfig.colorB] : colorMap[currentConfig.colorG];
-                for (let i = 1; i <= 4; i++) {
-                    document.getElementById(`led${i}`).style.background = color;
-                    document.getElementById(`led${i}`).style.boxShadow = `0 0 20px ${color}`;
-                }
-            } catch (e) {
-                console.log('Error actualizando sensores');
+                
+                document.getElementById('status').textContent = ' Online - ' + new Date().toLocaleTimeString();
+                document.getElementById('status').className = 'status online';
+            } catch(e) {
+                document.getElementById('status').textContent = ' Sin conexion';
+                document.getElementById('status').className = 'status offline';
             }
         }
 
         document.getElementById('threshold').addEventListener('input', (e) => {
-            document.getElementById('thresholdValue').textContent = e.target.value;
-            currentConfig.threshold = parseFloat(e.target.value);
-            actualizarSensores();
+            config.threshold = parseInt(e.target.value);
+            document.getElementById('thresholdValue').textContent = config.threshold + '%';
         });
-
+        
         document.getElementById('colorBaja').addEventListener('change', (e) => {
-            currentConfig.colorB = e.target.value;
-            actualizarSensores();
+            config.colorB = e.target.value;
         });
-
+        
         document.getElementById('colorBuena').addEventListener('change', (e) => {
-            currentConfig.colorG = e.target.value;
-            actualizarSensores();
+            config.colorG = e.target.value;
         });
 
         async function guardar() {
-            const res = await fetch('/api/config/RIEGO_001', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    humidity_low_threshold: currentConfig.threshold,
-                    humidity_low_color: currentConfig.colorB,
-                    humidity_good_color: currentConfig.colorG
-                })
-            });
-            if (res.ok) alert('✅ Guardado'); else alert('❌ Error');
+            try {
+                const res = await fetch('/api/config/RIEGO_001', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        humidity_low_threshold: config.threshold,
+                        humidity_low_color: config.colorB,
+                        humidity_good_color: config.colorG
+                    })
+                });
+                if (res.ok) {
+                    alert(' Configuracion guardada!\nEl ESP32 aplicara los cambios en 10 segundos.');
+                } else {
+                    alert(' Error al guardar');
+                }
+            } catch(e) {
+                alert(' Error de conexion');
+            }
         }
 
-        cargarConfiguracion();
+        cargarConfig();
         actualizarSensores();
         setInterval(actualizarSensores, 5000);
     </script>

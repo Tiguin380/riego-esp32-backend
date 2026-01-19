@@ -1,0 +1,235 @@
+esphome:
+  name: riegoesp32001
+  comment: "Riego automático prueba ESP32"
+
+esp32:   # <- Aquí se define la plataforma correcta
+  board: esp32dev
+  framework:
+    type: esp-idf
+    version: recommended
+
+# -------- WiFi --------
+wifi:
+  ssid: "AvanzaFibra_K733"
+  password: "ju4SgPKk"
+  reboot_timeout: 15min
+
+# -------- OTA y API --------
+ota:
+  platform: esphome
+api:
+  password: "ju4SgPKk"
+
+web_server:
+  port: 80
+
+logger:
+
+# -------- HTTP Request --------
+http_request:
+  verify_ssl: false
+
+# -------- Script para enviar datos --------
+script:
+  - id: send_sensor_data
+    then:
+      - http_request.post:
+          url: "https://riego-esp32-backend-production.up.railway.app/api/sensor/data"
+          request_headers:
+            Content-Type: application/json
+          body: !lambda |-
+            char json[512];
+            snprintf(json, sizeof(json), 
+              "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"humidity_low_color\":\"%s\",\"humidity_good_color\":\"%s\"}",
+              id(temp_test).state,
+              id(hum_test).state,
+              id(lluvia_test).state,
+              id(humidity_low).state,
+              id(color_critical).state.c_str(),
+              id(color_low).state.c_str()
+            );
+            return std::string(json);
+
+  - id: fetch_config_from_server
+    then:
+      - http_request.get:
+          url: "https://riego-esp32-backend-production.up.railway.app/api/config/RIEGO_001"
+          on_response:
+            then:
+              - lambda: |-
+                  // Parse color directamente - humidity_low_color es el color a mostrar
+                  std::string color_led = "Verde";
+                  
+                  size_t pos = body.find("humidity_low_color");
+                  if (pos != std::string::npos) {
+                    size_t start = body.find(":", pos);
+                    start = body.find("\"", start) + 1;
+                    size_t end = body.find("\"", start);
+                    color_led = body.substr(start, end - start);
+                  }
+                  
+                  ESP_LOGI("CONFIG", "Color recibido del servidor: %s", color_led.c_str());
+                  
+                  // Convertir color a RGB
+                  float r = 0, g = 0, b = 0;
+                  if (color_led == "Rojo") { r = 1.0; }
+                  else if (color_led == "Verde") { g = 1.0; }
+                  else if (color_led == "Azul") { b = 1.0; }
+                  else if (color_led == "Amarillo") { r = 1.0; g = 1.0; }
+                  else if (color_led == "Cian") { g = 1.0; b = 1.0; }
+                  else if (color_led == "Magenta") { r = 1.0; b = 1.0; }
+                  else if (color_led == "Blanco") { r = 1.0; g = 1.0; b = 1.0; }
+                  
+                  // APLICAR COLOR DIRECTO A LOS LEDS
+                  auto call = id(rgb_test).turn_on();
+                  call.set_rgb(r, g, b);
+                  call.perform();
+                  
+                  ESP_LOGI("LED", "APLICADO: %s -> R:%.0f G:%.0f B:%.0f", color_led.c_str(), r*100, g*100, b*100);
+          on_error:
+            then:
+              - logger.log: "ERROR al obtener configuracion"
+
+# -------- Parámetros configurables --------
+number:
+  - platform: template
+    name: "Humedad Baja"
+    id: humidity_low
+    min_value: 30
+    max_value: 80
+    step: 1
+    initial_value: 50
+    unit_of_measurement: "%"
+    restore_value: true
+    optimistic: true
+
+# -------- Selector de Color --------
+select:
+  - platform: template
+    name: "Humedad Baja - Color"
+    id: color_critical
+    icon: "mdi:palette"
+    options:
+      - "Rojo"
+      - "Verde"
+      - "Azul"
+      - "Amarillo"
+      - "Cian"
+      - "Magenta"
+      - "Blanco"
+    initial_option: "Rojo"
+    restore_value: true
+    optimistic: true
+
+  - platform: template
+    name: "Humedad Buena - Color"
+    id: color_low
+    icon: "mdi:palette"
+    options:
+      - "Rojo"
+      - "Verde"
+      - "Azul"
+      - "Amarillo"
+      - "Cian"
+      - "Magenta"
+      - "Blanco"
+    initial_option: "Verde"
+    restore_value: true
+    optimistic: true
+
+  - platform: template
+    name: "Color Manual LEDs"
+    id: color_manual
+    icon: "mdi:led-on"
+    options:
+      - "Rojo"
+      - "Verde"
+      - "Azul"
+      - "Amarillo"
+      - "Cian"
+      - "Magenta"
+      - "Blanco"
+      - "Automático"
+    initial_option: "Automático"
+    restore_value: true
+    optimistic: true
+
+# -------- I2C para LCD --------
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: True
+
+# -------- Display LCD de prueba --------
+display:
+  - platform: lcd_pcf8574
+    id: lcd_test
+    dimensions: 16x2
+    address: 0x27
+    lambda: |-
+      it.printf(0, 0, "Temp: %.1fC", id(temp_test).state);
+      it.printf(0, 1, "Hum: %.1f%%", id(hum_test).state);
+
+# -------- Sensores --------
+sensor:
+  - platform: dht
+    model: DHT11
+    pin: GPIO17
+    update_interval: 5s
+    temperature:
+      name: "Temp Test"
+      id: temp_test
+    humidity:
+      name: "Hum Test"
+      id: hum_test
+
+  - platform: adc
+    pin: GPIO34
+    name: "Lluvia Test"
+    id: lluvia_test
+    update_interval: 5s
+    filters:
+      - multiply: 3.3
+
+# -------- LED RGB Addressable 6812 (Solo para automations, sin control manual) --------
+light:
+  - platform: esp32_rmt_led_strip
+    rgb_order: GRB
+    pin: GPIO26
+    num_leds: 4
+    chipset: WS2812
+    id: rgb_test
+    internal: true
+    restore_mode: ALWAYS_ON
+
+# -------- Intervalo para enviar datos a Railway --------
+interval:
+  - interval: 5s
+    then:
+      - script.execute: send_sensor_data
+
+  - interval: 10s
+    then:
+      - script.execute: fetch_config_from_server
+
+# -------- BOTÓN DE PRUEBA - FORZAR ROJO --------
+button:
+  - platform: template
+    name: "FORZAR LED ROJO"
+    on_press:
+      then:
+        - lambda: |-
+            auto call = id(rgb_test).turn_on();
+            call.set_rgb(1.0, 0.0, 0.0);
+            call.perform();
+            ESP_LOGI("TEST", "LED FORZADO A ROJO");
+
+  - platform: template
+    name: "FORZAR LED AZUL"
+    on_press:
+      then:
+        - lambda: |-
+            auto call = id(rgb_test).turn_on();
+            call.set_rgb(0.0, 0.0, 1.0);
+            call.perform();
+            ESP_LOGI("TEST", "LED FORZADO A AZUL");
