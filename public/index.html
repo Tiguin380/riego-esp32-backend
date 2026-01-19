@@ -1,1 +1,152 @@
-﻿<!DOCTYPE html><html><head><meta charset=UTF-8><link rel=icon href=data:></head><body><esp-app></esp-app><script src="https://oi.esphome.io/v2/www.js"></script></body></html>
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Riego Automático</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f0f0f0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; margin-bottom: 30px; text-align: center; }
+        .sensor { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px; }
+        .card { background: #f9f9f9; padding: 15px; border-radius: 8px; border-left: 4px solid #4CAF50; }
+        .label { font-size: 12px; color: #666; text-transform: uppercase; }
+        .value { font-size: 24px; font-weight: bold; color: #333; margin: 10px 0; }
+        .unit { font-size: 14px; color: #999; }
+        .config { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; }
+        .config h2 { font-size: 18px; margin-bottom: 20px; color: #333; }
+        .control { margin-bottom: 15px; }
+        .control label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; }
+        input, select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        button { background: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; width: 100%; }
+        button:hover { background: #45a049; }
+        .leds { display: flex; gap: 10px; justify-content: center; margin: 15px 0; }
+        .led { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #ddd; box-shadow: 0 0 20px rgba(0,0,0,0.3); }
+        .status { text-align: center; margin-top: 10px; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌱 Riego Automático</h1>
+        
+        <div class="sensor">
+            <div class="card">
+                <div class="label">Temperatura</div>
+                <div class="value" id="temp">--</div>
+                <div class="unit">°C</div>
+            </div>
+            <div class="card">
+                <div class="label">Humedad</div>
+                <div class="value" id="humidity">--</div>
+                <div class="unit">%</div>
+            </div>
+            <div class="card">
+                <div class="label">Lluvia</div>
+                <div class="value" id="rain">--</div>
+                <div class="unit">V</div>
+            </div>
+            <div class="card">
+                <div class="label">Estado LEDs</div>
+                <div class="leds">
+                    <div class="led" id="led1"></div>
+                    <div class="led" id="led2"></div>
+                    <div class="led" id="led3"></div>
+                    <div class="led" id="led4"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="config">
+            <h2>⚙️ Configuración</h2>
+            <div class="control">
+                <label>Umbral Humedad Baja: <span id="thresholdValue">50</span>%</label>
+                <input type="range" id="threshold" min="30" max="80" value="50">
+            </div>
+            <div class="control">
+                <label>Color Humedad Baja</label>
+                <select id="colorBaja">
+                    <option value="Rojo">Rojo</option>
+                    <option value="Verde">Verde</option>
+                    <option value="Azul">Azul</option>
+                    <option value="Amarillo">Amarillo</option>
+                    <option value="Cian">Cian</option>
+                    <option value="Magenta">Magenta</option>
+                    <option value="Blanco">Blanco</option>
+                </select>
+            </div>
+            <div class="control">
+                <label>Color Humedad Buena</label>
+                <select id="colorBuena">
+                    <option value="Rojo">Rojo</option>
+                    <option value="Verde" selected>Verde</option>
+                    <option value="Azul">Azul</option>
+                    <option value="Amarillo">Amarillo</option>
+                    <option value="Cian">Cian</option>
+                    <option value="Magenta">Magenta</option>
+                    <option value="Blanco">Blanco</option>
+                </select>
+            </div>
+            <button onclick="guardar()">💾 Guardar Configuración</button>
+        </div>
+
+        <div class="status">
+            Última actualización: <span id="update">--</span>
+        </div>
+    </div>
+
+    <script>
+        const colorMap = {
+            'Rojo': '#ff3333', 'Verde': '#33ff33', 'Azul': '#3366ff',
+            'Amarillo': '#ffff33', 'Cian': '#33ffff', 'Magenta': '#ff33ff', 'Blanco': '#ffffff'
+        };
+
+        document.getElementById('threshold').addEventListener('input', (e) => {
+            document.getElementById('thresholdValue').textContent = e.target.value;
+            actualizar();
+        });
+
+        function actualizar() {
+            fetch('/api/sensor/latest/RIEGO_001').then(r => r.json()).then(data => {
+                document.getElementById('temp').textContent = parseFloat(data.temperature).toFixed(1);
+                document.getElementById('humidity').textContent = parseFloat(data.humidity).toFixed(1);
+                document.getElementById('rain').textContent = parseFloat(data.rain_level).toFixed(2);
+                document.getElementById('update').textContent = new Date().toLocaleTimeString();
+
+                fetch('/api/config/RIEGO_001').then(r => r.json()).then(cfg => {
+                    const threshold = parseFloat(cfg.humidity_low_threshold);
+                    const colorB = cfg.humidity_low_color;
+                    const colorG = cfg.humidity_good_color;
+                    
+                    document.getElementById('threshold').value = threshold;
+                    document.getElementById('thresholdValue').textContent = threshold;
+                    document.getElementById('colorBaja').value = colorB;
+                    document.getElementById('colorBuena').value = colorG;
+
+                    const color = parseFloat(data.humidity) < threshold ? colorMap[colorB] : colorMap[colorG];
+                    for (let i = 1; i <= 4; i++) {
+                        document.getElementById(`led${i}`).style.background = color;
+                        document.getElementById(`led${i}`).style.boxShadow = `0 0 20px ${color}`;
+                    }
+                });
+            });
+        }
+
+        async function guardar() {
+            const res = await fetch('/api/config/RIEGO_001', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    humidity_low_threshold: parseFloat(document.getElementById('threshold').value),
+                    humidity_low_color: document.getElementById('colorBaja').value,
+                    humidity_good_color: document.getElementById('colorBuena').value
+                })
+            });
+            if (res.ok) alert('✅ Guardado'); else alert('❌ Error');
+        }
+
+        actualizar();
+        setInterval(actualizar, 5000);
+    </script>
+</body>
+</html>
