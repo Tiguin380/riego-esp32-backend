@@ -157,6 +157,11 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
   }
 });
 
+// Redirigir raíz al panel del dispositivo
+app.get('/', (req, res) => {
+  res.redirect('/panel/RIEGO_001');
+});
+
 // Servir dashboard
 app.get('/panel/:device_code', (req, res) => {
   res.sendFile(__dirname + '/public/index.html');
@@ -168,3 +173,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor escuchando en puerto ${PORT}`);
 });
+
