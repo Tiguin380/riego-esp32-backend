@@ -48,6 +48,18 @@ app.get('/api/init', async (req, res) => {
       )
     `);
 
+    // Crear tabla de configuraci贸n
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS device_config (
+        id UUID PRIMARY KEY,
+        device_id UUID UNIQUE REFERENCES devices(id),
+        humidity_low_threshold DECIMAL(5,2) DEFAULT 50,
+        humidity_low_color VARCHAR(20) DEFAULT 'Rojo',
+        humidity_good_color VARCHAR(20) DEFAULT 'Verde',
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     res.json({ status: 'Base de datos inicializada' });
   } catch (error) {
     console.error(error);
@@ -59,7 +71,7 @@ app.get('/api/init', async (req, res) => {
 app.post('/api/device/register', async (req, res) => {
   try {
     const { device_code, name } = req.body;
-    
+
     let device = await pool.query(
       'SELECT * FROM devices WHERE device_code = $1',
       [device_code]
@@ -85,7 +97,6 @@ app.post('/api/device/register', async (req, res) => {
 app.post('/api/sensor/data', async (req, res) => {
   try {
     const { device_code, temperature, humidity, rain_level, led_status, humidity_low_threshold, humidity_low_color, humidity_good_color } = req.body;
-
     const device = await pool.query(
       'SELECT id FROM devices WHERE device_code = $1',
       [device_code]
@@ -98,7 +109,7 @@ app.post('/api/sensor/data', async (req, res) => {
     const device_id = device.rows[0].id;
 
     await pool.query(
-      `INSERT INTO sensor_data (device_id, temperature, humidity, rain_level, led_status, humidity_low_threshold, humidity_low_color, humidity_good_color) 
+      `INSERT INTO sensor_data (device_id, temperature, humidity, rain_level, led_status, humidity_low_threshold, humidity_low_color, humidity_good_color)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [device_id, temperature, humidity, rain_level, led_status, humidity_low_threshold, humidity_low_color, humidity_good_color]
     );
@@ -157,7 +168,79 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
   }
 });
 
-// Redirigir ra韟 al panel del dispositivo
+// Obtener configuraci贸n del dispositivo
+app.get('/api/config/:device_code', async (req, res) => {
+  try {
+    const { device_code } = req.params;
+
+    const result = await pool.query(
+      `SELECT dc.* FROM device_config dc
+       JOIN devices d ON dc.device_id = d.id
+       WHERE d.device_code = $1`,
+      [device_code]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'No hay configuraci贸n' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Actualizar configuraci贸n del dispositivo
+app.post('/api/config/:device_code', async (req, res) => {
+  try {
+    const { device_code } = req.params;
+    const { humidity_low_threshold, humidity_low_color, humidity_good_color } = req.body;
+
+    // Obtener device_id
+    const device = await pool.query(
+      'SELECT id FROM devices WHERE device_code = $1',
+      [device_code]
+    );
+
+    if (device.rows.length === 0) {
+      return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    }
+
+    const device_id = device.rows[0].id;
+
+    // Verificar si existe configuraci贸n
+    const existing = await pool.query(
+      'SELECT id FROM device_config WHERE device_id = $1',
+      [device_id]
+    );
+
+    if (existing.rows.length === 0) {
+      // Crear nueva configuraci贸n
+      const config_id = uuidv4();
+      await pool.query(
+        `INSERT INTO device_config (id, device_id, humidity_low_threshold, humidity_low_color, humidity_good_color)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [config_id, device_id, humidity_low_threshold, humidity_low_color, humidity_good_color]
+      );
+    } else {
+      // Actualizar configuraci贸n existente
+      await pool.query(
+        `UPDATE device_config 
+         SET humidity_low_threshold = $1, humidity_low_color = $2, humidity_good_color = $3, updated_at = CURRENT_TIMESTAMP
+         WHERE device_id = $4`,
+        [humidity_low_threshold, humidity_low_color, humidity_good_color, device_id]
+      );
+    }
+
+    res.json({ status: 'Configuraci贸n guardada' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Redirigir ra铆z al panel del dispositivo
 app.get('/', (req, res) => {
   res.redirect('/panel/RIEGO_001');
 });
@@ -173,4 +256,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor escuchando en puerto ${PORT}`);
 });
-

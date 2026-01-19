@@ -412,8 +412,28 @@
             statusDiv.textContent = '⏳ Guardando...';
 
             try {
+                const humidity_low_threshold = parseFloat(document.getElementById('humiditySlider').value);
+                const humidity_low_color = document.getElementById('colorCritical').value;
+                const humidity_good_color = document.getElementById('colorLow').value;
+
+                const response = await fetch(`/api/config/${deviceCode}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        humidity_low_threshold,
+                        humidity_low_color,
+                        humidity_good_color
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Error al guardar');
+                }
+
                 statusDiv.className = 'status success';
-                statusDiv.textContent = '✅ Configuración guardada';
+                statusDiv.textContent = '✅ Configuración guardada correctamente';
                 setTimeout(() => { statusDiv.textContent = ''; statusDiv.className = ''; }, 3000);
             } catch (error) {
                 statusDiv.className = 'status error';
