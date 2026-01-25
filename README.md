@@ -41,6 +41,31 @@ script:
             return std::string(json);
 ```
 
+## Uso del Dashboard
+
+Una vez desplegado el backend y configurado el ESP32, accede al dashboard en: `https://<tu-app>.railway.app/panel/RIEGO_001`
+
+### Sensores en Tiempo Real
+- **Temperatura**: Muestra la temperatura ambiente.
+- **Humedad**: Porcentaje de humedad del suelo.
+- **Lluvia**: Nivel de voltaje del sensor de lluvia.
+
+### Control de LEDs
+- Los LEDs cambian automáticamente según la configuración.
+- **Modo Automático**: Los LEDs cambian de color basado en el umbral de humedad configurado.
+- **Modo Manual**: Control directo del color de los LEDs.
+
+### Configuración Automática
+- **Umbral Humedad Baja**: Define el porcentaje por debajo del cual se considera humedad baja.
+- **Color si Humedad Baja**: Color de LEDs cuando la humedad está baja.
+- **Color si Humedad Buena**: Color de LEDs cuando la humedad está buena.
+
+### Configura el Modo LED
+- Selecciona **"Automático (basado en humedad)"** para que los LEDs cambien según el umbral de humedad.
+- O selecciona **"Manual"** y elige un color para control directo.
+
+Guarda la configuración y espera 10 segundos para que el ESP32 aplique los cambios.
+
 ## Necesitas que yo lo haga por ti?
 Puedo crear el proyecto en Railway y conectar el repo si me das acceso (invítame como colaborador o comparte un token `RAILWAY_API_KEY` con permisos de deploy). Si prefieres hacerlo tú, sigue los pasos anteriores y dime si quieres que revise los logs y finalice la configuración por ti.
 
