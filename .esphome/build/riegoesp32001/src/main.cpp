@@ -341,10 +341,10 @@ void setup() {
   //             - then:
   //                 - logger.log:
   //                     format: ERROR al obtener configuracion
-  //                     args: []
-  //                     tag: main
   //                     level: DEBUG
+  //                     args: []
   //                     logger_id: logger_logger_id
+  //                     tag: main
   //                   type_id: lambdaaction_id_2
   //               automation_id: automation_id_3
   //               trigger_id: trigger_id_2
