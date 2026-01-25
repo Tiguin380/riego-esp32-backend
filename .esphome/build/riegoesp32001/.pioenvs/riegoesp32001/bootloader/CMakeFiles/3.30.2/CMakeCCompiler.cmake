@@ -75,7 +75,7 @@ endif()
 
 
 
-set(CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES "C:/Users/gorra/.platformio/packages/toolchain-xtensa-esp-elf/lib/gcc/xtensa-esp-elf/13.2.0/include;C:/Users/gorra/.platformio/packages/toolchain-xtensa-esp-elf/lib/gcc/xtensa-esp-elf/13.2.0/include-fixed;C:/Users/gorra/.platformio/packages/toolchain-xtensa-esp-elf/xtensa-esp-elf/include")
+set(CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES "C:/Users/gorra/scoop/apps/gcc/current/include;C:/Users/gorra/.platformio/packages/toolchain-xtensa-esp-elf/lib/gcc/xtensa-esp-elf/13.2.0/include;C:/Users/gorra/.platformio/packages/toolchain-xtensa-esp-elf/lib/gcc/xtensa-esp-elf/13.2.0/include-fixed;C:/Users/gorra/.platformio/packages/toolchain-xtensa-esp-elf/xtensa-esp-elf/include")
 set(CMAKE_C_IMPLICIT_LINK_LIBRARIES "gcc;c;nosys;c;gcc")
 set(CMAKE_C_IMPLICIT_LINK_DIRECTORIES "C:/Users/gorra/.platformio/packages/toolchain-xtensa-esp-elf/lib/gcc/xtensa-esp-elf/13.2.0/esp32;C:/Users/gorra/.platformio/packages/toolchain-xtensa-esp-elf/xtensa-esp-elf/lib/esp32;C:/Users/gorra/.platformio/packages/toolchain-xtensa-esp-elf/lib/gcc/xtensa-esp-elf/13.2.0;C:/Users/gorra/.platformio/packages/toolchain-xtensa-esp-elf/lib/gcc;C:/Users/gorra/.platformio/packages/toolchain-xtensa-esp-elf/xtensa-esp-elf/lib")
 set(CMAKE_C_IMPLICIT_LINK_FRAMEWORK_DIRECTORIES "")

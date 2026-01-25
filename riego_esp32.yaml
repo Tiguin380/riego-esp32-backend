@@ -24,10 +24,12 @@ web_server:
   port: 80
 
 logger:
+  level: DEBUG
 
 # -------- HTTP Request --------
 http_request:
   verify_ssl: false
+  timeout: 10s
 
 # -------- Script para enviar datos --------
 script:
@@ -40,11 +42,13 @@ script:
           body: !lambda |-
             char json[512];
             snprintf(json, sizeof(json), 
-              "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"humidity_low_color\":\"%s\",\"humidity_good_color\":\"%s\"}",
-              id(temp_test).state,
-              id(hum_test).state,
+              "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"soil_voltage\":%.2f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"valve_state\":\"%s\",\"humidity_low_color\":\"%s\",\"humidity_good_color\":\"%s\"}",
+              0.0,
+              id(soil_hum).state,
+              id(soil_raw).state,
               id(lluvia_test).state,
               id(humidity_low).state,
+              (id(valve_relay).state ? "ON" : "OFF"),
               id(color_critical).state.c_str(),
               id(color_low).state.c_str()
             );
@@ -54,38 +58,76 @@ script:
     then:
       - http_request.get:
           url: "https://riego-esp32-backend-production.up.railway.app/api/config/RIEGO_001"
+          capture_response: true
+          max_response_buffer_size: 1024
           on_response:
             then:
               - lambda: |-
-                  // Parse color directamente - humidity_low_color es el color a mostrar
-                  std::string color_led = "Verde";
+                  std::string resp_body = body;
+                  ESP_LOGI("HTTP", "Body length: %d", resp_body.length());
+                  ESP_LOGI("RAW", "Response: %.200s", resp_body.c_str());
                   
-                  size_t pos = body.find("humidity_low_color");
-                  if (pos != std::string::npos) {
-                    size_t start = body.find(":", pos);
-                    start = body.find("\"", start) + 1;
-                    size_t end = body.find("\"", start);
-                    color_led = body.substr(start, end - start);
+                  // Parse humidity_low_threshold robustly (fallback to local value)
+                  float umbral = id(humidity_low).state;
+                  {
+                    std::string key = "\"humidity_low_threshold\"";
+                    size_t pos = resp_body.find(key);
+                    if (pos != std::string::npos) {
+                      size_t colon = resp_body.find(":", pos + key.length());
+                      if (colon != std::string::npos) {
+                        size_t start = colon + 1;
+                        while (start < resp_body.size() && isspace((unsigned char)resp_body[start])) start++;
+                        if (start < resp_body.size() && resp_body[start] == '"') start++;
+                        size_t end = start;
+                        while (end < resp_body.size() && (isdigit((unsigned char)resp_body[end]) || resp_body[end]=='.' || resp_body[end]=='-')) end++;
+                        if (end > start) {
+                          umbral = atof(resp_body.substr(start, end - start).c_str());
+                          ESP_LOGI("CONFIG", "Parsed umbral: %.1f", umbral);
+                        }
+                      }
+                    }
+                  }
+
+                  // Parse humidity_low_color
+                  std::string color_low = "Rojo";
+                  std::string search_low = "\"humidity_low_color\":\"";
+                  size_t pos_l = resp_body.find(search_low);
+                  if (pos_l != std::string::npos) {
+                    size_t start_l = pos_l + search_low.length();
+                    size_t end_l = resp_body.find("\"", start_l);
+                    if (end_l != std::string::npos) {
+                      color_low = resp_body.substr(start_l, end_l - start_l);
+                    }
+                  }
+
+                  // Parse humidity_good_color
+                  std::string color_good = "Verde";
+                  std::string search_good = "\"humidity_good_color\":\"";
+                  size_t pos_g = resp_body.find(search_good);
+                  if (pos_g != std::string::npos) {
+                    size_t start_g = pos_g + search_good.length();
+                    size_t end_g = resp_body.find("\"", start_g);
+                    if (end_g != std::string::npos) {
+                      color_good = resp_body.substr(start_g, end_g - start_g);
+                    }
                   }
                   
-                  ESP_LOGI("CONFIG", "Color recibido del servidor: %s", color_led.c_str());
-                  
-                  // Convertir color a RGB
-                  float r = 0, g = 0, b = 0;
-                  if (color_led == "Rojo") { r = 1.0; }
-                  else if (color_led == "Verde") { g = 1.0; }
-                  else if (color_led == "Azul") { b = 1.0; }
-                  else if (color_led == "Amarillo") { r = 1.0; g = 1.0; }
-                  else if (color_led == "Cian") { g = 1.0; b = 1.0; }
-                  else if (color_led == "Magenta") { r = 1.0; b = 1.0; }
-                  else if (color_led == "Blanco") { r = 1.0; g = 1.0; b = 1.0; }
-                  
-                  // APLICAR COLOR DIRECTO A LOS LEDS
-                  auto call = id(rgb_test).turn_on();
-                  call.set_rgb(r, g, b);
-                  call.perform();
-                  
-                  ESP_LOGI("LED", "APLICADO: %s -> R:%.0f G:%.0f B:%.0f", color_led.c_str(), r*100, g*100, b*100);
+                  // Obtener humedad actual del sensor y voltage
+                  float humedad_actual = id(soil_hum).state;
+                  float soil_v = id(soil_raw).state;
+                  ESP_LOGI("SENSOR", "Soil V: %.2f, Hum: %.1f, Umbral: %.1f", soil_v, humedad_actual, umbral);
+
+                  // Hysteresis para evitar toggles rápidos
+                  float hys = 1.0; // porcentaje
+                  if (humedad_actual < (umbral - hys)) {
+                    id(valve_relay).turn_on();
+                    ESP_LOGI("VALVE", "ABRIENDO VÁLVULA: Hum %.1f < Umbral %.1f", humedad_actual, umbral);
+                  } else if (humedad_actual > (umbral + hys)) {
+                    id(valve_relay).turn_off();
+                    ESP_LOGI("VALVE", "CERRANDO VÁLVULA: Hum %.1f >= Umbral %.1f", humedad_actual, umbral);
+                  } else {
+                    ESP_LOGI("VALVE", "SIN CAMBIO: Hum %.1f Umbral %.1f", humedad_actual, umbral);
+                  }
           on_error:
             then:
               - logger.log: "ERROR al obtener configuracion"
@@ -95,8 +137,8 @@ number:
   - platform: template
     name: "Humedad Baja"
     id: humidity_low
-    min_value: 30
-    max_value: 80
+    min_value: 10
+    max_value: 100
     step: 1
     initial_value: 50
     unit_of_measurement: "%"
@@ -154,37 +196,60 @@ select:
     restore_value: true
     optimistic: true
 
-# -------- I2C para LCD --------
+# -------- I2C (OLED) --------
 i2c:
   sda: GPIO21
   scl: GPIO22
   scan: True
 
-# -------- Display LCD de prueba --------
+# -------- Pantalla OLED 0.96" I2C --------
+font:
+  - file: "fonts/NotoSans-Regular.ttf"
+    id: oled_font
+    size: 12
+
 display:
-  - platform: lcd_pcf8574
-    id: lcd_test
-    dimensions: 16x2
-    address: 0x27
+  - platform: ssd1306_i2c
+    model: "SSD1306 128x64"
+    address: 0x3C
+    id: oled_test
     lambda: |-
-      it.printf(0, 0, "Temp: %.1fC", id(temp_test).state);
-      it.printf(0, 1, "Hum: %.1f%%", id(hum_test).state);
+      // Línea 1: Humedad y voltaje
+      it.printf(0, 0, id(oled_font), "Humedad: %.1f%% Volt: %.2fV", id(soil_hum).state, id(soil_raw).state);
+      // Línea 2: Umbral configurado
+      it.printf(0, 16, id(oled_font), "Umbral: %.1f%%", id(humidity_low).state);
+      // Línea 3: Estado válvula
+      if (id(valve_relay).state) it.printf(0, 32, id(oled_font), "VALVULA: ON "); else it.printf(0, 32, id(oled_font), "VALVULA: OFF");
+      // Línea 4: Lectura lluvia
+      it.printf(0, 48, id(oled_font), "Lluvia V: %.2f", id(lluvia_test).state);
 
 # -------- Sensores --------
 sensor:
-  - platform: dht
-    model: DHT11
-    pin: GPIO17
-    update_interval: 5s
-    temperature:
-      name: "Temp Test"
-      id: temp_test
-    humidity:
-      name: "Hum Test"
-      id: hum_test
-
   - platform: adc
     pin: GPIO34
+    name: "Soil Voltage"
+    id: soil_raw
+    update_interval: 5s
+    filters:
+      - multiply: 3.3
+
+  - platform: template
+    name: "Soil Humidity"
+    id: soil_hum
+    unit_of_measurement: "%"
+    update_interval: 5s
+    lambda: |-
+      float v = id(soil_raw).state;
+      // Ajusta min_v/max_v según tu sensor y suelo (valores de ejemplo)
+      float min_v = 0.30; // suelo muy mojado
+      float max_v = 3.00; // suelo muy seco
+      if (v < min_v) v = min_v;
+      if (v > max_v) v = max_v;
+      float pct = (1.0 - (v - min_v) / (max_v - min_v)) * 100.0;
+      return pct;
+
+  - platform: adc
+    pin: GPIO35
     name: "Lluvia Test"
     id: lluvia_test
     update_interval: 5s
@@ -201,6 +266,16 @@ light:
     id: rgb_test
     internal: true
     restore_mode: ALWAYS_ON
+
+# Válvula (relé)
+switch:
+  - platform: gpio
+    pin:
+      number: GPIO25
+      inverted: true
+    id: valve_relay
+    name: "Válvula Riego"
+    restore_mode: ALWAYS_OFF
 
 # -------- Intervalo para enviar datos a Railway --------
 interval:

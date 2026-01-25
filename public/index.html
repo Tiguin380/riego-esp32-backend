@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -93,12 +93,12 @@
             <h2> CONFIGURACION AUTOMATICA</h2>
             <div class="control-row">
                 <label>Umbral Humedad Baja:</label>
-                <input type="range" id="threshold" min="30" max="80" value="50">
-                <span id="thresholdValue" style="width:50px;text-align:right">50%</span>
+                <input type="range" id="threshold" min="1" max="100" value="25">
+                <span id="thresholdValue" style="width:50px;text-align:right">25%</span>
             </div>
             <div class="control-row">
                 <label>Color si Humedad BAJA:</label>
-                <select id="colorBaja">
+                <select id="colorBuena">
                     <option value="Rojo">Rojo</option>
                     <option value="Verde">Verde</option>
                     <option value="Azul">Azul</option>
@@ -110,7 +110,7 @@
             </div>
             <div class="control-row">
                 <label>Color si Humedad BUENA:</label>
-                <select id="colorBuena">
+                <select id="colorBaja">
                     <option value="Rojo">Rojo</option>
                     <option value="Verde" selected>Verde</option>
                     <option value="Azul">Azul</option>
@@ -133,7 +133,7 @@
             'Blanco': '#ffffff', 'Off': '#222222'
         };
         
-        let config = { threshold: 50, colorB: 'Rojo', colorG: 'Verde' };
+        let config = { threshold: 25, colorB: 'Rojo', colorG: 'Verde' };
         let currentLedColor = 'Verde';
 
         function updateLeds(color) {
@@ -173,15 +173,16 @@
             try {
                 const res = await fetch('/api/config/RIEGO_001');
                 const cfg = await res.json();
-                config.threshold = parseFloat(cfg.humidity_low_threshold) || 50;
+                let threshold = parseFloat(cfg.humidity_low_threshold);
+                if (isNaN(threshold) || threshold < 1) threshold = 25;
+                if (threshold > 100) threshold = 100;
+                config.threshold = threshold;
                 config.colorB = cfg.humidity_low_color || 'Rojo';
                 config.colorG = cfg.humidity_good_color || 'Verde';
-                
                 document.getElementById('threshold').value = config.threshold;
                 document.getElementById('thresholdValue').textContent = config.threshold + '%';
-                document.getElementById('colorBaja').value = config.colorB;
-                document.getElementById('colorBuena').value = config.colorG;
-                
+                document.getElementById('colorBuena').value = config.colorB;
+                document.getElementById('colorBaja').value = config.colorG;
                 currentLedColor = config.colorB;
                 updateLeds(currentLedColor);
             } catch(e) {
@@ -211,11 +212,11 @@
             document.getElementById('thresholdValue').textContent = config.threshold + '%';
         });
         
-        document.getElementById('colorBaja').addEventListener('change', (e) => {
+        document.getElementById('colorBuena').addEventListener('change', (e) => {
             config.colorB = e.target.value;
         });
         
-        document.getElementById('colorBuena').addEventListener('change', (e) => {
+        document.getElementById('colorBaja').addEventListener('change', (e) => {
             config.colorG = e.target.value;
         });
 

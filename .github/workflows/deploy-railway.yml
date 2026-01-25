@@ -1,0 +1,48 @@
+name: Deploy to Railway
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: Login to Railway
+        env:
+          RAILWAY_API_KEY: ${{ secrets.RAILWAY_API_KEY }}
+        run: |
+          railway login --apiKey $RAILWAY_API_KEY
+
+      - name: Link to Project (optional)
+        env:
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+        run: |
+          # Try to link project by ID if provided (optional)
+          if [ -n "$RAILWAY_PROJECT_ID" ]; then
+            railway link --projectId $RAILWAY_PROJECT_ID || true
+          else
+            echo "RAILWAY_PROJECT_ID not set - Railway auto-detect will be used if available"
+          fi
+
+      - name: Deploy to Railway
+        run: |
+          railway up --detach
+
+      - name: Wait for app to be reachable
+        run: |
+          echo "Deployment triggered. If you want automatic DB init, ensure AUTO_DB_INIT=true in Railway variables or call /api/init after deployment." 

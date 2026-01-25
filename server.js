@@ -19,6 +19,60 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL
 });
 
+// Inicialización automática de tablas en arranque (útil en despliegues en Railway u otros hosts)
+async function initDB() {
+  try {
+    // Crear tabla de dispositivos
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS devices (
+        id UUID PRIMARY KEY,
+        device_code VARCHAR(20) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Crear tabla de sensores
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sensor_data (
+        id SERIAL PRIMARY KEY,
+        device_id UUID REFERENCES devices(id),
+        temperature DECIMAL(5,2),
+        humidity DECIMAL(5,2),
+        rain_level DECIMAL(5,2),
+        led_status VARCHAR(20),
+        humidity_low_threshold DECIMAL(5,2),
+        humidity_low_color VARCHAR(20),
+        humidity_good_color VARCHAR(20),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Crear tabla de configuración
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS device_config (
+        id UUID PRIMARY KEY,
+        device_id UUID UNIQUE REFERENCES devices(id),
+        humidity_low_threshold DECIMAL(5,2) DEFAULT 50,
+        humidity_low_color VARCHAR(20) DEFAULT 'Rojo',
+        humidity_good_color VARCHAR(20) DEFAULT 'Verde',
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    console.log('Database initialized (auto)');
+  } catch (error) {
+    console.error('Error initializing DB on startup:', error.message);
+  }
+}
+
+// Llamar a initDB si hay DATABASE_URL (deployment) o si la variable AUTO_DB_INIT está activa
+if (process.env.DATABASE_URL || process.env.AUTO_DB_INIT === 'true') {
+  initDB();
+} else {
+  console.log('DATABASE_URL not set: skipping automatic DB init (use /api/init endpoint to initialize)');
+}
+
 // Tabla de dispositivos
 app.get('/api/init', async (req, res) => {
   try {
