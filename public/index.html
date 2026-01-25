@@ -78,27 +78,8 @@
         </div>
 
         <div class="section">
-            <h2> MODO LED</h2>
-            <div class="control-row">
-                <label>Modo:</label>
-                <select id="ledMode">
-                    <option value="auto">Automático (basado en humedad)</option>
-                    <option value="manual">Manual</option>
-                </select>
-            </div>
-            <div class="control-row" id="manualColorRow" style="display: none;">
-                <label>Color Manual:</label>
-                <select id="manualColor">
-                    <option value="Rojo">Rojo</option>
-                    <option value="Verde">Verde</option>
-                    <option value="Azul">Azul</option>
-                    <option value="Amarillo">Amarillo</option>
-                    <option value="Cian">Cian</option>
-                    <option value="Magenta">Magenta</option>
-                    <option value="Blanco">Blanco</option>
-                    <option value="Off">Apagado</option>
-                </select>
-            </div>
+            <h2> CONFIGURACION AUTOMATICA</h2>
+
         </div>
             <div class="control-row">
                 <label>Umbral Humedad Baja:</label>
@@ -168,7 +149,7 @@
             'Blanco': '#ffffff', 'Off': '#222222'
         };
         
-        let config = { threshold: 25, colorB: 'Rojo', colorG: 'Verde', ledMode: 'auto', manualColor: 'Off' };
+        let config = { threshold: 25, colorB: 'Rojo', colorG: 'Verde' };
         let sensorChart;
         let chartData = {
             labels: [],
@@ -247,16 +228,11 @@
                 config.threshold = threshold;
                 config.colorB = cfg.humidity_low_color || 'Rojo';
                 config.colorG = cfg.humidity_good_color || 'Verde';
-                config.ledMode = cfg.led_mode || 'auto';
-                config.manualColor = cfg.led_manual_color || 'Off';
                 document.getElementById('threshold').value = config.threshold;
                 document.getElementById('thresholdValue').textContent = config.threshold + '%';
                 document.getElementById('colorBuena').value = config.colorB;
                 document.getElementById('colorBaja').value = config.colorG;
-                document.getElementById('ledMode').value = config.ledMode;
-                document.getElementById('manualColor').value = config.manualColor;
-                toggleManualColor();
-                currentLedColor = config.ledMode === 'manual' ? config.manualColor : config.colorB;
+                currentLedColor = config.colorB;
                 updateLeds(currentLedColor);
             } catch(e) {
                 console.log('Error cargando config');
@@ -315,24 +291,6 @@
             config.colorG = e.target.value;
         });
 
-        function toggleManualColor() {
-            const manualRow = document.getElementById('manualColorRow');
-            if (config.ledMode === 'manual') {
-                manualRow.style.display = 'flex';
-            } else {
-                manualRow.style.display = 'none';
-            }
-        }
-
-        document.getElementById('ledMode').addEventListener('change', (e) => {
-            config.ledMode = e.target.value;
-            toggleManualColor();
-        });
-
-        document.getElementById('manualColor').addEventListener('change', (e) => {
-            config.manualColor = e.target.value;
-        });
-
         async function actualizarEstadisticas() {
             try {
                 const res = await fetch('/api/sensor/stats/RIEGO_001');
@@ -356,9 +314,7 @@
                     body: JSON.stringify({
                         humidity_low_threshold: config.threshold,
                         humidity_low_color: config.colorB,
-                        humidity_good_color: config.colorG,
-                        led_mode: config.ledMode,
-                        led_manual_color: config.manualColor
+                        humidity_good_color: config.colorG
                     })
                 });
                 if (res.ok) {
