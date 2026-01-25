@@ -35,8 +35,8 @@ script:
           body: !lambda |-
             char json[512];
             snprintf(json, sizeof(json),
-              "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"soil_voltage\":%.2f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"valve_state\":\"%s\",\"humidity_low_color\":\"%s\",\"humidity_good_color\":\"%s\"}",
-              id(temperature_sensor).state, id(soil_hum).state, id(soil_raw).state, id(lluvia_test).state, id(humidity_low).state, (id(valve_relay).state ? "ON" : "OFF"), id(color_critical).state.c_str(), id(color_low).state.c_str()
+              "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"soil_voltage\":%.2f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"valve_state\":\"%s\"}",
+              id(temperature_sensor).state, id(soil_hum).state, id(soil_raw).state, id(lluvia_test).state, id(humidity_low).state, (id(valve_relay).state ? "ON" : "OFF")
             );
             return std::string(json);
 ```
@@ -50,19 +50,8 @@ Una vez desplegado el backend y configurado el ESP32, accede al dashboard en: `h
 - **Humedad**: Porcentaje de humedad del suelo.
 - **Lluvia**: Nivel de voltaje del sensor de lluvia.
 
-### Control de LEDs
-- Los LEDs cambian automáticamente según la configuración.
-- **Modo Automático**: Los LEDs cambian de color basado en el umbral de humedad configurado.
-- **Modo Manual**: Control directo del color de los LEDs.
-
 ### Configuración Automática
 - **Umbral Humedad Baja**: Define el porcentaje por debajo del cual se considera humedad baja.
-- **Color si Humedad Baja**: Color de LEDs cuando la humedad está baja.
-- **Color si Humedad Buena**: Color de LEDs cuando la humedad está buena.
-
-### Configura el Modo LED
-- Selecciona **"Automático (basado en humedad)"** para que los LEDs cambien según el umbral de humedad.
-- O selecciona **"Manual"** y elige un color para control directo.
 
 Guarda la configuración y espera 10 segundos para que el ESP32 aplique los cambios.
 

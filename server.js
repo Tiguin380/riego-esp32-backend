@@ -32,7 +32,7 @@ async function initDB() {
       )
     `);
 
-    // Crear tabla de sensores
+    // Crear tabla de sensores (sin soporte LED)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sensor_data (
         id SERIAL PRIMARY KEY,
@@ -40,24 +40,17 @@ async function initDB() {
         temperature DECIMAL(5,2),
         humidity DECIMAL(5,2),
         rain_level DECIMAL(5,2),
-        led_status VARCHAR(20),
         humidity_low_threshold DECIMAL(5,2),
-        humidity_low_color VARCHAR(20),
-        humidity_good_color VARCHAR(20),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Crear tabla de configuración
+    // Crear tabla de configuración (sin soporte LED)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS device_config (
         id UUID PRIMARY KEY,
         device_id UUID UNIQUE REFERENCES devices(id),
         humidity_low_threshold DECIMAL(5,2) DEFAULT 50,
-        humidity_low_color VARCHAR(20) DEFAULT 'Rojo',
-        humidity_good_color VARCHAR(20) DEFAULT 'Verde',
-        led_mode VARCHAR(10) DEFAULT 'auto',
-        led_manual_color VARCHAR(20) DEFAULT 'Off',
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -88,7 +81,7 @@ app.get('/api/init', async (req, res) => {
       )
     `);
 
-    // Crear tabla de sensores
+    // Crear tabla de sensores (sin soporte LED)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sensor_data (
         id SERIAL PRIMARY KEY,
@@ -96,24 +89,17 @@ app.get('/api/init', async (req, res) => {
         temperature DECIMAL(5,2),
         humidity DECIMAL(5,2),
         rain_level DECIMAL(5,2),
-        led_status VARCHAR(20),
         humidity_low_threshold DECIMAL(5,2),
-        humidity_low_color VARCHAR(20),
-        humidity_good_color VARCHAR(20),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Crear tabla de configuración
+    // Crear tabla de configuración (sin soporte LED)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS device_config (
         id UUID PRIMARY KEY,
         device_id UUID UNIQUE REFERENCES devices(id),
         humidity_low_threshold DECIMAL(5,2) DEFAULT 50,
-        humidity_low_color VARCHAR(20) DEFAULT 'Rojo',
-        humidity_good_color VARCHAR(20) DEFAULT 'Verde',
-        led_mode VARCHAR(10) DEFAULT 'auto',
-        led_manual_color VARCHAR(20) DEFAULT 'Off',
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -154,7 +140,7 @@ app.post('/api/device/register', async (req, res) => {
 // Enviar datos del sensor (desde ESP32)
 app.post('/api/sensor/data', async (req, res) => {
   try {
-    const { device_code, temperature, humidity, rain_level, led_status, humidity_low_threshold, humidity_low_color, humidity_good_color } = req.body;
+    const { device_code, temperature, humidity, rain_level, humidity_low_threshold } = req.body;
     const device = await pool.query(
       'SELECT id FROM devices WHERE device_code = $1',
       [device_code]
@@ -167,9 +153,9 @@ app.post('/api/sensor/data', async (req, res) => {
     const device_id = device.rows[0].id;
 
     await pool.query(
-      `INSERT INTO sensor_data (device_id, temperature, humidity, rain_level, led_status, humidity_low_threshold, humidity_low_color, humidity_good_color)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [device_id, temperature, humidity, rain_level, led_status, humidity_low_threshold, humidity_low_color, humidity_good_color]
+      `INSERT INTO sensor_data (device_id, temperature, humidity, rain_level, humidity_low_threshold)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [device_id, temperature, humidity, rain_level, humidity_low_threshold]
     );
 
     res.json({ status: 'Datos guardados' });
@@ -253,7 +239,7 @@ app.get('/api/config/:device_code', async (req, res) => {
 app.post('/api/config/:device_code', async (req, res) => {
   try {
     const { device_code } = req.params;
-    const { humidity_low_threshold, humidity_low_color, humidity_good_color, led_mode, led_manual_color } = req.body;
+    const { humidity_low_threshold } = req.body;
 
     // Obtener device_id
     const device = await pool.query(
@@ -277,17 +263,17 @@ app.post('/api/config/:device_code', async (req, res) => {
       // Crear nueva configuración
       const config_id = uuidv4();
       await pool.query(
-        `INSERT INTO device_config (id, device_id, humidity_low_threshold, humidity_low_color, humidity_good_color, led_mode, led_manual_color)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [config_id, device_id, humidity_low_threshold, humidity_low_color, humidity_good_color, led_mode, led_manual_color]
+        `INSERT INTO device_config (id, device_id, humidity_low_threshold)
+         VALUES ($1, $2, $3)`,
+        [config_id, device_id, humidity_low_threshold]
       );
     } else {
       // Actualizar configuración existente
       await pool.query(
         `UPDATE device_config 
-         SET humidity_low_threshold = $1, humidity_low_color = $2, humidity_good_color = $3, led_mode = $4, led_manual_color = $5, updated_at = CURRENT_TIMESTAMP
-         WHERE device_id = $6`,
-        [humidity_low_threshold, humidity_low_color, humidity_good_color, led_mode, led_manual_color, device_id]
+         SET humidity_low_threshold = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE device_id = $2`,
+        [humidity_low_threshold, device_id]
       );
     }
 
