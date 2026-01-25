@@ -298,9 +298,9 @@ app.post('/api/config/:device_code', async (req, res) => {
   }
 });
 
-// Redirigir raíz al panel del dispositivo
+// Redirigir raíz al panel del dispositivo (URL pública de Railway)
 app.get('/', (req, res) => {
-  res.redirect('/panel/RIEGO_001');
+  res.redirect('https://riego-esp32-backend-production.up.railway.app/panel/RIEGO_001');
 });
 
 // Servir dashboard
