@@ -289,12 +289,16 @@ app.get('/', (req, res) => {
   res.redirect('https://riego-esp32-backend-production.up.railway.app/panel/RIEGO_001');
 });
 
-// Servir dashboard
+// Servir dashboard con headers para evitar cache
 app.get('/panel/:device_code', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.sendFile(__dirname + '/public/index.html');
 });
 
-app.use(express.static('public'));
+// Servir archivos estáticos sin cache
+app.use(express.static('public', { maxAge: 0 }));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
