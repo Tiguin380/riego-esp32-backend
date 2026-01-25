@@ -58,6 +58,23 @@
             <div class="chart-container">
                 <canvas id="sensorChart"></canvas>
             </div>
+            <div class="sensor-grid">
+                <div class="sensor-card">
+                    <div class="sensor-label">Temperatura</div>
+                    <div class="sensor-value" id="temp">--</div>
+                    <div class="sensor-unit">C</div>
+                </div>
+                <div class="sensor-card">
+                    <div class="sensor-label">Humedad</div>
+                    <div class="sensor-value" id="humidity">--</div>
+                    <div class="sensor-unit">%</div>
+                </div>
+                <div class="sensor-card">
+                    <div class="sensor-label">Lluvia</div>
+                    <div class="sensor-value" id="rain">--</div>
+                    <div class="sensor-unit">V</div>
+                </div>
+            </div>
         </div>
 
         <div class="section">
@@ -255,6 +272,11 @@
                 const temp = parseFloat(data.temperature);
                 const hum = parseFloat(data.humidity);
                 const rain = parseFloat(data.rain_level);
+
+                // Actualizar tarjetas numéricas
+                document.getElementById('temp').textContent = temp.toFixed(1);
+                document.getElementById('humidity').textContent = hum.toFixed(1);
+                document.getElementById('rain').textContent = rain.toFixed(2);
 
                 // Agregar datos a la gráfica
                 chartData.labels.push(now);
