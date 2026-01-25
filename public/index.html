@@ -61,30 +61,7 @@
                 <input type="range" id="threshold" min="1" max="100" value="25">
                 <span id="thresholdValue" style="width:50px;text-align:right">25%</span>
             </div>
-            <div class="control-row">
-                <label>Color si Humedad BAJA:</label>
-                <select id="colorBuena">
-                    <option value="Rojo">Rojo</option>
-                    <option value="Verde">Verde</option>
-                    <option value="Azul">Azul</option>
-                    <option value="Amarillo">Amarillo</option>
-                    <option value="Cian">Cian</option>
-                    <option value="Magenta">Magenta</option>
-                    <option value="Blanco">Blanco</option>
-                </select>
-            </div>
-            <div class="control-row">
-                <label>Color si Humedad BUENA:</label>
-                <select id="colorBaja">
-                    <option value="Rojo">Rojo</option>
-                    <option value="Verde" selected>Verde</option>
-                    <option value="Azul">Azul</option>
-                    <option value="Amarillo">Amarillo</option>
-                    <option value="Cian">Cian</option>
-                    <option value="Magenta">Magenta</option>
-                    <option value="Blanco">Blanco</option>
-                </select>
-            </div>
+
             <button class="btn btn-save" onclick="guardar()"> GUARDAR CONFIGURACION</button>
         </div>
 
@@ -109,31 +86,7 @@
             }
         }
 
-        async function cargarConfig() {
-            try {
-                const res = await fetch('/api/config/RIEGO_001');
-                const cfg = await res.json();
-                let threshold = parseFloat(cfg.humidity_low_threshold);
-                if (isNaN(threshold) || threshold < 1) threshold = 25;
-                if (threshold > 100) threshold = 100;
-                config.threshold = threshold;
-                config.colorB = cfg.humidity_low_color || 'Rojo';
-                config.colorG = cfg.humidity_good_color || 'Verde';
-                config.ledMode = cfg.led_mode || 'auto';
-                config.manualColor = cfg.led_manual_color || 'Off';
-                document.getElementById('threshold').value = config.threshold;
-                document.getElementById('thresholdValue').textContent = config.threshold + '%';
-                document.getElementById('colorBuena').value = config.colorB;
-                document.getElementById('colorBaja').value = config.colorG;
-                document.getElementById('ledMode').value = config.ledMode;
-                document.getElementById('manualColor').value = config.manualColor;
-                toggleManualColor();
-                currentLedColor = config.ledMode === 'manual' ? config.manualColor : config.colorB;
-                updateLeds(currentLedColor);
-            } catch(e) {
-                console.log('Error cargando config');
-            }
-        }
+
 
         async function actualizarSensores() {
             try {
