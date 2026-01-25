@@ -13,10 +13,8 @@
   "loaded_integrations": [
     "adc",
     "api",
-    "button",
     "display",
     "esp32",
-    "esp32_rmt_led_strip",
     "esphome",
     "font",
     "globals",
@@ -25,7 +23,6 @@
     "i2c",
     "interval",
     "json",
-    "light",
     "logger",
     "md5",
     "mdns",
@@ -35,7 +32,6 @@
     "preferences",
     "safe_mode",
     "script",
-    "select",
     "sensor",
     "socket",
     "ssd1306_base",
@@ -50,12 +46,9 @@
     "wifi"
   ],
   "loaded_platforms": [
-    "button/template",
     "display/ssd1306_i2c",
-    "light/esp32_rmt_led_strip",
     "number/template",
     "ota/esphome",
-    "select/template",
     "sensor/adc",
     "sensor/template",
     "switch/gpio"

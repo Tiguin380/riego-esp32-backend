@@ -6,12 +6,9 @@ using std::isnan;
 using std::min;
 using std::max;
 using namespace number;
-using namespace select;
 using namespace display;
 using namespace sensor;
-using namespace light;
 using namespace switch_;
-using namespace button;
 logger::Logger *logger_logger_id;
 web_server_base::WebServerBase *web_server_base_webserverbase_id;
 wifi::WiFiComponent *wifi_wificomponent_id;
@@ -33,9 +30,6 @@ script::SingleScript<> *fetch_config_from_server;
 Automation<> *automation_id;
 http_request::HttpRequestSendAction<> *http_request_httprequestsendaction_id;
 template_::TemplateNumber *humidity_low;
-template_::TemplateSelect *color_critical;
-template_::TemplateSelect *color_low;
-template_::TemplateSelect *color_manual;
 font::Font *oled_font;
 ssd1306_i2c::I2CSSD1306 *oled_test;
 adc::ADCSensor *soil_raw;
@@ -46,8 +40,6 @@ template_::TemplateSensor *server_threshold;
 adc::ADCSensor *lluvia_test;
 sensor::MultiplyFilter *sensor_multiplyfilter_id_2;
 esp32::ESP32InternalGPIOPin *esp32_esp32internalgpiopin_id_2;
-esp32_rmt_led_strip::ESP32RMTLEDStripLightOutput *esp32_rmt_led_strip_esp32rmtledstriplightoutput_id;
-light::AddressableLightState *rgb_test;
 gpio::GPIOSwitch *valve_relay;
 esp32::ESP32InternalGPIOPin *esp32_esp32internalgpiopin_id_3;
 interval::IntervalTrigger *interval_intervaltrigger_id;
@@ -56,14 +48,6 @@ script::ScriptExecuteAction<script::Script<>> *script_scriptexecuteaction_id;
 interval::IntervalTrigger *interval_intervaltrigger_id_2;
 Automation<> *automation_id_6;
 script::ScriptExecuteAction<script::Script<>> *script_scriptexecuteaction_id_2;
-template_::TemplateButton *template__templatebutton_id;
-button::ButtonPressTrigger *button_buttonpresstrigger_id;
-Automation<> *automation_id_7;
-LambdaAction<> *lambdaaction_id_3;
-template_::TemplateButton *template__templatebutton_id_2;
-button::ButtonPressTrigger *button_buttonpresstrigger_id_2;
-Automation<> *automation_id_8;
-LambdaAction<> *lambdaaction_id_4;
 Automation<> *automation_id_4;
 http_request::HttpRequestSendAction<> *http_request_httprequestsendaction_id_2;
 http_request::HttpRequestResponseTrigger *http_request_httprequestresponsetrigger_id;
@@ -79,10 +63,7 @@ void setup() {
   // ========== AUTO GENERATED CODE BEGIN ===========
   App.reserve_switch(1);
   App.reserve_sensor(4);
-  App.reserve_select(3);
   App.reserve_number(1);
-  App.reserve_light(1);
-  App.reserve_button(2);
   // network:
   //   enable_ipv6: false
   //   min_ipv6_addr_count: 0
@@ -100,14 +81,11 @@ void setup() {
   //   areas: []
   //   devices: []
   App.pre_setup("riegoesp32001", "", "Riego autom\303\241tico prueba ESP32", __DATE__ ", " __TIME__, false);
-  App.reserve_components(26);
+  App.reserve_components(21);
   // number:
-  // select:
   // display:
   // sensor:
-  // light:
   // switch:
-  // button:
   // logger:
   //   level: DEBUG
   //   id: logger_logger_id
@@ -292,11 +270,9 @@ void setup() {
   //           body: !lambda "char json[512];\nsnprintf(json, sizeof(json), \n  \"{\\\"device_code\<cont>
   //             \":\\\"RIEGO_001\\\",\\\"temperature\\\":%.2f,\\\"humidity\\\":%.2f,\\\"
   //             soil_voltage\\\":%.2f,\\\"rain_level\\\":%.2f,\\\"humidity_low_threshold\<cont>
-  //             \":%.2f,\\\"valve_state\\\":\\\"%s\\\",\\\"humidity_low_color\\\":\\\"%s\<cont>
-  //             \",\\\"humidity_good_color\\\":\\\"%s\\\"}\",\n  0.0,\n  id(soil_hum).state,\n
+  //             \":%.2f,\\\"valve_state\\\":\\\"%s\\\"}\",\n  0.0,\n  id(soil_hum).state,\n
   //             \  id(soil_raw).state,\n  id(lluvia_test).state,\n  id(humidity_low).state,\n
-  //             \  (id(valve_relay).state ? \"ON\" : \"OFF\"),\n  id(color_critical).state.c_str(),\n
-  //             \  id(color_low).state.c_str()\n);\nreturn std::string(json);"
+  //             \  (id(valve_relay).state ? \"ON\" : \"OFF\")\n);\nreturn std::string(json);"
   //           id: http_request_httprequestidf_id
   //           capture_response: false
   //           max_response_buffer_size: 1000
@@ -342,31 +318,7 @@ void setup() {
   //                       }
   //                     }
   //   
-  //                      Parse humidity_low_color
-  //                     std::string color_low = "Rojo";
-  //                     std::string search_low = "\"humidity_low_color\":\"";
-  //                     size_t pos_l = resp_body.find(search_low);
-  //                     if (pos_l != std::string::npos) {
-  //                       size_t start_l = pos_l + search_low.length();
-  //                       size_t end_l = resp_body.find("\"", start_l);
-  //                       if (end_l != std::string::npos) {
-  //                         color_low = resp_body.substr(start_l, end_l - start_l);
-  //                       }
-  //                     }
   //   
-  //                      Parse humidity_good_color
-  //                     std::string color_good = "Verde";
-  //                     std::string search_good = "\"humidity_good_color\":\"";
-  //                     size_t pos_g = resp_body.find(search_good);
-  //                     if (pos_g != std::string::npos) {
-  //                       size_t start_g = pos_g + search_good.length();
-  //                       size_t end_g = resp_body.find("\"", start_g);
-  //                       if (end_g != std::string::npos) {
-  //                         color_good = resp_body.substr(start_g, end_g - start_g);
-  //                       }
-  //                     }
-  //   
-  //                      Obtener humedad actual del sensor y voltage
   //                     float humedad_actual = id(soil_hum).state;
   //                     float soil_v = id(soil_raw).state;
   //                     ESP_LOGI("SENSOR", "Soil V: %.2f, Hum: %.1f, Umbral: %.1f", soil_v, humedad_actual, umbral);
@@ -389,9 +341,9 @@ void setup() {
   //             - then:
   //                 - logger.log:
   //                     format: ERROR al obtener configuracion
-  //                     level: DEBUG
-  //                     tag: main
   //                     args: []
+  //                     tag: main
+  //                     level: DEBUG
   //                     logger_id: logger_logger_id
   //                   type_id: lambdaaction_id_2
   //               automation_id: automation_id_3
@@ -443,101 +395,6 @@ void setup() {
   humidity_low->set_optimistic(true);
   humidity_low->set_initial_value(50.0f);
   humidity_low->set_restore_value(true);
-  // select.template:
-  //   platform: template
-  //   name: Humedad Baja - Color
-  //   id: color_critical
-  //   icon: mdi:palette
-  //   options:
-  //     - Rojo
-  //     - Verde
-  //     - Azul
-  //     - Amarillo
-  //     - Cian
-  //     - Magenta
-  //     - Blanco
-  //   initial_option: Rojo
-  //   restore_value: true
-  //   optimistic: true
-  //   disabled_by_default: false
-  //   update_interval: 60s
-  color_critical = new template_::TemplateSelect();
-  color_critical->set_update_interval(60000);
-  color_critical->set_component_source("template.select");
-  App.register_component(color_critical);
-  App.register_select(color_critical);
-  color_critical->set_name("Humedad Baja - Color");
-  color_critical->set_object_id("humedad_baja_-_color");
-  color_critical->set_disabled_by_default(false);
-  color_critical->set_icon("mdi:palette");
-  color_critical->traits.set_options({"Rojo", "Verde", "Azul", "Amarillo", "Cian", "Magenta", "Blanco"});
-  color_critical->set_optimistic(true);
-  color_critical->set_initial_option("Rojo");
-  color_critical->set_restore_value(true);
-  // select.template:
-  //   platform: template
-  //   name: Humedad Buena - Color
-  //   id: color_low
-  //   icon: mdi:palette
-  //   options:
-  //     - Rojo
-  //     - Verde
-  //     - Azul
-  //     - Amarillo
-  //     - Cian
-  //     - Magenta
-  //     - Blanco
-  //   initial_option: Verde
-  //   restore_value: true
-  //   optimistic: true
-  //   disabled_by_default: false
-  //   update_interval: 60s
-  color_low = new template_::TemplateSelect();
-  color_low->set_update_interval(60000);
-  color_low->set_component_source("template.select");
-  App.register_component(color_low);
-  App.register_select(color_low);
-  color_low->set_name("Humedad Buena - Color");
-  color_low->set_object_id("humedad_buena_-_color");
-  color_low->set_disabled_by_default(false);
-  color_low->set_icon("mdi:palette");
-  color_low->traits.set_options({"Rojo", "Verde", "Azul", "Amarillo", "Cian", "Magenta", "Blanco"});
-  color_low->set_optimistic(true);
-  color_low->set_initial_option("Verde");
-  color_low->set_restore_value(true);
-  // select.template:
-  //   platform: template
-  //   name: Color Manual LEDs
-  //   id: color_manual
-  //   icon: mdi:led-on
-  //   options:
-  //     - Rojo
-  //     - Verde
-  //     - Azul
-  //     - Amarillo
-  //     - Cian
-  //     - Magenta
-  //     - Blanco
-  //     - Apagar
-  //     - Automático
-  //   initial_option: Automático
-  //   restore_value: true
-  //   optimistic: true
-  //   disabled_by_default: false
-  //   update_interval: 60s
-  color_manual = new template_::TemplateSelect();
-  color_manual->set_update_interval(60000);
-  color_manual->set_component_source("template.select");
-  App.register_component(color_manual);
-  App.register_select(color_manual);
-  color_manual->set_name("Color Manual LEDs");
-  color_manual->set_object_id("color_manual_leds");
-  color_manual->set_disabled_by_default(false);
-  color_manual->set_icon("mdi:led-on");
-  color_manual->traits.set_options({"Rojo", "Verde", "Azul", "Amarillo", "Cian", "Magenta", "Blanco", "Apagar", "Autom\303\241tico"});
-  color_manual->set_optimistic(true);
-  color_manual->set_initial_option("Autom\303\241tico");
-  color_manual->set_restore_value(true);
   // font:
   //   file:
   //     path: C:\Users\gorra\Desktop\Proyecto_macetas\fonts/NotoSans-Regular.ttf
@@ -1713,7 +1570,7 @@ void setup() {
   soil_hum->set_component_source("template.sensor");
   App.register_component(soil_hum);
   soil_hum->set_template([=]() -> esphome::optional<float> {
-      #line 250 "riego_esp32.yaml"
+      #line 176 "riego_esp32.yaml"
       float v = soil_raw->state;
        
       float min_v = 0.30;  
@@ -1802,51 +1659,6 @@ void setup() {
   lluvia_test->set_sampling_mode(adc::SamplingMode::AVG);
   lluvia_test->set_attenuation(ADC_ATTEN_DB_0);
   lluvia_test->set_channel1(::ADC1_CHANNEL_7);
-  // light.esp32_rmt_led_strip:
-  //   platform: esp32_rmt_led_strip
-  //   rgb_order: GRB
-  //   pin: 26
-  //   num_leds: 4
-  //   chipset: WS2812
-  //   id: rgb_test
-  //   internal: true
-  //   restore_mode: ALWAYS_ON
-  //   disabled_by_default: false
-  //   gamma_correct: 2.8
-  //   default_transition_length: 1s
-  //   flash_transition_length: 0s
-  //   output_id: esp32_rmt_led_strip_esp32rmtledstriplightoutput_id
-  //   rmt_symbols: 192
-  //   is_rgbw: false
-  //   is_wrgb: false
-  //   use_psram: true
-  //   reset_high: 0us
-  //   reset_low: 0us
-  //   name: rgb_test
-  esp32_rmt_led_strip_esp32rmtledstriplightoutput_id = new esp32_rmt_led_strip::ESP32RMTLEDStripLightOutput();
-  rgb_test = new light::AddressableLightState(esp32_rmt_led_strip_esp32rmtledstriplightoutput_id);
-  App.register_light(rgb_test);
-  rgb_test->set_component_source("light");
-  App.register_component(rgb_test);
-  rgb_test->set_name("rgb_test");
-  rgb_test->set_object_id("rgb_test");
-  rgb_test->set_disabled_by_default(false);
-  rgb_test->set_internal(true);
-  rgb_test->set_restore_mode(light::LIGHT_ALWAYS_ON);
-  rgb_test->set_default_transition_length(1000);
-  rgb_test->set_flash_transition_length(0);
-  rgb_test->set_gamma_correct(2.8f);
-  rgb_test->add_effects({});
-  esp32_rmt_led_strip_esp32rmtledstriplightoutput_id->set_component_source("esp32_rmt_led_strip.light");
-  App.register_component(esp32_rmt_led_strip_esp32rmtledstriplightoutput_id);
-  esp32_rmt_led_strip_esp32rmtledstriplightoutput_id->set_num_leds(4);
-  esp32_rmt_led_strip_esp32rmtledstriplightoutput_id->set_pin(26);
-  esp32_rmt_led_strip_esp32rmtledstriplightoutput_id->set_led_params(400, 1000, 1000, 400, 0, 0);
-  esp32_rmt_led_strip_esp32rmtledstriplightoutput_id->set_rgb_order(esp32_rmt_led_strip::ORDER_GRB);
-  esp32_rmt_led_strip_esp32rmtledstriplightoutput_id->set_is_rgbw(false);
-  esp32_rmt_led_strip_esp32rmtledstriplightoutput_id->set_is_wrgb(false);
-  esp32_rmt_led_strip_esp32rmtledstriplightoutput_id->set_use_psram(true);
-  esp32_rmt_led_strip_esp32rmtledstriplightoutput_id->set_rmt_symbols(192);
   // switch.gpio:
   //   platform: gpio
   //   pin:
@@ -1918,66 +1730,6 @@ void setup() {
   automation_id_6->add_actions({script_scriptexecuteaction_id_2});
   interval_intervaltrigger_id_2->set_update_interval(5000);
   interval_intervaltrigger_id_2->set_startup_delay(0);
-  // button.template:
-  //   platform: template
-  //   name: FORZAR LED ROJO
-  //   on_press:
-  //     - then:
-  //         - lambda: !lambda |-
-  //             auto call = id(rgb_test).turn_on();
-  //             call.set_rgb(1.0, 0.0, 0.0);
-  //             call.perform();
-  //             ESP_LOGI("TEST", "LED FORZADO A ROJO");
-  //           type_id: lambdaaction_id_3
-  //       automation_id: automation_id_7
-  //       trigger_id: button_buttonpresstrigger_id
-  //   disabled_by_default: false
-  //   id: template__templatebutton_id
-  template__templatebutton_id = new template_::TemplateButton();
-  App.register_button(template__templatebutton_id);
-  template__templatebutton_id->set_name("FORZAR LED ROJO");
-  template__templatebutton_id->set_object_id("forzar_led_rojo");
-  template__templatebutton_id->set_disabled_by_default(false);
-  button_buttonpresstrigger_id = new button::ButtonPressTrigger(template__templatebutton_id);
-  automation_id_7 = new Automation<>(button_buttonpresstrigger_id);
-  lambdaaction_id_3 = new LambdaAction<>([=]() -> void {
-      #line 312 "riego_esp32.yaml"
-      auto call = rgb_test->turn_on();
-      call.set_rgb(1.0, 0.0, 0.0);
-      call.perform();
-      ESP_LOGI("TEST", "LED FORZADO A ROJO");
-  });
-  automation_id_7->add_actions({lambdaaction_id_3});
-  // button.template:
-  //   platform: template
-  //   name: FORZAR LED AZUL
-  //   on_press:
-  //     - then:
-  //         - lambda: !lambda |-
-  //             auto call = id(rgb_test).turn_on();
-  //             call.set_rgb(0.0, 0.0, 1.0);
-  //             call.perform();
-  //             ESP_LOGI("TEST", "LED FORZADO A AZUL");
-  //           type_id: lambdaaction_id_4
-  //       automation_id: automation_id_8
-  //       trigger_id: button_buttonpresstrigger_id_2
-  //   disabled_by_default: false
-  //   id: template__templatebutton_id_2
-  template__templatebutton_id_2 = new template_::TemplateButton();
-  App.register_button(template__templatebutton_id_2);
-  template__templatebutton_id_2->set_name("FORZAR LED AZUL");
-  template__templatebutton_id_2->set_object_id("forzar_led_azul");
-  template__templatebutton_id_2->set_disabled_by_default(false);
-  button_buttonpresstrigger_id_2 = new button::ButtonPressTrigger(template__templatebutton_id_2);
-  automation_id_8 = new Automation<>(button_buttonpresstrigger_id_2);
-  lambdaaction_id_4 = new LambdaAction<>([=]() -> void {
-      #line 322 "riego_esp32.yaml"
-      auto call = rgb_test->turn_on();
-      call.set_rgb(0.0, 0.0, 1.0);
-      call.perform();
-      ESP_LOGI("TEST", "LED FORZADO A AZUL");
-  });
-  automation_id_8->add_actions({lambdaaction_id_4});
   // md5:
   // socket:
   //   implementation: bsd_sockets
@@ -1987,15 +1739,13 @@ void setup() {
       #line 48 "riego_esp32.yaml"
       char json[512];
       snprintf(json, sizeof(json), 
-        "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"soil_voltage\":%.2f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"valve_state\":\"%s\",\"humidity_low_color\":\"%s\",\"humidity_good_color\":\"%s\"}",
+        "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"soil_voltage\":%.2f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"valve_state\":\"%s\"}",
         0.0,
         soil_hum->state,
         soil_raw->state,
         lluvia_test->state,
         humidity_low->state,
-        (valve_relay->state ? "ON" : "OFF"),
-        color_critical->state.c_str(),
-        color_low->state.c_str()
+        (valve_relay->state ? "ON" : "OFF")
       );
       return std::string(json);
   });
@@ -2011,7 +1761,7 @@ void setup() {
   http_request_httprequestsendaction_id_2->register_response_trigger(http_request_httprequestresponsetrigger_id);
   automation_id_2 = new Automation<std::shared_ptr<http_request::HttpContainer>, std::string &>(http_request_httprequestresponsetrigger_id);
   oled_test->set_writer([=](display::Display & it) -> void {
-      #line 225 "riego_esp32.yaml"
+      #line 151 "riego_esp32.yaml"
        
       it.printf(0, 0, oled_font, "Humedad: %.1f%% Volt: %.2fV", soil_hum->state, soil_raw->state);
        
@@ -2032,7 +1782,7 @@ void setup() {
   server_umbral->set_component_source("globals");
   App.register_component(server_umbral);
   lambdaaction_id = new LambdaAction<std::shared_ptr<http_request::HttpContainer>, std::string &>([=](std::shared_ptr<http_request::HttpContainer> response, std::string & body) -> void {
-      #line 71 "riego_esp32.yaml"
+      #line 69 "riego_esp32.yaml"
       std::string resp_body = body;
       ESP_LOGI("HTTP", "Body length: %d", resp_body.length());
       ESP_LOGI("RAW", "Response: %.200s", resp_body.c_str());
@@ -2060,31 +1810,7 @@ void setup() {
         }
       }
       
-       
-      std::string color_low = "Rojo";
-      std::string search_low = "\"humidity_low_color\":\"";
-      size_t pos_l = resp_body.find(search_low);
-      if (pos_l != std::string::npos) {
-        size_t start_l = pos_l + search_low.length();
-        size_t end_l = resp_body.find("\"", start_l);
-        if (end_l != std::string::npos) {
-          color_low = resp_body.substr(start_l, end_l - start_l);
-        }
-      }
       
-       
-      std::string color_good = "Verde";
-      std::string search_good = "\"humidity_good_color\":\"";
-      size_t pos_g = resp_body.find(search_good);
-      if (pos_g != std::string::npos) {
-        size_t start_g = pos_g + search_good.length();
-        size_t end_g = resp_body.find("\"", start_g);
-        if (end_g != std::string::npos) {
-          color_good = resp_body.substr(start_g, end_g - start_g);
-        }
-      }
-      
-       
       float humedad_actual = soil_hum->state;
       float soil_v = soil_raw->state;
       ESP_LOGI("SENSOR", "Soil V: %.2f, Hum: %.1f, Umbral: %.1f", soil_v, humedad_actual, umbral);
@@ -2111,7 +1837,7 @@ void setup() {
   automation_id_3->add_actions({lambdaaction_id_2});
   automation_id_4->add_actions({http_request_httprequestsendaction_id_2});
   server_threshold->set_template([=]() -> esphome::optional<float> {
-      #line 265 "riego_esp32.yaml"
+      #line 191 "riego_esp32.yaml"
       return server_umbral->value();
   });
   // =========== AUTO GENERATED CODE END ============

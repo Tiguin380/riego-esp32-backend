@@ -5,14 +5,11 @@
 #define USE_API
 #define USE_API_PASSWORD
 #define USE_API_PLAINTEXT
-#define USE_BUTTON
 #define USE_DISPLAY
-#define USE_ENTITY_ICON
 #define USE_ESPHOME_TASK_LOG_BUFFER
 #define USE_ESP_IDF_VERSION_CODE VERSION_CODE(5, 3, 2)
 #define USE_I2C
 #define USE_JSON
-#define USE_LIGHT
 #define USE_LOGGER
 #define USE_MD5
 #define USE_MDNS
@@ -21,7 +18,6 @@
 #define USE_NUMBER
 #define USE_OTA
 #define USE_OTA_VERSION 2
-#define USE_SELECT
 #define USE_SENSOR
 #define USE_SOCKET_IMPL_BSD_SOCKETS
 #define USE_SOCKET_SELECT_SUPPORT

@@ -3,7 +3,7 @@
 	"artifacts" : 
 	[
 		{
-			"path" : "esp-idf/esp_local_ctrl/libesp_local_ctrl.a"
+			"path" : "esp-idf/protocomm/libprotocomm.a"
 		}
 	],
 	"backtrace" : 2,
@@ -16,8 +16,6 @@
 			"set_property",
 			"__component_set_dependencies",
 			"__component_set_all_dependencies",
-			"target_link_libraries",
-			"idf_component_optional_requires",
 			"add_compile_options",
 			"add_c_compile_options",
 			"add_compile_definitions",
@@ -28,7 +26,7 @@
 		"files" : 
 		[
 			"C:/Users/gorra/.platformio/packages/framework-espidf/tools/cmake/component.cmake",
-			"C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_local_ctrl/CMakeLists.txt",
+			"C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/CMakeLists.txt",
 			"C:/Users/gorra/.platformio/packages/framework-espidf/tools/cmake/utilities.cmake"
 		],
 		"nodes" : 
@@ -39,7 +37,7 @@
 			{
 				"command" : 1,
 				"file" : 1,
-				"line" : 23,
+				"line" : 54,
 				"parent" : 0
 			},
 			{
@@ -57,96 +55,6 @@
 			{
 				"command" : 3,
 				"file" : 0,
-				"line" : 355,
-				"parent" : 3
-			},
-			{
-				"command" : 2,
-				"file" : 0,
-				"line" : 340,
-				"parent" : 4
-			},
-			{
-				"command" : 2,
-				"file" : 0,
-				"line" : 340,
-				"parent" : 4
-			},
-			{
-				"command" : 6,
-				"file" : 1,
-				"line" : 29,
-				"parent" : 0
-			},
-			{
-				"command" : 5,
-				"file" : 0,
-				"line" : 603,
-				"parent" : 7
-			},
-			{
-				"command" : 7,
-				"file" : 0,
-				"line" : 465,
-				"parent" : 1
-			},
-			{
-				"command" : 8,
-				"file" : 0,
-				"line" : 467,
-				"parent" : 1
-			},
-			{
-				"command" : 7,
-				"file" : 2,
-				"line" : 281,
-				"parent" : 10
-			},
-			{
-				"command" : 9,
-				"file" : 0,
-				"line" : 466,
-				"parent" : 1
-			},
-			{
-				"command" : 10,
-				"file" : 0,
-				"line" : 464,
-				"parent" : 1
-			},
-			{
-				"command" : 12,
-				"file" : 0,
-				"line" : 482,
-				"parent" : 1
-			},
-			{
-				"command" : 11,
-				"file" : 0,
-				"line" : 316,
-				"parent" : 14
-			},
-			{
-				"command" : 12,
-				"file" : 0,
-				"line" : 483,
-				"parent" : 1
-			},
-			{
-				"command" : 11,
-				"file" : 0,
-				"line" : 316,
-				"parent" : 16
-			},
-			{
-				"command" : 11,
-				"file" : 0,
-				"line" : 316,
-				"parent" : 16
-			},
-			{
-				"command" : 3,
-				"file" : 0,
 				"line" : 358,
 				"parent" : 3
 			},
@@ -154,7 +62,121 @@
 				"command" : 2,
 				"file" : 0,
 				"line" : 337,
+				"parent" : 4
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 337,
+				"parent" : 4
+			},
+			{
+				"command" : 5,
+				"file" : 0,
+				"line" : 465,
+				"parent" : 1
+			},
+			{
+				"command" : 6,
+				"file" : 0,
+				"line" : 467,
+				"parent" : 1
+			},
+			{
+				"command" : 5,
+				"file" : 2,
+				"line" : 281,
+				"parent" : 8
+			},
+			{
+				"command" : 7,
+				"file" : 0,
+				"line" : 466,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 337,
+				"parent" : 4
+			},
+			{
+				"command" : 8,
+				"file" : 0,
+				"line" : 464,
+				"parent" : 1
+			},
+			{
+				"command" : 10,
+				"file" : 0,
+				"line" : 482,
+				"parent" : 1
+			},
+			{
+				"command" : 9,
+				"file" : 0,
+				"line" : 316,
+				"parent" : 13
+			},
+			{
+				"command" : 9,
+				"file" : 0,
+				"line" : 316,
+				"parent" : 13
+			},
+			{
+				"command" : 9,
+				"file" : 0,
+				"line" : 316,
+				"parent" : 13
+			},
+			{
+				"command" : 9,
+				"file" : 0,
+				"line" : 316,
+				"parent" : 13
+			},
+			{
+				"command" : 9,
+				"file" : 0,
+				"line" : 316,
+				"parent" : 13
+			},
+			{
+				"command" : 10,
+				"file" : 0,
+				"line" : 483,
+				"parent" : 1
+			},
+			{
+				"command" : 9,
+				"file" : 0,
+				"line" : 316,
 				"parent" : 19
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 355,
+				"parent" : 3
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 340,
+				"parent" : 21
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 337,
+				"parent" : 4
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 337,
+				"parent" : 4
 			}
 		]
 	},
@@ -167,102 +189,98 @@
 					"fragment" : "-mlongcalls -Wno-frame-address  -fno-builtin-memcpy -fno-builtin-memset -fno-builtin-bzero -fno-builtin-stpcpy -fno-builtin-strncpy -fdiagnostics-color=always"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-ffunction-sections"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-fdata-sections"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-Wno-error=unused-function"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-Wno-error=unused-variable"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-Wno-error=unused-but-set-variable"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-Wno-error=deprecated-declarations"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-Wno-unused-parameter"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-Wno-sign-compare"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-Wno-enum-conversion"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-gdwarf-4"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-ggdb"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-Os"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-freorder-blocks"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-fmacro-prefix-map=C:/Users/gorra/Desktop/Proyecto_macetas/.esphome/build/riegoesp32001=."
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-fmacro-prefix-map=C:/Users/gorra/.platformio/packages/framework-espidf=/IDF"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-fstrict-volatile-bitfields"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-fno-jump-tables"
 				},
 				{
-					"backtrace" : 9,
+					"backtrace" : 7,
 					"fragment" : "-fno-tree-switch-conversion"
 				},
 				{
-					"backtrace" : 11,
+					"backtrace" : 9,
 					"fragment" : "-std=gnu17"
 				},
 				{
-					"backtrace" : 11,
+					"backtrace" : 9,
 					"fragment" : "-Wno-old-style-declaration"
 				}
 			],
 			"defines" : 
 			[
 				{
-					"backtrace" : 8,
-					"define" : "ESP_MDNS_VERSION_NUMBER=\"1.8.2\""
-				},
-				{
-					"backtrace" : 12,
+					"backtrace" : 10,
 					"define" : "ESP_PLATFORM"
 				},
 				{
-					"backtrace" : 12,
+					"backtrace" : 10,
 					"define" : "IDF_VER=\"5.3.2\""
 				},
 				{
-					"backtrace" : 6,
+					"backtrace" : 11,
 					"define" : "MBEDTLS_CONFIG_FILE=\"mbedtls/esp_config.h\""
 				},
 				{
@@ -274,39 +292,51 @@
 					"define" : "SOC_XTAL_FREQ_MHZ=CONFIG_XTAL_FREQ"
 				},
 				{
-					"backtrace" : 12,
+					"backtrace" : 10,
 					"define" : "_GLIBCXX_HAVE_POSIX_SEMAPHORE"
 				},
 				{
-					"backtrace" : 12,
+					"backtrace" : 10,
 					"define" : "_GLIBCXX_USE_POSIX_SEMAPHORE"
 				},
 				{
-					"backtrace" : 12,
+					"backtrace" : 10,
 					"define" : "_GNU_SOURCE"
 				},
 				{
-					"backtrace" : 12,
+					"backtrace" : 10,
 					"define" : "_POSIX_READER_WRITER_LOCKS"
 				}
 			],
 			"includes" : 
 			[
 				{
-					"backtrace" : 13,
+					"backtrace" : 12,
 					"path" : "C:/Users/gorra/Desktop/Proyecto_macetas/.esphome/build/riegoesp32001/.pioenvs/riegoesp32001/config"
 				},
 				{
+					"backtrace" : 14,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/include/common"
+				},
+				{
 					"backtrace" : 15,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_local_ctrl/include"
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/include/security"
+				},
+				{
+					"backtrace" : 16,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/include/transports"
 				},
 				{
 					"backtrace" : 17,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_local_ctrl/proto-c"
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/include/crypto/srp6a"
 				},
 				{
 					"backtrace" : 18,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_local_ctrl/src"
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/proto-c"
+				},
+				{
+					"backtrace" : 20,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/src/common"
 				},
 				{
 					"backtrace" : 2,
@@ -477,124 +507,196 @@
 					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/lwip/port/esp32xx/include/sys"
 				},
 				{
-					"backtrace" : 5,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/include/common"
-				},
-				{
-					"backtrace" : 5,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/include/security"
-				},
-				{
-					"backtrace" : 5,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/include/transports"
-				},
-				{
-					"backtrace" : 5,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/include/crypto/srp6a"
-				},
-				{
-					"backtrace" : 5,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/proto-c"
-				},
-				{
-					"backtrace" : 5,
+					"backtrace" : 22,
 					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_timer/include"
 				},
 				{
-					"backtrace" : 5,
+					"backtrace" : 22,
 					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_wifi/include"
 				},
 				{
-					"backtrace" : 5,
+					"backtrace" : 22,
 					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_wifi/wifi_apps/include"
 				},
 				{
-					"backtrace" : 5,
+					"backtrace" : 22,
 					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_wifi/wifi_apps/nan_app/include"
 				},
 				{
-					"backtrace" : 5,
+					"backtrace" : 22,
 					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_wifi/include/local"
 				},
 				{
-					"backtrace" : 5,
+					"backtrace" : 22,
 					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_event/include"
 				},
 				{
-					"backtrace" : 5,
+					"backtrace" : 22,
 					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_phy/include"
 				},
 				{
-					"backtrace" : 5,
+					"backtrace" : 22,
 					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_phy/esp32/include"
 				},
 				{
-					"backtrace" : 5,
+					"backtrace" : 22,
 					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_netif/include"
 				},
 				{
-					"backtrace" : 6,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_https_server/include"
-				},
-				{
-					"backtrace" : 6,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_http_server/include"
-				},
-				{
-					"backtrace" : 6,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/http_parser"
-				},
-				{
-					"backtrace" : 6,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp-tls"
-				},
-				{
-					"backtrace" : 6,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp-tls/esp-tls-crypto"
-				},
-				{
-					"backtrace" : 6,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/mbedtls/port/include"
-				},
-				{
-					"backtrace" : 6,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/include"
-				},
-				{
-					"backtrace" : 6,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/library"
-				},
-				{
-					"backtrace" : 6,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/3rdparty/everest/include"
-				},
-				{
-					"backtrace" : 6,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/3rdparty/p256-m"
-				},
-				{
-					"backtrace" : 6,
-					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/3rdparty/p256-m/p256-m"
-				},
-				{
-					"backtrace" : 20,
+					"backtrace" : 5,
 					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protobuf-c/protobuf-c"
 				},
 				{
-					"backtrace" : 8,
-					"path" : "C:/Users/gorra/Desktop/Proyecto_macetas/.esphome/build/riegoesp32001/managed_components/espressif__mdns/include"
+					"backtrace" : 11,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/mbedtls/port/include"
 				},
 				{
-					"backtrace" : 8,
+					"backtrace" : 11,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/include"
+				},
+				{
+					"backtrace" : 11,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/library"
+				},
+				{
+					"backtrace" : 11,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/3rdparty/everest/include"
+				},
+				{
+					"backtrace" : 11,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/3rdparty/p256-m"
+				},
+				{
+					"backtrace" : 11,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/3rdparty/p256-m/p256-m"
+				},
+				{
+					"backtrace" : 6,
 					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/console"
 				},
 				{
-					"backtrace" : 8,
+					"backtrace" : 6,
 					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/vfs/include"
 				},
 				{
-					"backtrace" : 8,
+					"backtrace" : 6,
 					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_vfs_console/include"
+				},
+				{
+					"backtrace" : 23,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_http_server/include"
+				},
+				{
+					"backtrace" : 23,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/http_parser"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/driver/deprecated"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/driver/i2c/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/driver/touch_sensor/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/driver/twai/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/driver/touch_sensor/esp32/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_pm/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_ringbuf/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_gpio/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_pcnt/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_gptimer/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_spi/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_mcpwm/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_ana_cmpr/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_i2s/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_sdmmc/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/sdmmc/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_sdspi/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_sdio/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_dac/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_rmt/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_tsens/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_sdm/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_i2c/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_uart/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_ledc/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_parlio/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_driver_usb_serial_jtag/include"
 				}
 			],
 			"language" : "C",
@@ -603,7 +705,16 @@
 				0,
 				1,
 				2,
-				3
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12
 			]
 		}
 	],
@@ -615,32 +726,20 @@
 		},
 		{
 			"backtrace" : 5,
-			"id" : "__idf_console::@4311ed8d271cc0ee1422"
-		},
-		{
-			"backtrace" : 6,
-			"id" : "__idf_esp_https_server::@a47490a9e49b7eabdb18"
-		},
-		{
-			"backtrace" : 5,
-			"id" : "__idf_protocomm::@d76d01c8dec06205e1fc"
-		},
-		{
-			"backtrace" : 5,
 			"id" : "__idf_protobuf-c::@b14513c4bd859268ec22"
 		},
 		{
-			"backtrace" : 8,
-			"id" : "__idf_espressif__mdns::@d92204a997f34ad8e688"
+			"backtrace" : 6,
+			"id" : "__idf_console::@4311ed8d271cc0ee1422"
 		}
 	],
-	"id" : "__idf_esp_local_ctrl::@d6aad58d2946e56208ef",
-	"name" : "__idf_esp_local_ctrl",
-	"nameOnDisk" : "libesp_local_ctrl.a",
+	"id" : "__idf_protocomm::@d76d01c8dec06205e1fc",
+	"name" : "__idf_protocomm",
+	"nameOnDisk" : "libprotocomm.a",
 	"paths" : 
 	{
-		"build" : "esp-idf/esp_local_ctrl",
-		"source" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_local_ctrl"
+		"build" : "esp-idf/protocomm",
+		"source" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm"
 	},
 	"sourceGroups" : 
 	[
@@ -651,7 +750,16 @@
 				0,
 				1,
 				2,
-				3
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12
 			]
 		}
 	],
@@ -660,25 +768,79 @@
 		{
 			"backtrace" : 2,
 			"compileGroupIndex" : 0,
-			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_local_ctrl/src/esp_local_ctrl.c",
+			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/src/common/protocomm.c",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 2,
 			"compileGroupIndex" : 0,
-			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_local_ctrl/src/esp_local_ctrl_handler.c",
+			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/proto-c/constants.pb-c.c",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 2,
 			"compileGroupIndex" : 0,
-			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_local_ctrl/proto-c/esp_local_ctrl.pb-c.c",
+			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/proto-c/sec0.pb-c.c",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 2,
 			"compileGroupIndex" : 0,
-			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/esp_local_ctrl/src/esp_local_ctrl_transport_httpd.c",
+			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/proto-c/sec1.pb-c.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/proto-c/sec2.pb-c.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/proto-c/session.pb-c.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/src/transports/protocomm_console.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/src/transports/protocomm_httpd.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/src/security/security0.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/src/security/security1.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/src/security/security2.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/src/crypto/srp6a/esp_srp.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "C:/Users/gorra/.platformio/packages/framework-espidf/components/protocomm/src/crypto/srp6a/esp_srp_mpi.c",
 			"sourceGroupIndex" : 0
 		}
 	],

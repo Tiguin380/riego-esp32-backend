@@ -47,15 +47,13 @@ script:
           body: !lambda |-
             char json[512];
             snprintf(json, sizeof(json), 
-              "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"soil_voltage\":%.2f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"valve_state\":\"%s\",\"humidity_low_color\":\"%s\",\"humidity_good_color\":\"%s\"}",
+              "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"soil_voltage\":%.2f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"valve_state\":\"%s\"}",
               0.0,
               id(soil_hum).state,
               id(soil_raw).state,
               id(lluvia_test).state,
               id(humidity_low).state,
-              (id(valve_relay).state ? "ON" : "OFF"),
-              id(color_critical).state.c_str(),
-              id(color_low).state.c_str()
+              (id(valve_relay).state ? "ON" : "OFF")
             );
             return std::string(json);
 
@@ -95,55 +93,7 @@ script:
                     }
                   }
 
-                  // Parse humidity_low_color
-                  std::string color_low = "Rojo";
-                  std::string search_low = "\"humidity_low_color\":\"";
-                  size_t pos_l = resp_body.find(search_low);
-                  if (pos_l != std::string::npos) {
-                    size_t start_l = pos_l + search_low.length();
-                    size_t end_l = resp_body.find("\"", start_l);
-                    if (end_l != std::string::npos) {
-                      color_low = resp_body.substr(start_l, end_l - start_l);
-                    }
-                  }
 
-                  // Parse humidity_good_color
-                  std::string color_good = "Verde";
-                  std::string search_good = "\"humidity_good_color\":\"";
-                  size_t pos_g = resp_body.find(search_good);
-                  if (pos_g != std::string::npos) {
-                    size_t start_g = pos_g + search_good.length();
-                    size_t end_g = resp_body.find("\"", start_g);
-                    if (end_g != std::string::npos) {
-                      color_good = resp_body.substr(start_g, end_g - start_g);
-                    }
-                  }
-
-                  // Parse led_mode
-                  std::string led_mode = "auto";
-                  std::string search_mode = "\"led_mode\":\"";
-                  size_t pos_mode = resp_body.find(search_mode);
-                  if (pos_mode != std::string::npos) {
-                    size_t start_mode = pos_mode + search_mode.length();
-                    size_t end_mode = resp_body.find("\"", start_mode);
-                    if (end_mode != std::string::npos) {
-                      led_mode = resp_body.substr(start_mode, end_mode - start_mode);
-                    }
-                  }
-
-                  // Parse led_manual_color
-                  std::string led_manual_color = "Off";
-                  std::string search_manual = "\"led_manual_color\":\"";
-                  size_t pos_manual = resp_body.find(search_manual);
-                  if (pos_manual != std::string::npos) {
-                    size_t start_manual = pos_manual + search_manual.length();
-                    size_t end_manual = resp_body.find("\"", start_manual);
-                    if (end_manual != std::string::npos) {
-                      led_manual_color = resp_body.substr(start_manual, end_manual - start_manual);
-                    }
-                  }
-                  
-                  // Obtener humedad actual del sensor y voltage
                   float humedad_actual = id(soil_hum).state;
                   float soil_v = id(soil_raw).state;
                   ESP_LOGI("SENSOR", "Soil V: %.2f, Hum: %.1f, Umbral: %.1f", soil_v, humedad_actual, umbral);
@@ -160,106 +110,7 @@ script:
                     ESP_LOGI("VALVE", "SIN CAMBIO: Hum %.1f Umbral %.1f", humedad_actual, umbral);
                   }
 
-                  // Lógica para LEDs
-                  if (led_mode == "manual") {
-                    // Aplicar color manual
-                    if (led_manual_color == "Rojo") {
-                      auto call = id(rgb_test).turn_on();
-                      call.set_rgb(1.0, 0.0, 0.0);
-                      call.perform();
-                    } else if (led_manual_color == "Verde") {
-                      auto call = id(rgb_test).turn_on();
-                      call.set_rgb(0.0, 1.0, 0.0);
-                      call.perform();
-                    } else if (led_manual_color == "Azul") {
-                      auto call = id(rgb_test).turn_on();
-                      call.set_rgb(0.0, 0.0, 1.0);
-                      call.perform();
-                    } else if (led_manual_color == "Amarillo") {
-                      auto call = id(rgb_test).turn_on();
-                      call.set_rgb(1.0, 1.0, 0.0);
-                      call.perform();
-                    } else if (led_manual_color == "Cian") {
-                      auto call = id(rgb_test).turn_on();
-                      call.set_rgb(0.0, 1.0, 1.0);
-                      call.perform();
-                    } else if (led_manual_color == "Magenta") {
-                      auto call = id(rgb_test).turn_on();
-                      call.set_rgb(1.0, 0.0, 1.0);
-                      call.perform();
-                    } else if (led_manual_color == "Blanco") {
-                      auto call = id(rgb_test).turn_on();
-                      call.set_rgb(1.0, 1.0, 1.0);
-                      call.perform();
-                    } else if (led_manual_color == "Off") {
-                      id(rgb_test).turn_off();
-                    }
-                  } else {
-                    // Modo automático basado en humedad
-                    if (humedad_actual < umbral) {
-                      // Humedad baja - usar color_low
-                      if (color_low == "Rojo") {
-                        auto call = id(rgb_test).turn_on();
-                        call.set_rgb(1.0, 0.0, 0.0);
-                        call.perform();
-                      } else if (color_low == "Verde") {
-                        auto call = id(rgb_test).turn_on();
-                        call.set_rgb(0.0, 1.0, 0.0);
-                        call.perform();
-                      } else if (color_low == "Azul") {
-                        auto call = id(rgb_test).turn_on();
-                        call.set_rgb(0.0, 0.0, 1.0);
-                        call.perform();
-                      } else if (color_low == "Amarillo") {
-                        auto call = id(rgb_test).turn_on();
-                        call.set_rgb(1.0, 1.0, 0.0);
-                        call.perform();
-                      } else if (color_low == "Cian") {
-                        auto call = id(rgb_test).turn_on();
-                        call.set_rgb(0.0, 1.0, 1.0);
-                        call.perform();
-                      } else if (color_low == "Magenta") {
-                        auto call = id(rgb_test).turn_on();
-                        call.set_rgb(1.0, 0.0, 1.0);
-                        call.perform();
-                      } else if (color_low == "Blanco") {
-                        auto call = id(rgb_test).turn_on();
-                        call.set_rgb(1.0, 1.0, 1.0);
-                        call.perform();
-                      }
-                    } else {
-                      // Humedad buena - usar color_good
-                      if (color_good == "Rojo") {
-                        auto call = id(rgb_test).turn_on();
-                        call.set_rgb(1.0, 0.0, 0.0);
-                        call.perform();
-                      } else if (color_good == "Verde") {
-                        auto call = id(rgb_test).turn_on();
-                        call.set_rgb(0.0, 1.0, 0.0);
-                        call.perform();
-                      } else if (color_good == "Azul") {
-                        auto call = id(rgb_test).turn_on();
-                        call.set_rgb(0.0, 0.0, 1.0);
-                        call.perform();
-                      } else if (color_good == "Amarillo") {
-                        auto call = id(rgb_test).turn_on();
-                        call.set_rgb(1.0, 1.0, 0.0);
-                        call.perform();
-                      } else if (color_good == "Cian") {
-                        auto call = id(rgb_test).turn_on();
-                        call.set_rgb(0.0, 1.0, 1.0);
-                        call.perform();
-                      } else if (color_good == "Magenta") {
-                        auto call = id(rgb_test).turn_on();
-                        call.set_rgb(1.0, 0.0, 1.0);
-                        call.perform();
-                      } else if (color_good == "Blanco") {
-                        auto call = id(rgb_test).turn_on();
-                        call.set_rgb(1.0, 1.0, 1.0);
-                        call.perform();
-                      }
-                    }
-                  }
+
           on_error:
             then:
               - logger.log: "ERROR al obtener configuracion"
@@ -277,56 +128,7 @@ number:
     restore_value: true
     optimistic: true
 
-# -------- Selector de Color --------
-select:
-  - platform: template
-    name: "Humedad Baja - Color"
-    id: color_critical
-    icon: "mdi:palette"
-    options:
-      - "Rojo"
-      - "Verde"
-      - "Azul"
-      - "Amarillo"
-      - "Cian"
-      - "Magenta"
-      - "Blanco"
-    initial_option: "Rojo"
-    restore_value: true
-    optimistic: true
 
-  - platform: template
-    name: "Humedad Buena - Color"
-    id: color_low
-    icon: "mdi:palette"
-    options:
-      - "Rojo"
-      - "Verde"
-      - "Azul"
-      - "Amarillo"
-      - "Cian"
-      - "Magenta"
-      - "Blanco"
-    initial_option: "Verde"
-    restore_value: true
-    optimistic: true
-
-  - platform: template
-    name: "Color Manual LEDs"
-    id: color_manual
-    icon: "mdi:led-on"
-    options:
-      - "Rojo"
-      - "Verde"
-      - "Azul"
-      - "Amarillo"
-      - "Cian"
-      - "Magenta"
-      - "Blanco"
-      - "Off"
-    initial_option: "Off"
-    restore_value: true
-    optimistic: true
 
 # -------- I2C (OLED) --------
 i2c:
@@ -396,16 +198,7 @@ sensor:
     filters:
       - multiply: 3.3
 
-# -------- LED RGB Addressable 6812 (Solo para automations, sin control manual) --------
-light:
-  - platform: esp32_rmt_led_strip
-    rgb_order: GRB
-    pin: GPIO26
-    num_leds: 4
-    chipset: WS2812
-    id: rgb_test
-    internal: true
-    restore_mode: ALWAYS_ON
+
 
 # Válvula (relé)
 switch:
@@ -426,24 +219,4 @@ interval:
     then:
       - script.execute: fetch_config_from_server
 
-# -------- BOTÓN DE PRUEBA - FORZAR ROJO --------
-button:
-  - platform: template
-    name: "FORZAR LED ROJO"
-    on_press:
-      then:
-        - lambda: |-
-            auto call = id(rgb_test).turn_on();
-            call.set_rgb(1.0, 0.0, 0.0);
-            call.perform();
-            ESP_LOGI("TEST", "LED FORZADO A ROJO");
 
-  - platform: template
-    name: "FORZAR LED AZUL"
-    on_press:
-      then:
-        - lambda: |-
-            auto call = id(rgb_test).turn_on();
-            call.set_rgb(0.0, 0.0, 1.0);
-            call.perform();
-            ESP_LOGI("TEST", "LED FORZADO A AZUL");

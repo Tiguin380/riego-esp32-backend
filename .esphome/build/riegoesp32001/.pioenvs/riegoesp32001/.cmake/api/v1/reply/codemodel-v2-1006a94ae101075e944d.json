@@ -2438,7 +2438,7 @@
 				{
 					"directoryIndex" : 100,
 					"id" : "__idf_esp_local_ctrl::@d6aad58d2946e56208ef",
-					"jsonFile" : "target-__idf_esp_local_ctrl-a01f81bef73eb9c4b948.json",
+					"jsonFile" : "target-__idf_esp_local_ctrl-a4d591a1bc0ca58842a3.json",
 					"name" : "__idf_esp_local_ctrl",
 					"projectIndex" : 1
 				},
@@ -2634,7 +2634,7 @@
 				{
 					"directoryIndex" : 99,
 					"id" : "__idf_protocomm::@d76d01c8dec06205e1fc",
-					"jsonFile" : "target-__idf_protocomm-51dde39440b1c2055c15.json",
+					"jsonFile" : "target-__idf_protocomm-1fbe4b69961cbfd4c9bf.json",
 					"name" : "__idf_protocomm",
 					"projectIndex" : 1
 				},
@@ -2676,7 +2676,7 @@
 				{
 					"directoryIndex" : 116,
 					"id" : "__idf_src::@2478b13de56d3028f688",
-					"jsonFile" : "target-__idf_src-45591d94ff1684c80e26.json",
+					"jsonFile" : "target-__idf_src-8089a3005418d7d5450b.json",
 					"name" : "__idf_src",
 					"projectIndex" : 1
 				},
@@ -2711,7 +2711,7 @@
 				{
 					"directoryIndex" : 114,
 					"id" : "__idf_wifi_provisioning::@9d7e7ffe1b15746c1098",
-					"jsonFile" : "target-__idf_wifi_provisioning-cecdb1ff0353b508d9d7.json",
+					"jsonFile" : "target-__idf_wifi_provisioning-9f5ec69d239dd89e0d5a.json",
 					"name" : "__idf_wifi_provisioning",
 					"projectIndex" : 1
 				},
@@ -2732,7 +2732,7 @@
 				{
 					"directoryIndex" : 25,
 					"id" : "__ldgen_output_sections.ld::@874df54e61e20112dfd4",
-					"jsonFile" : "target-__ldgen_output_sections.ld-14b983c3abd692de04f2.json",
+					"jsonFile" : "target-__ldgen_output_sections.ld-1080d646ae90c46c071d.json",
 					"name" : "__ldgen_output_sections.ld",
 					"projectIndex" : 1
 				},
@@ -3033,7 +3033,7 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "riegoesp32001.elf::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-riegoesp32001.elf-26b3ab3fd08f91e8d8ea.json",
+					"jsonFile" : "target-riegoesp32001.elf-7f8e73e5f982de1e10bf.json",
 					"name" : "riegoesp32001.elf",
 					"projectIndex" : 0
 				},
