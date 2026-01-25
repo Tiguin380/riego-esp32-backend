@@ -204,6 +204,36 @@ app.get('/api/sensor/latest/:device_code', async (req, res) => {
   }
 });
 
+// Obtener estadísticas de las últimas 24 horas
+app.get('/api/sensor/stats/:device_code', async (req, res) => {
+  try {
+    const { device_code } = req.params;
+
+    const result = await pool.query(
+      `SELECT 
+        COUNT(*) as total_readings,
+        AVG(temperature) as temp_avg,
+        MAX(temperature) as temp_max,
+        MIN(temperature) as temp_min,
+        AVG(humidity) as hum_avg
+       FROM sensor_data sd
+       JOIN devices d ON sd.device_id = d.id
+       WHERE d.device_code = $1
+       AND sd.created_at >= NOW() - INTERVAL '24 hours'`,
+      [device_code]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ total_readings: 0 });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Obtener historial de datos
 app.get('/api/sensor/history/:device_code', async (req, res) => {
   try {

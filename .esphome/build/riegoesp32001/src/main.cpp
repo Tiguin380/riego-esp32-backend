@@ -366,6 +366,30 @@ void setup() {
   //                       }
   //                     }
   //   
+  //                      Parse led_mode
+  //                     std::string led_mode = "auto";
+  //                     std::string search_mode = "\"led_mode\":\"";
+  //                     size_t pos_mode = resp_body.find(search_mode);
+  //                     if (pos_mode != std::string::npos) {
+  //                       size_t start_mode = pos_mode + search_mode.length();
+  //                       size_t end_mode = resp_body.find("\"", start_mode);
+  //                       if (end_mode != std::string::npos) {
+  //                         led_mode = resp_body.substr(start_mode, end_mode - start_mode);
+  //                       }
+  //                     }
+  //   
+  //                      Parse led_manual_color
+  //                     std::string led_manual_color = "Off";
+  //                     std::string search_manual = "\"led_manual_color\":\"";
+  //                     size_t pos_manual = resp_body.find(search_manual);
+  //                     if (pos_manual != std::string::npos) {
+  //                       size_t start_manual = pos_manual + search_manual.length();
+  //                       size_t end_manual = resp_body.find("\"", start_manual);
+  //                       if (end_manual != std::string::npos) {
+  //                         led_manual_color = resp_body.substr(start_manual, end_manual - start_manual);
+  //                       }
+  //                     }
+  //   
   //                      Obtener humedad actual del sensor y voltage
   //                     float humedad_actual = id(soil_hum).state;
   //                     float soil_v = id(soil_raw).state;
@@ -382,6 +406,107 @@ void setup() {
   //                     } else {
   //                       ESP_LOGI("VALVE", "SIN CAMBIO: Hum %.1f Umbral %.1f", humedad_actual, umbral);
   //                     }
+  //   
+  //                      Lógica para LEDs
+  //                     if (led_mode == "manual") {
+  //                        Aplicar color manual
+  //                       if (led_manual_color == "Rojo") {
+  //                         auto call = id(rgb_test).turn_on();
+  //                         call.set_rgb(1.0, 0.0, 0.0);
+  //                         call.perform();
+  //                       } else if (led_manual_color == "Verde") {
+  //                         auto call = id(rgb_test).turn_on();
+  //                         call.set_rgb(0.0, 1.0, 0.0);
+  //                         call.perform();
+  //                       } else if (led_manual_color == "Azul") {
+  //                         auto call = id(rgb_test).turn_on();
+  //                         call.set_rgb(0.0, 0.0, 1.0);
+  //                         call.perform();
+  //                       } else if (led_manual_color == "Amarillo") {
+  //                         auto call = id(rgb_test).turn_on();
+  //                         call.set_rgb(1.0, 1.0, 0.0);
+  //                         call.perform();
+  //                       } else if (led_manual_color == "Cian") {
+  //                         auto call = id(rgb_test).turn_on();
+  //                         call.set_rgb(0.0, 1.0, 1.0);
+  //                         call.perform();
+  //                       } else if (led_manual_color == "Magenta") {
+  //                         auto call = id(rgb_test).turn_on();
+  //                         call.set_rgb(1.0, 0.0, 1.0);
+  //                         call.perform();
+  //                       } else if (led_manual_color == "Blanco") {
+  //                         auto call = id(rgb_test).turn_on();
+  //                         call.set_rgb(1.0, 1.0, 1.0);
+  //                         call.perform();
+  //                       } else if (led_manual_color == "Off") {
+  //                         id(rgb_test).turn_off();
+  //                       }
+  //                     } else {
+  //                        Modo automático basado en humedad
+  //                       if (humedad_actual < umbral) {
+  //                          Humedad baja - usar color_low
+  //                         if (color_low == "Rojo") {
+  //                           auto call = id(rgb_test).turn_on();
+  //                           call.set_rgb(1.0, 0.0, 0.0);
+  //                           call.perform();
+  //                         } else if (color_low == "Verde") {
+  //                           auto call = id(rgb_test).turn_on();
+  //                           call.set_rgb(0.0, 1.0, 0.0);
+  //                           call.perform();
+  //                         } else if (color_low == "Azul") {
+  //                           auto call = id(rgb_test).turn_on();
+  //                           call.set_rgb(0.0, 0.0, 1.0);
+  //                           call.perform();
+  //                         } else if (color_low == "Amarillo") {
+  //                           auto call = id(rgb_test).turn_on();
+  //                           call.set_rgb(1.0, 1.0, 0.0);
+  //                           call.perform();
+  //                         } else if (color_low == "Cian") {
+  //                           auto call = id(rgb_test).turn_on();
+  //                           call.set_rgb(0.0, 1.0, 1.0);
+  //                           call.perform();
+  //                         } else if (color_low == "Magenta") {
+  //                           auto call = id(rgb_test).turn_on();
+  //                           call.set_rgb(1.0, 0.0, 1.0);
+  //                           call.perform();
+  //                         } else if (color_low == "Blanco") {
+  //                           auto call = id(rgb_test).turn_on();
+  //                           call.set_rgb(1.0, 1.0, 1.0);
+  //                           call.perform();
+  //                         }
+  //                       } else {
+  //                          Humedad buena - usar color_good
+  //                         if (color_good == "Rojo") {
+  //                           auto call = id(rgb_test).turn_on();
+  //                           call.set_rgb(1.0, 0.0, 0.0);
+  //                           call.perform();
+  //                         } else if (color_good == "Verde") {
+  //                           auto call = id(rgb_test).turn_on();
+  //                           call.set_rgb(0.0, 1.0, 0.0);
+  //                           call.perform();
+  //                         } else if (color_good == "Azul") {
+  //                           auto call = id(rgb_test).turn_on();
+  //                           call.set_rgb(0.0, 0.0, 1.0);
+  //                           call.perform();
+  //                         } else if (color_good == "Amarillo") {
+  //                           auto call = id(rgb_test).turn_on();
+  //                           call.set_rgb(1.0, 1.0, 0.0);
+  //                           call.perform();
+  //                         } else if (color_good == "Cian") {
+  //                           auto call = id(rgb_test).turn_on();
+  //                           call.set_rgb(0.0, 1.0, 1.0);
+  //                           call.perform();
+  //                         } else if (color_good == "Magenta") {
+  //                           auto call = id(rgb_test).turn_on();
+  //                           call.set_rgb(1.0, 0.0, 1.0);
+  //                           call.perform();
+  //                         } else if (color_good == "Blanco") {
+  //                           auto call = id(rgb_test).turn_on();
+  //                           call.set_rgb(1.0, 1.0, 1.0);
+  //                           call.perform();
+  //                         }
+  //                       }
+  //                     }
   //                   type_id: lambdaaction_id
   //               automation_id: automation_id_2
   //               trigger_id: http_request_httprequestresponsetrigger_id
@@ -390,9 +515,9 @@ void setup() {
   //                 - logger.log:
   //                     format: ERROR al obtener configuracion
   //                     level: DEBUG
-  //                     tag: main
-  //                     args: []
   //                     logger_id: logger_logger_id
+  //                     args: []
+  //                     tag: main
   //                   type_id: lambdaaction_id_2
   //               automation_id: automation_id_3
   //               trigger_id: trigger_id_2
@@ -518,9 +643,8 @@ void setup() {
   //     - Cian
   //     - Magenta
   //     - Blanco
-  //     - Apagar
-  //     - Automático
-  //   initial_option: Automático
+  //     - 'Off'
+  //   initial_option: 'Off'
   //   restore_value: true
   //   optimistic: true
   //   disabled_by_default: false
@@ -534,9 +658,9 @@ void setup() {
   color_manual->set_object_id("color_manual_leds");
   color_manual->set_disabled_by_default(false);
   color_manual->set_icon("mdi:led-on");
-  color_manual->traits.set_options({"Rojo", "Verde", "Azul", "Amarillo", "Cian", "Magenta", "Blanco", "Apagar", "Autom\303\241tico"});
+  color_manual->traits.set_options({"Rojo", "Verde", "Azul", "Amarillo", "Cian", "Magenta", "Blanco", "Off"});
   color_manual->set_optimistic(true);
-  color_manual->set_initial_option("Autom\303\241tico");
+  color_manual->set_initial_option("Off");
   color_manual->set_restore_value(true);
   // font:
   //   file:
@@ -1713,7 +1837,7 @@ void setup() {
   soil_hum->set_component_source("template.sensor");
   App.register_component(soil_hum);
   soil_hum->set_template([=]() -> esphome::optional<float> {
-      #line 250 "riego_esp32.yaml"
+      #line 374 "riego_esp32.yaml"
       float v = soil_raw->state;
        
       float min_v = 0.30;  
@@ -1941,7 +2065,7 @@ void setup() {
   button_buttonpresstrigger_id = new button::ButtonPressTrigger(template__templatebutton_id);
   automation_id_7 = new Automation<>(button_buttonpresstrigger_id);
   lambdaaction_id_3 = new LambdaAction<>([=]() -> void {
-      #line 312 "riego_esp32.yaml"
+      #line 436 "riego_esp32.yaml"
       auto call = rgb_test->turn_on();
       call.set_rgb(1.0, 0.0, 0.0);
       call.perform();
@@ -1971,7 +2095,7 @@ void setup() {
   button_buttonpresstrigger_id_2 = new button::ButtonPressTrigger(template__templatebutton_id_2);
   automation_id_8 = new Automation<>(button_buttonpresstrigger_id_2);
   lambdaaction_id_4 = new LambdaAction<>([=]() -> void {
-      #line 322 "riego_esp32.yaml"
+      #line 446 "riego_esp32.yaml"
       auto call = rgb_test->turn_on();
       call.set_rgb(0.0, 0.0, 1.0);
       call.perform();
@@ -2011,7 +2135,7 @@ void setup() {
   http_request_httprequestsendaction_id_2->register_response_trigger(http_request_httprequestresponsetrigger_id);
   automation_id_2 = new Automation<std::shared_ptr<http_request::HttpContainer>, std::string &>(http_request_httprequestresponsetrigger_id);
   oled_test->set_writer([=](display::Display & it) -> void {
-      #line 225 "riego_esp32.yaml"
+      #line 349 "riego_esp32.yaml"
        
       it.printf(0, 0, oled_font, "Humedad: %.1f%% Volt: %.2fV", soil_hum->state, soil_raw->state);
        
@@ -2085,6 +2209,30 @@ void setup() {
       }
       
        
+      std::string led_mode = "auto";
+      std::string search_mode = "\"led_mode\":\"";
+      size_t pos_mode = resp_body.find(search_mode);
+      if (pos_mode != std::string::npos) {
+        size_t start_mode = pos_mode + search_mode.length();
+        size_t end_mode = resp_body.find("\"", start_mode);
+        if (end_mode != std::string::npos) {
+          led_mode = resp_body.substr(start_mode, end_mode - start_mode);
+        }
+      }
+      
+       
+      std::string led_manual_color = "Off";
+      std::string search_manual = "\"led_manual_color\":\"";
+      size_t pos_manual = resp_body.find(search_manual);
+      if (pos_manual != std::string::npos) {
+        size_t start_manual = pos_manual + search_manual.length();
+        size_t end_manual = resp_body.find("\"", start_manual);
+        if (end_manual != std::string::npos) {
+          led_manual_color = resp_body.substr(start_manual, end_manual - start_manual);
+        }
+      }
+      
+       
       float humedad_actual = soil_hum->state;
       float soil_v = soil_raw->state;
       ESP_LOGI("SENSOR", "Soil V: %.2f, Hum: %.1f, Umbral: %.1f", soil_v, humedad_actual, umbral);
@@ -2100,6 +2248,107 @@ void setup() {
       } else {
         ESP_LOGI("VALVE", "SIN CAMBIO: Hum %.1f Umbral %.1f", humedad_actual, umbral);
       }
+      
+       
+      if (led_mode == "manual") {
+         
+        if (led_manual_color == "Rojo") {
+          auto call = rgb_test->turn_on();
+          call.set_rgb(1.0, 0.0, 0.0);
+          call.perform();
+        } else if (led_manual_color == "Verde") {
+          auto call = rgb_test->turn_on();
+          call.set_rgb(0.0, 1.0, 0.0);
+          call.perform();
+        } else if (led_manual_color == "Azul") {
+          auto call = rgb_test->turn_on();
+          call.set_rgb(0.0, 0.0, 1.0);
+          call.perform();
+        } else if (led_manual_color == "Amarillo") {
+          auto call = rgb_test->turn_on();
+          call.set_rgb(1.0, 1.0, 0.0);
+          call.perform();
+        } else if (led_manual_color == "Cian") {
+          auto call = rgb_test->turn_on();
+          call.set_rgb(0.0, 1.0, 1.0);
+          call.perform();
+        } else if (led_manual_color == "Magenta") {
+          auto call = rgb_test->turn_on();
+          call.set_rgb(1.0, 0.0, 1.0);
+          call.perform();
+        } else if (led_manual_color == "Blanco") {
+          auto call = rgb_test->turn_on();
+          call.set_rgb(1.0, 1.0, 1.0);
+          call.perform();
+        } else if (led_manual_color == "Off") {
+          rgb_test->turn_off();
+        }
+      } else {
+         
+        if (humedad_actual < umbral) {
+           
+          if (color_low == "Rojo") {
+            auto call = rgb_test->turn_on();
+            call.set_rgb(1.0, 0.0, 0.0);
+            call.perform();
+          } else if (color_low == "Verde") {
+            auto call = rgb_test->turn_on();
+            call.set_rgb(0.0, 1.0, 0.0);
+            call.perform();
+          } else if (color_low == "Azul") {
+            auto call = rgb_test->turn_on();
+            call.set_rgb(0.0, 0.0, 1.0);
+            call.perform();
+          } else if (color_low == "Amarillo") {
+            auto call = rgb_test->turn_on();
+            call.set_rgb(1.0, 1.0, 0.0);
+            call.perform();
+          } else if (color_low == "Cian") {
+            auto call = rgb_test->turn_on();
+            call.set_rgb(0.0, 1.0, 1.0);
+            call.perform();
+          } else if (color_low == "Magenta") {
+            auto call = rgb_test->turn_on();
+            call.set_rgb(1.0, 0.0, 1.0);
+            call.perform();
+          } else if (color_low == "Blanco") {
+            auto call = rgb_test->turn_on();
+            call.set_rgb(1.0, 1.0, 1.0);
+            call.perform();
+          }
+        } else {
+           
+          if (color_good == "Rojo") {
+            auto call = rgb_test->turn_on();
+            call.set_rgb(1.0, 0.0, 0.0);
+            call.perform();
+          } else if (color_good == "Verde") {
+            auto call = rgb_test->turn_on();
+            call.set_rgb(0.0, 1.0, 0.0);
+            call.perform();
+          } else if (color_good == "Azul") {
+            auto call = rgb_test->turn_on();
+            call.set_rgb(0.0, 0.0, 1.0);
+            call.perform();
+          } else if (color_good == "Amarillo") {
+            auto call = rgb_test->turn_on();
+            call.set_rgb(1.0, 1.0, 0.0);
+            call.perform();
+          } else if (color_good == "Cian") {
+            auto call = rgb_test->turn_on();
+            call.set_rgb(0.0, 1.0, 1.0);
+            call.perform();
+          } else if (color_good == "Magenta") {
+            auto call = rgb_test->turn_on();
+            call.set_rgb(1.0, 0.0, 1.0);
+            call.perform();
+          } else if (color_good == "Blanco") {
+            auto call = rgb_test->turn_on();
+            call.set_rgb(1.0, 1.0, 1.0);
+            call.perform();
+          }
+        }
+      }
   });
   automation_id_2->add_actions({lambdaaction_id});
   trigger_id_2 = new Trigger<>();
@@ -2111,7 +2360,7 @@ void setup() {
   automation_id_3->add_actions({lambdaaction_id_2});
   automation_id_4->add_actions({http_request_httprequestsendaction_id_2});
   server_threshold->set_template([=]() -> esphome::optional<float> {
-      #line 265 "riego_esp32.yaml"
+      #line 389 "riego_esp32.yaml"
       return server_umbral->value();
   });
   // =========== AUTO GENERATED CODE END ============
