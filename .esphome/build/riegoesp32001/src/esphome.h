@@ -24,6 +24,7 @@
 #include "esphome\components\esp32_rmt_led_strip\led_strip.h"
 #include "esphome\components\esphome\ota\ota_esphome.h"
 #include "esphome\components\font\font.h"
+#include "esphome\components\globals\globals_component.h"
 #include "esphome\components\gpio\switch\gpio_switch.h"
 #include "esphome\components\http_request\http_request.h"
 #include "esphome\components\http_request\http_request_arduino.h"

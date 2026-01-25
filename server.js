@@ -56,6 +56,8 @@ async function initDB() {
         humidity_low_threshold DECIMAL(5,2) DEFAULT 50,
         humidity_low_color VARCHAR(20) DEFAULT 'Rojo',
         humidity_good_color VARCHAR(20) DEFAULT 'Verde',
+        led_mode VARCHAR(10) DEFAULT 'auto',
+        led_manual_color VARCHAR(20) DEFAULT 'Off',
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -110,6 +112,8 @@ app.get('/api/init', async (req, res) => {
         humidity_low_threshold DECIMAL(5,2) DEFAULT 50,
         humidity_low_color VARCHAR(20) DEFAULT 'Rojo',
         humidity_good_color VARCHAR(20) DEFAULT 'Verde',
+        led_mode VARCHAR(10) DEFAULT 'auto',
+        led_manual_color VARCHAR(20) DEFAULT 'Off',
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -249,7 +253,7 @@ app.get('/api/config/:device_code', async (req, res) => {
 app.post('/api/config/:device_code', async (req, res) => {
   try {
     const { device_code } = req.params;
-    const { humidity_low_threshold, humidity_low_color, humidity_good_color } = req.body;
+    const { humidity_low_threshold, humidity_low_color, humidity_good_color, led_mode, led_manual_color } = req.body;
 
     // Obtener device_id
     const device = await pool.query(
@@ -273,17 +277,17 @@ app.post('/api/config/:device_code', async (req, res) => {
       // Crear nueva configuración
       const config_id = uuidv4();
       await pool.query(
-        `INSERT INTO device_config (id, device_id, humidity_low_threshold, humidity_low_color, humidity_good_color)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [config_id, device_id, humidity_low_threshold, humidity_low_color, humidity_good_color]
+        `INSERT INTO device_config (id, device_id, humidity_low_threshold, humidity_low_color, humidity_good_color, led_mode, led_manual_color)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [config_id, device_id, humidity_low_threshold, humidity_low_color, humidity_good_color, led_mode, led_manual_color]
       );
     } else {
       // Actualizar configuración existente
       await pool.query(
         `UPDATE device_config 
-         SET humidity_low_threshold = $1, humidity_low_color = $2, humidity_good_color = $3, updated_at = CURRENT_TIMESTAMP
-         WHERE device_id = $4`,
-        [humidity_low_threshold, humidity_low_color, humidity_good_color, device_id]
+         SET humidity_low_threshold = $1, humidity_low_color = $2, humidity_good_color = $3, led_mode = $4, led_manual_color = $5, updated_at = CURRENT_TIMESTAMP
+         WHERE device_id = $6`,
+        [humidity_low_threshold, humidity_low_color, humidity_good_color, led_mode, led_manual_color, device_id]
       );
     }
 

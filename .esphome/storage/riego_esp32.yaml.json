@@ -8,8 +8,8 @@
   "address": "riegoesp32001.local",
   "web_port": 80,
   "esp_platform": "ESP32",
-  "build_path": "c:\\Users\\gorra\\Desktop\\Proyecto_macetas\\.esphome\\build\\riegoesp32001",
-  "firmware_bin_path": "c:\\Users\\gorra\\Desktop\\Proyecto_macetas\\.esphome\\build\\riegoesp32001\\.pioenvs\\riegoesp32001\\firmware.bin",
+  "build_path": "C:\\Users\\gorra\\Desktop\\Proyecto_macetas\\.esphome\\build\\riegoesp32001",
+  "firmware_bin_path": "C:\\Users\\gorra\\Desktop\\Proyecto_macetas\\.esphome\\build\\riegoesp32001\\.pioenvs\\riegoesp32001\\firmware.bin",
   "loaded_integrations": [
     "adc",
     "api",
@@ -19,6 +19,7 @@
     "esp32_rmt_led_strip",
     "esphome",
     "font",
+    "globals",
     "gpio",
     "http_request",
     "i2c",

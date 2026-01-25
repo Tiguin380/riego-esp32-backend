@@ -42,6 +42,7 @@ adc::ADCSensor *soil_raw;
 sensor::MultiplyFilter *sensor_multiplyfilter_id;
 esp32::ESP32InternalGPIOPin *esp32_esp32internalgpiopin_id;
 template_::TemplateSensor *soil_hum;
+template_::TemplateSensor *server_threshold;
 adc::ADCSensor *lluvia_test;
 sensor::MultiplyFilter *sensor_multiplyfilter_id_2;
 esp32::ESP32InternalGPIOPin *esp32_esp32internalgpiopin_id_2;
@@ -67,6 +68,7 @@ Automation<> *automation_id_4;
 http_request::HttpRequestSendAction<> *http_request_httprequestsendaction_id_2;
 http_request::HttpRequestResponseTrigger *http_request_httprequestresponsetrigger_id;
 Automation<std::shared_ptr<http_request::HttpContainer>, std::string &> *automation_id_2;
+globals::GlobalsComponent<float> *server_umbral;
 LambdaAction<std::shared_ptr<http_request::HttpContainer>, std::string &> *lambdaaction_id;
 Trigger<> *trigger_id_2;
 Automation<> *automation_id_3;
@@ -76,7 +78,7 @@ LambdaAction<> *lambdaaction_id_2;
 void setup() {
   // ========== AUTO GENERATED CODE BEGIN ===========
   App.reserve_switch(1);
-  App.reserve_sensor(3);
+  App.reserve_sensor(4);
   App.reserve_select(3);
   App.reserve_number(1);
   App.reserve_light(1);
@@ -98,7 +100,7 @@ void setup() {
   //   areas: []
   //   devices: []
   App.pre_setup("riegoesp32001", "", "Riego autom\303\241tico prueba ESP32", __DATE__ ", " __TIME__, false);
-  App.reserve_components(24);
+  App.reserve_components(26);
   // number:
   // select:
   // display:
@@ -333,6 +335,8 @@ void setup() {
   //                           if (end > start) {
   //                             umbral = atof(resp_body.substr(start, end - start).c_str());
   //                             ESP_LOGI("CONFIG", "Parsed umbral: %.1f", umbral);
+  //                             id(server_umbral) = umbral;
+  //                             id(server_threshold).publish_state(umbral);
   //                           }
   //                         }
   //                       }
@@ -369,12 +373,12 @@ void setup() {
   //   
   //                      Hysteresis para evitar toggles rápidos
   //                     float hys = 1.0;  porcentaje
-  //                     if (humedad_actual < (umbral - hys)) {
+  //                     if (humedad_actual > (umbral - hys)) {
   //                       id(valve_relay).turn_on();
-  //                       ESP_LOGI("VALVE", "ABRIENDO VÁLVULA: Hum %.1f < Umbral %.1f", humedad_actual, umbral);
-  //                     } else if (humedad_actual > (umbral + hys)) {
+  //                       ESP_LOGI("VALVE", "ABRIENDO VÁLVULA: Hum %.1f > Umbral %.1f", humedad_actual, umbral);
+  //                     } else if (humedad_actual < (umbral + hys)) {
   //                       id(valve_relay).turn_off();
-  //                       ESP_LOGI("VALVE", "CERRANDO VÁLVULA: Hum %.1f >= Umbral %.1f", humedad_actual, umbral);
+  //                       ESP_LOGI("VALVE", "CERRANDO VÁLVULA: Hum %.1f < Umbral %.1f", humedad_actual, umbral);
   //                     } else {
   //                       ESP_LOGI("VALVE", "SIN CAMBIO: Hum %.1f Umbral %.1f", humedad_actual, umbral);
   //                     }
@@ -385,9 +389,9 @@ void setup() {
   //             - then:
   //                 - logger.log:
   //                     format: ERROR al obtener configuracion
-  //                     args: []
   //                     level: DEBUG
   //                     tag: main
+  //                     args: []
   //                     logger_id: logger_logger_id
   //                   type_id: lambdaaction_id_2
   //               automation_id: automation_id_3
@@ -413,7 +417,7 @@ void setup() {
   //   platform: template
   //   name: Humedad Baja
   //   id: humidity_low
-  //   min_value: 10.0
+  //   min_value: 1.0
   //   max_value: 100.0
   //   step: 1.0
   //   initial_value: 50.0
@@ -431,7 +435,7 @@ void setup() {
   humidity_low->set_name("Humedad Baja");
   humidity_low->set_object_id("humedad_baja");
   humidity_low->set_disabled_by_default(false);
-  humidity_low->traits.set_min_value(10.0f);
+  humidity_low->traits.set_min_value(1.0f);
   humidity_low->traits.set_max_value(100.0f);
   humidity_low->traits.set_step(1.0f);
   humidity_low->traits.set_mode(number::NUMBER_MODE_AUTO);
@@ -514,6 +518,7 @@ void setup() {
   //     - Cian
   //     - Magenta
   //     - Blanco
+  //     - Apagar
   //     - Automático
   //   initial_option: Automático
   //   restore_value: true
@@ -529,13 +534,13 @@ void setup() {
   color_manual->set_object_id("color_manual_leds");
   color_manual->set_disabled_by_default(false);
   color_manual->set_icon("mdi:led-on");
-  color_manual->traits.set_options({"Rojo", "Verde", "Azul", "Amarillo", "Cian", "Magenta", "Blanco", "Autom\303\241tico"});
+  color_manual->traits.set_options({"Rojo", "Verde", "Azul", "Amarillo", "Cian", "Magenta", "Blanco", "Apagar", "Autom\303\241tico"});
   color_manual->set_optimistic(true);
   color_manual->set_initial_option("Autom\303\241tico");
   color_manual->set_restore_value(true);
   // font:
   //   file:
-  //     path: c:\Users\gorra\Desktop\Proyecto_macetas\fonts/NotoSans-Regular.ttf
+  //     path: C:\Users\gorra\Desktop\Proyecto_macetas\fonts/NotoSans-Regular.ttf
   //     type: local
   //   id: oled_font
   //   size: 12
@@ -1593,9 +1598,9 @@ void setup() {
   //      Línea 1: Humedad y voltaje
   //     it.printf(0, 0, id(oled_font), "Humedad: %.1f%% Volt: %.2fV", id(soil_hum).state, id(soil_raw).state);
   //      Línea 2: Umbral configurado
-  //     it.printf(0, 16, id(oled_font), "Umbral: %.1f%%", id(humidity_low).state);
+  //     it.printf(0, 16, id(oled_font), "Umbral: %.1f%%", id(server_threshold).state);
   //      Línea 3: Estado válvula
-  //     if (id(valve_relay).state) it.printf(0, 32, id(oled_font), "VALVULA: ON "); else it.printf(0, 32, id(oled_font), "VALVULA: OFF");
+  //     if (!id(valve_relay).state) it.printf(0, 32, id(oled_font), "VALVULA: ON "); else it.printf(0, 32, id(oled_font), "VALVULA: OFF");
   //      Línea 4: Lectura lluvia
   //     it.printf(0, 48, id(oled_font), "Lluvia V: %.2f", id(lluvia_test).state);
   //   auto_clear_enabled: unspecified
@@ -1708,7 +1713,7 @@ void setup() {
   soil_hum->set_component_source("template.sensor");
   App.register_component(soil_hum);
   soil_hum->set_template([=]() -> esphome::optional<float> {
-      #line 242 "c:\\Users\\gorra\\Desktop\\Proyecto_macetas\\riego_esp32.yaml"
+      #line 250 "riego_esp32.yaml"
       float v = soil_raw->state;
        
       float min_v = 0.30;  
@@ -1718,6 +1723,28 @@ void setup() {
       float pct = (1.0 - (v - min_v) / (max_v - min_v)) * 100.0;
       return pct;
   });
+  // sensor.template:
+  //   platform: template
+  //   name: Umbral Servidor
+  //   id: server_threshold
+  //   unit_of_measurement: '%'
+  //   update_interval: 5s
+  //   lambda: !lambda |-
+  //     return id(server_umbral);
+  //   disabled_by_default: false
+  //   force_update: false
+  //   accuracy_decimals: 1
+  server_threshold = new template_::TemplateSensor();
+  App.register_sensor(server_threshold);
+  server_threshold->set_name("Umbral Servidor");
+  server_threshold->set_object_id("umbral_servidor");
+  server_threshold->set_disabled_by_default(false);
+  server_threshold->set_unit_of_measurement("%");
+  server_threshold->set_accuracy_decimals(1);
+  server_threshold->set_force_update(false);
+  server_threshold->set_update_interval(5000);
+  server_threshold->set_component_source("template.sensor");
+  App.register_component(server_threshold);
   // sensor.adc:
   //   platform: adc
   //   pin:
@@ -1824,7 +1851,6 @@ void setup() {
   //   platform: gpio
   //   pin:
   //     number: 25
-  //     inverted: true
   //     mode:
   //       output: true
   //       input: false
@@ -1832,6 +1858,7 @@ void setup() {
   //       pullup: false
   //       pulldown: false
   //     id: esp32_esp32internalgpiopin_id_3
+  //     inverted: false
   //     ignore_pin_validation_error: false
   //     ignore_strapping_warning: false
   //     drive_strength: 20.0
@@ -1850,7 +1877,7 @@ void setup() {
   App.register_component(valve_relay);
   esp32_esp32internalgpiopin_id_3 = new esp32::ESP32InternalGPIOPin();
   esp32_esp32internalgpiopin_id_3->set_pin(::GPIO_NUM_25);
-  esp32_esp32internalgpiopin_id_3->set_inverted(true);
+  esp32_esp32internalgpiopin_id_3->set_inverted(false);
   esp32_esp32internalgpiopin_id_3->set_drive_strength(::GPIO_DRIVE_CAP_2);
   esp32_esp32internalgpiopin_id_3->set_flags(gpio::Flags::FLAG_OUTPUT);
   valve_relay->set_pin(esp32_esp32internalgpiopin_id_3);
@@ -1864,7 +1891,7 @@ void setup() {
   //     automation_id: automation_id_5
   //     id: interval_intervaltrigger_id
   //     startup_delay: 0s
-  //   - interval: 10s
+  //   - interval: 5s
   //     then:
   //       - script.execute:
   //           id: fetch_config_from_server
@@ -1889,7 +1916,7 @@ void setup() {
   script_scriptexecuteaction_id_2 = new script::ScriptExecuteAction<script::Script<>>(fetch_config_from_server);
   script_scriptexecuteaction_id_2->set_args();
   automation_id_6->add_actions({script_scriptexecuteaction_id_2});
-  interval_intervaltrigger_id_2->set_update_interval(10000);
+  interval_intervaltrigger_id_2->set_update_interval(5000);
   interval_intervaltrigger_id_2->set_startup_delay(0);
   // button.template:
   //   platform: template
@@ -1914,7 +1941,7 @@ void setup() {
   button_buttonpresstrigger_id = new button::ButtonPressTrigger(template__templatebutton_id);
   automation_id_7 = new Automation<>(button_buttonpresstrigger_id);
   lambdaaction_id_3 = new LambdaAction<>([=]() -> void {
-      #line 297 "c:\\Users\\gorra\\Desktop\\Proyecto_macetas\\riego_esp32.yaml"
+      #line 312 "riego_esp32.yaml"
       auto call = rgb_test->turn_on();
       call.set_rgb(1.0, 0.0, 0.0);
       call.perform();
@@ -1944,7 +1971,7 @@ void setup() {
   button_buttonpresstrigger_id_2 = new button::ButtonPressTrigger(template__templatebutton_id_2);
   automation_id_8 = new Automation<>(button_buttonpresstrigger_id_2);
   lambdaaction_id_4 = new LambdaAction<>([=]() -> void {
-      #line 307 "c:\\Users\\gorra\\Desktop\\Proyecto_macetas\\riego_esp32.yaml"
+      #line 322 "riego_esp32.yaml"
       auto call = rgb_test->turn_on();
       call.set_rgb(0.0, 0.0, 1.0);
       call.perform();
@@ -1957,7 +1984,7 @@ void setup() {
   // web_server_idf:
   //   {}
   http_request_httprequestsendaction_id->set_body([=]() -> std::string {
-      #line 43 "c:\\Users\\gorra\\Desktop\\Proyecto_macetas\\riego_esp32.yaml"
+      #line 48 "riego_esp32.yaml"
       char json[512];
       snprintf(json, sizeof(json), 
         "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"soil_voltage\":%.2f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"valve_state\":\"%s\",\"humidity_low_color\":\"%s\",\"humidity_good_color\":\"%s\"}",
@@ -1983,8 +2010,29 @@ void setup() {
   http_request_httprequestresponsetrigger_id = new http_request::HttpRequestResponseTrigger();
   http_request_httprequestsendaction_id_2->register_response_trigger(http_request_httprequestresponsetrigger_id);
   automation_id_2 = new Automation<std::shared_ptr<http_request::HttpContainer>, std::string &>(http_request_httprequestresponsetrigger_id);
+  oled_test->set_writer([=](display::Display & it) -> void {
+      #line 225 "riego_esp32.yaml"
+       
+      it.printf(0, 0, oled_font, "Humedad: %.1f%% Volt: %.2fV", soil_hum->state, soil_raw->state);
+       
+      it.printf(0, 16, oled_font, "Umbral: %.1f%%", server_threshold->state);
+       
+      if (!valve_relay->state) it.printf(0, 32, oled_font, "VALVULA: ON "); else it.printf(0, 32, oled_font, "VALVULA: OFF");
+       
+      it.printf(0, 48, oled_font, "Lluvia V: %.2f", lluvia_test->state);
+  });
+  oled_test->set_i2c_bus(i2c_idfi2cbus_id);
+  oled_test->set_i2c_address(0x3C);
+  // globals:
+  //   id: server_umbral
+  //   type: float
+  //   initial_value: '50.0'
+  //   restore_value: false
+  server_umbral = new globals::GlobalsComponent<float>(50.0);
+  server_umbral->set_component_source("globals");
+  App.register_component(server_umbral);
   lambdaaction_id = new LambdaAction<std::shared_ptr<http_request::HttpContainer>, std::string &>([=](std::shared_ptr<http_request::HttpContainer> response, std::string & body) -> void {
-      #line 66 "c:\\Users\\gorra\\Desktop\\Proyecto_macetas\\riego_esp32.yaml"
+      #line 71 "riego_esp32.yaml"
       std::string resp_body = body;
       ESP_LOGI("HTTP", "Body length: %d", resp_body.length());
       ESP_LOGI("RAW", "Response: %.200s", resp_body.c_str());
@@ -2005,6 +2053,8 @@ void setup() {
             if (end > start) {
               umbral = atof(resp_body.substr(start, end - start).c_str());
               ESP_LOGI("CONFIG", "Parsed umbral: %.1f", umbral);
+              server_umbral->value() = umbral;
+              server_threshold->publish_state(umbral);
             }
           }
         }
@@ -2041,12 +2091,12 @@ void setup() {
       
        
       float hys = 1.0;  
-      if (humedad_actual < (umbral - hys)) {
+      if (humedad_actual > (umbral - hys)) {
         valve_relay->turn_on();
-        ESP_LOGI("VALVE", "ABRIENDO VÁLVULA: Hum %.1f < Umbral %.1f", humedad_actual, umbral);
-      } else if (humedad_actual > (umbral + hys)) {
+        ESP_LOGI("VALVE", "ABRIENDO VÁLVULA: Hum %.1f > Umbral %.1f", humedad_actual, umbral);
+      } else if (humedad_actual < (umbral + hys)) {
         valve_relay->turn_off();
-        ESP_LOGI("VALVE", "CERRANDO VÁLVULA: Hum %.1f >= Umbral %.1f", humedad_actual, umbral);
+        ESP_LOGI("VALVE", "CERRANDO VÁLVULA: Hum %.1f < Umbral %.1f", humedad_actual, umbral);
       } else {
         ESP_LOGI("VALVE", "SIN CAMBIO: Hum %.1f Umbral %.1f", humedad_actual, umbral);
       }
@@ -2060,19 +2110,10 @@ void setup() {
   });
   automation_id_3->add_actions({lambdaaction_id_2});
   automation_id_4->add_actions({http_request_httprequestsendaction_id_2});
-  oled_test->set_writer([=](display::Display & it) -> void {
-      #line 217 "c:\\Users\\gorra\\Desktop\\Proyecto_macetas\\riego_esp32.yaml"
-       
-      it.printf(0, 0, oled_font, "Humedad: %.1f%% Volt: %.2fV", soil_hum->state, soil_raw->state);
-       
-      it.printf(0, 16, oled_font, "Umbral: %.1f%%", humidity_low->state);
-       
-      if (valve_relay->state) it.printf(0, 32, oled_font, "VALVULA: ON "); else it.printf(0, 32, oled_font, "VALVULA: OFF");
-       
-      it.printf(0, 48, oled_font, "Lluvia V: %.2f", lluvia_test->state);
+  server_threshold->set_template([=]() -> esphome::optional<float> {
+      #line 265 "riego_esp32.yaml"
+      return server_umbral->value();
   });
-  oled_test->set_i2c_bus(i2c_idfi2cbus_id);
-  oled_test->set_i2c_address(0x3C);
   // =========== AUTO GENERATED CODE END ============
   App.setup();
 }
