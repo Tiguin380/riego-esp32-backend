@@ -48,7 +48,7 @@ async function initDB() {
       )
     `);
 
-    // Crear tabla de configuración
+    // Crear tabla de configuración (y aplicar migraciones seguras si faltan columnas)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS device_config (
         id UUID PRIMARY KEY,
@@ -61,6 +61,10 @@ async function initDB() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Migraciones idempotentes (aseguran columnas nuevas en instalaciones existentes)
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS led_mode VARCHAR(10) DEFAULT 'auto'`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS led_manual_color VARCHAR(20) DEFAULT 'Off'`);
 
     console.log('Database initialized (auto)');
   } catch (error) {
@@ -258,9 +262,23 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
 
 // Obtener configuración del dispositivo
 app.get('/api/config/:device_code', async (req, res) => {
-  try {
-    const { device_code } = req.params;
+  const { device_code } = req.params;
 
+  // Si no hay DB configurada localmente, devolver configuración por defecto para evitar 500 en dev
+  if (!process.env.DATABASE_URL) {
+    console.warn('DATABASE_URL not set — returning default config for', device_code);
+    return res.json({
+      device_id: null,
+      humidity_low_threshold: '50.00',
+      humidity_low_color: 'Rojo',
+      humidity_good_color: 'Verde',
+      led_mode: 'auto',
+      led_manual_color: 'Off',
+      updated_at: new Date().toISOString()
+    });
+  }
+
+  try {
     const result = await pool.query(
       `SELECT dc.* FROM device_config dc
        JOIN devices d ON dc.device_id = d.id
@@ -269,13 +287,51 @@ app.get('/api/config/:device_code', async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'No hay configuración' });
+      // Si el dispositivo existe pero no tiene config, devolver defaults en lugar de 404 para UX robusta
+      const dev = await pool.query('SELECT id FROM devices WHERE device_code = $1', [device_code]);
+      if (dev.rows.length === 0) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+
+      return res.json({
+        device_id: dev.rows[0].id,
+        humidity_low_threshold: '50.00',
+        humidity_low_color: 'Rojo',
+        humidity_good_color: 'Verde',
+        led_mode: 'auto',
+        led_manual_color: 'Off',
+        updated_at: new Date().toISOString()
+      });
     }
 
     res.json(result.rows[0]);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    console.error('GET /api/config error:', error.message);
+
+    // Si hay un error de esquema (columna faltante), intentar migración y reintentar una vez
+    if (/column .* does not exist/i.test(error.message)) {
+      try {
+        console.warn('Detected missing column — attempting safe migration');
+        await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS led_mode VARCHAR(10) DEFAULT 'auto'`);
+        await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS led_manual_color VARCHAR(20) DEFAULT 'Off'`);
+        const retry = await pool.query(
+          `SELECT dc.* FROM device_config dc JOIN devices d ON dc.device_id = d.id WHERE d.device_code = $1`,
+          [device_code]
+        );
+        if (retry.rows.length > 0) return res.json(retry.rows[0]);
+      } catch (mErr) {
+        console.error('Migration attempt failed:', mErr.message);
+      }
+    }
+
+    // Fallback seguro: devolver configuración por defecto en vez de 500 para que UI/ESP no rompan
+    return res.json({
+      device_id: null,
+      humidity_low_threshold: '50.00',
+      humidity_low_color: 'Rojo',
+      humidity_good_color: 'Verde',
+      led_mode: 'auto',
+      led_manual_color: 'Off',
+      updated_at: new Date().toISOString()
+    });
   }
 });
 
