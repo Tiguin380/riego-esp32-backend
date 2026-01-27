@@ -11,16 +11,17 @@
         h1 { color: #4CAF50; margin-bottom: 20px; text-align: center; font-size: 28px; }
         .section { background: #16213e; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
         .section h2 { color: #4CAF50; font-size: 16px; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
-        .sensor-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
-        .sensor-card { background: #0f3460; padding: 15px; border-radius: 8px; text-align: center; }
+        /* Rejilla responsive: evita que en móvil se “salgan” las tarjetas */
+        .sensor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 15px; }
+        .sensor-card { background: #0f3460; padding: 15px; border-radius: 8px; text-align: center; min-width: 0; }
         .sensor-label { font-size: 11px; color: #888; text-transform: uppercase; margin-bottom: 5px; }
-        .sensor-value { font-size: 32px; font-weight: bold; color: #4CAF50; }
+        .sensor-value { font-size: clamp(22px, 6vw, 32px); font-weight: bold; color: #4CAF50; }
         .sensor-unit { font-size: 14px; color: #666; }
-        .valve-indicator { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 8px; }
+        .valve-indicator { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
         .valve-dot { width: 14px; height: 14px; border-radius: 50%; background: #666; box-shadow: 0 0 10px #000; }
         .valve-dot.on { background: #33cc33; box-shadow: 0 0 18px #33cc33; }
         .valve-dot.off { background: #ff3333; box-shadow: 0 0 18px #ff3333; }
-        .valve-text { font-size: 14px; font-weight: bold; color: #ddd; }
+        .valve-text { font-size: 14px; font-weight: bold; color: #ddd; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
         .leds-container { display: flex; justify-content: center; gap: 15px; margin: 20px 0; }
         .led { width: 40px; height: 40px; border-radius: 50%; border: 3px solid #333; transition: all 0.3s; }
         .control-row { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
