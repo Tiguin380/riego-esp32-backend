@@ -78,6 +78,27 @@
         </div>
 
         <div class="section">
+            <h2> GRÁFICAS EN TIEMPO REAL</h2>
+            <div style="display:grid; grid-template-columns: 1fr; gap: 16px;">
+                <div class="sensor-card" style="text-align:left;">
+                    <div class="sensor-label">Humedad del suelo (%)</div>
+                    <canvas id="humChart" height="140"></canvas>
+                </div>
+                <div class="sensor-card" style="text-align:left;">
+                    <div class="sensor-label">Válvula (ON/OFF) + tiempo activa</div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap: 10px; margin: 8px 0 6px;">
+                        <div class="valve-indicator" style="margin-top: 0; justify-content:flex-start;">
+                            <div class="valve-dot" id="valveDotChart"></div>
+                            <div class="valve-text" id="valveTextChart">--</div>
+                        </div>
+                        <div class="sensor-unit" id="valveOnTime">Tiempo ON: --</div>
+                    </div>
+                    <canvas id="valveChart" height="140"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
             <h2> CONFIGURACIÓN AUTOMÁTICA</h2>
             <div class="control-row">
                 <label>Umbral Humedad Baja:</label>
@@ -114,8 +135,92 @@
         <div class="status" id="status">Conectando...</div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script>
         let config = { threshold: 25, colorB: 'Rojo', colorG: 'Verde' };
+
+        // --- Gráficas (solo desde que se abre el panel) ---
+        const MAX_POINTS = 120; // 120 puntos * 5s = ~10 min
+        const humLabels = [];
+        const humSeries = [];
+        const valveLabels = [];
+        const valveSeries = [];
+        let lastValveIsOn = null;
+        let lastSampleMs = null;
+        let valveOnMs = 0;
+
+        function fmtTimeLabel(d) {
+            const hh = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            const ss = String(d.getSeconds()).padStart(2, '0');
+            return `${hh}:${mm}:${ss}`;
+        }
+
+        function trimSeries(labels, series) {
+            while (labels.length > MAX_POINTS) labels.shift();
+            while (series.length > MAX_POINTS) series.shift();
+        }
+
+        const humChart = new Chart(document.getElementById('humChart'), {
+            type: 'line',
+            data: {
+                labels: humLabels,
+                datasets: [{
+                    label: 'Humedad (%)',
+                    data: humSeries,
+                    borderColor: '#4CAF50',
+                    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+                    fill: true,
+                    tension: 0.25,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { min: 0, max: 100, ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+                    x: { ticks: { color: '#888', maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' } }
+                }
+            }
+        });
+
+        const valveChart = new Chart(document.getElementById('valveChart'), {
+            type: 'line',
+            data: {
+                labels: valveLabels,
+                datasets: [{
+                    label: 'Válvula (0/1)',
+                    data: valveSeries,
+                    borderColor: '#33cc33',
+                    backgroundColor: 'rgba(51, 204, 51, 0.12)',
+                    fill: true,
+                    stepped: true,
+                    tension: 0,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        min: -0.1,
+                        max: 1.1,
+                        ticks: {
+                            color: '#aaa',
+                            callback: (v) => (v >= 0.5 ? 'ON' : 'OFF')
+                        },
+                        grid: { color: 'rgba(255,255,255,0.06)' }
+                    },
+                    x: { ticks: { color: '#888', maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' } }
+                }
+            }
+        });
 
         async function cargarConfig() {
             try {
@@ -209,6 +314,55 @@
                     valveText.textContent = 'SIN DATOS';
                     valveValue.textContent = '--';
                     valveValue.style.color = '#aaa';
+                }
+
+                // --- Actualizar gráficas ---
+                const now = new Date();
+                const nowMs = now.getTime();
+                const label = fmtTimeLabel(now);
+
+                const hum = Number.parseFloat(data.humidity);
+                if (!Number.isNaN(hum)) {
+                    humLabels.push(label);
+                    humSeries.push(Number(hum.toFixed(2)));
+                    trimSeries(humLabels, humSeries);
+                    humChart.update('none');
+                }
+
+                const valveVal = isOn ? 1 : (isOff ? 0 : null);
+                if (valveVal !== null) {
+                    valveLabels.push(label);
+                    valveSeries.push(valveVal);
+                    trimSeries(valveLabels, valveSeries);
+                    valveChart.update('none');
+                }
+
+                // Acumular tiempo ON (desde que se abrió el panel)
+                if (lastSampleMs !== null && lastValveIsOn !== null) {
+                    const dt = Math.max(0, nowMs - lastSampleMs);
+                    if (lastValveIsOn) valveOnMs += dt;
+                }
+                if (valveVal !== null) {
+                    lastValveIsOn = valveVal === 1;
+                    lastSampleMs = nowMs;
+                }
+
+                const onSecs = Math.floor(valveOnMs / 1000);
+                const mm = Math.floor(onSecs / 60);
+                const ss = onSecs % 60;
+                document.getElementById('valveOnTime').textContent = `Tiempo ON: ${mm}m ${ss}s`;
+
+                const valveDotChart = document.getElementById('valveDotChart');
+                const valveTextChart = document.getElementById('valveTextChart');
+                if (isOn) {
+                    valveDotChart.className = 'valve-dot on';
+                    valveTextChart.textContent = 'ENCENDIDA';
+                } else if (isOff) {
+                    valveDotChart.className = 'valve-dot off';
+                    valveTextChart.textContent = 'APAGADA';
+                } else {
+                    valveDotChart.className = 'valve-dot';
+                    valveTextChart.textContent = 'SIN DATOS';
                 }
                 
                 document.getElementById('status').textContent = ' Online - ' + new Date().toLocaleTimeString();
