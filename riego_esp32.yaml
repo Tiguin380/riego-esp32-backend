@@ -378,7 +378,7 @@ sensor:
       // CALIBRACION RAPIDA: reemplaza wet_v/dry_v con tus mediciones si las tienes
       float wet_v = 0.40;   // voltaje en suelo MUY húmedo (ajusta si mides otro)
       float dry_v = 3.50;   // voltaje en suelo SECO (ajusta si mides otro)
-      if (!isfinite(v)) return 0.0f;
+      if (isnan(v)) return 0.0f;
       if (v < wet_v) v = wet_v;
       if (v > dry_v) v = dry_v;
       float pct = (1.0f - (v - wet_v) / (dry_v - wet_v)) * 100.0f;
