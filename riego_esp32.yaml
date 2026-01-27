@@ -7,6 +7,14 @@ globals:
     type: float
     initial_value: '50.0'
 
+  - id: soil_v_min
+    type: float
+    initial_value: '1000.0'
+
+  - id: soil_v_max
+    type: float
+    initial_value: '0.0'
+
 esp32:   # <- Aquí se define la plataforma correcta
   board: esp32dev
   framework:
@@ -280,6 +288,28 @@ number:
     restore_value: true
     optimistic: true
 
+  - platform: template
+    name: "Suelo - Voltaje Mojado (100%)"
+    id: soil_wet_v
+    min_value: 0.0
+    max_value: 3.3
+    step: 0.01
+    initial_value: 0.60
+    unit_of_measurement: "V"
+    restore_value: true
+    optimistic: true
+
+  - platform: template
+    name: "Suelo - Voltaje Seco (0%)"
+    id: soil_dry_v
+    min_value: 0.0
+    max_value: 3.3
+    step: 0.01
+    initial_value: 2.12
+    unit_of_measurement: "V"
+    restore_value: true
+    optimistic: true
+
 # -------- Selector de Color --------
 select:
   - platform: template
@@ -350,14 +380,15 @@ display:
     id: oled_test
     update_interval: 500ms
     lambda: |-
-      // Línea 1: Humedad y voltaje
-      it.printf(0, 0, id(oled_font), "Humedad: %.1f%% Volt: %.2fV", id(soil_hum).state, id(soil_raw).state);
-      // Línea 2: Umbral configurado (mostrar valor que usa la lógica de control)
-      it.printf(0, 16, id(oled_font), "Umbral: %.1f%%", id(humidity_low).state);
-      // Línea 3: Estado válvula
-      if (!id(valve_relay).state) it.printf(0, 32, id(oled_font), "VALVULA: ON "); else it.printf(0, 32, id(oled_font), "VALVULA: OFF");
-      // Línea 4: Voltaje (más grande) para lectura rápida
-      it.printf(0, 48, id(oled_font), "Voltaje: %.2fV", id(soil_raw).state);
+      // Línea 1: lectura actual
+      it.printf(0, 0, id(oled_font), "V: %.2f  H: %.0f%%", id(soil_raw).state, id(soil_hum).state);
+      // Línea 2: calibración
+      it.printf(0, 16, id(oled_font), "Wet:%.2f Dry:%.2f", id(soil_wet_v).state, id(soil_dry_v).state);
+      // Línea 3: umbral + válvula
+      if (!id(valve_relay).state) it.printf(0, 32, id(oled_font), "Umbral:%.0f  VAL:ON", id(humidity_low).state);
+      else it.printf(0, 32, id(oled_font), "Umbral:%.0f  VAL:OFF", id(humidity_low).state);
+      // Línea 4: min/max observados
+      it.printf(0, 48, id(oled_font), "Min:%.2f Max:%.2f", id(soil_v_min), id(soil_v_max));
 
 # -------- Sensores --------
 sensor:
@@ -370,7 +401,11 @@ sensor:
     accuracy_decimals: 2
     update_interval: 500ms
     filters:
-      - multiply: 3.3
+      # En ESP32, con `attenuation` ESPHome ya entrega voltios reales.
+      # El multiply 3.3 inflaba la lectura (ej: ~7V), por eso se elimina.
+      - sliding_window_moving_average:
+          window_size: 8
+          send_every: 1
 
   - platform: template
     name: "Soil Humidity"
@@ -380,58 +415,45 @@ sensor:
     update_interval: 500ms
     lambda: |-
       float v = id(soil_raw).state;
-      // Valores base (ajustables). Mide para afinar wet_v/dry_v si es posible.
-      const float wet_v = 0.40f;   // voltaje en suelo MUY húmedo (esperado)
-      const float dry_v = 3.50f;   // voltaje en suelo SECO (esperado)
+      float wet_v = id(soil_wet_v).state; // 100%
+      float dry_v = id(soil_dry_v).state; // 0%
+      float last_state = id(soil_hum).state;
 
-      if (isnan(v)) {
-        ESP_LOGW("CAL", "Soil V=NaN -> returning previous state");
-        return id(soil_hum).state;
+      auto is_nan = [](float x) -> bool { return x != x; };
+
+      if (is_nan(v) || is_nan(wet_v) || is_nan(dry_v)) {
+        ESP_LOGW("CAL", "Soil V/wet/dry = NaN -> returning previous state");
+        return is_nan(last_state) ? 0.0f : last_state;
       }
 
-      // Mapeo A (normal): menor voltaje = más humedad
-      float v_a = v;
-      if (v_a < wet_v) v_a = wet_v;
-      if (v_a > dry_v) v_a = dry_v;
-      float pct_a = (1.0f - (v_a - wet_v) / (dry_v - wet_v)) * 100.0f;
-
-      // Mapeo B (invertido): mayor voltaje = más humedad (algunos módulos/plásticos se comportan así)
-      float v_b = v;
-      float pct_b = ( (v_b - wet_v) / (dry_v - wet_v) ) * 100.0f; // inverted scale
-
-      // Clamp
-      pct_a = constrain(pct_a, 0.0f, 100.0f);
-      pct_b = constrain(pct_b, 0.0f, 100.0f);
-
-      // Selección automática del mejor mapeo:
-      // - Si pct_a casi 0 pero pct_b alto -> usar invertido
-      // - Si pct_a está en rango razonable -> usar normal
-      // - Si ambos plausibles, elegir el más cercano al estado anterior
-      float last = id(soil_hum).state;
-      bool a_plausible = (pct_a > 5.0f && pct_a < 98.0f);
-      bool b_plausible = (pct_b > 5.0f && pct_b < 98.0f);
-
-      float chosen = pct_a;
-      const char *mode = "A";
-      if (!a_plausible && b_plausible) {
-        chosen = pct_b; mode = "B";
-      } else if (a_plausible && !b_plausible) {
-        chosen = pct_a; mode = "A";
-      } else if (!a_plausible && !b_plausible) {
-        // ambos fuera de rango: si lectura está por encima de dry_v usamos invertido
-        if (v > dry_v - 0.05f && pct_b > pct_a) { chosen = pct_b; mode = "B"; }
-        else { chosen = pct_a; mode = "A"; }
-      } else {
-        // ambos plausibles: elige el que esté más cerca del último valor para estabilidad
-        chosen = (fabs(pct_a - last) < fabs(pct_b - last)) ? pct_a : pct_b;
-        mode = (chosen == pct_a) ? "A" : "B";
+      float lo = fminf(wet_v, dry_v);
+      float hi = fmaxf(wet_v, dry_v);
+      if ((hi - lo) < 0.02f) {
+        ESP_LOGW("CAL", "Calibration too close: wet=%.3f dry=%.3f", wet_v, dry_v);
+        return is_nan(last_state) ? 0.0f : last_state;
       }
 
-      // Suavizado exponencial ligero para evitar saltos bruscos
+      // Guardar min/max observados (para ayudarte a calibrar)
+      if (v < id(soil_v_min)) id(soil_v_min) = v;
+      if (v > id(soil_v_max)) id(soil_v_max) = v;
+
+      float vc = v;
+      if (vc < lo) vc = lo;
+      if (vc > hi) vc = hi;
+      float t = (vc - lo) / (hi - lo); // 0..1
+      // Si wet_v < dry_v: menos voltaje = más humedad -> 100% en wet_v
+      float chosen = (wet_v < dry_v) ? ((1.0f - t) * 100.0f) : (t * 100.0f);
+      if (chosen < 0.0f) chosen = 0.0f;
+      if (chosen > 100.0f) chosen = 100.0f;
+
+      // Suavizado exponencial ligero
       float alpha = 0.35f;
+      float last = is_nan(last_state) ? chosen : last_state;
       float smooth = last * (1.0f - alpha) + chosen * alpha;
 
-      ESP_LOGD("CAL", "Soil V=%.3f pctA=%.1f pctB=%.1f chosen=%s -> smooth=%.1f", v, pct_a, pct_b, mode, smooth);
+      if (is_nan(smooth)) smooth = chosen;
+
+      ESP_LOGD("CAL", "Soil V=%.3f wet=%.3f dry=%.3f -> %.1f (smooth %.1f)", v, wet_v, dry_v, chosen, smooth);
       return smooth;
 
   - platform: template
