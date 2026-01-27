@@ -51,7 +51,7 @@ script:
               0.0,
               id(soil_hum).state,
               id(soil_raw).state,
-              id(lluvia_test).state,
+              0.0,
               id(humidity_low).state,
               (id(valve_relay).state ? "ON" : "OFF"),
               id(color_critical).state.c_str(),
@@ -348,6 +348,7 @@ display:
     model: "SSD1306 128x64"
     address: 0x3C
     id: oled_test
+    update_interval: 500ms
     lambda: |-
       // Línea 1: Humedad y voltaje
       it.printf(0, 0, id(oled_font), "Humedad: %.1f%% Volt: %.2fV", id(soil_hum).state, id(soil_raw).state);
@@ -355,8 +356,8 @@ display:
       it.printf(0, 16, id(oled_font), "Umbral: %.1f%%", id(humidity_low).state);
       // Línea 3: Estado válvula
       if (!id(valve_relay).state) it.printf(0, 32, id(oled_font), "VALVULA: ON "); else it.printf(0, 32, id(oled_font), "VALVULA: OFF");
-      // Línea 4: Lectura lluvia
-      it.printf(0, 48, id(oled_font), "Lluvia V: %.2f", id(lluvia_test).state);
+      // Línea 4: Voltaje (más grande) para lectura rápida
+      it.printf(0, 48, id(oled_font), "Voltaje: %.2fV", id(soil_raw).state);
 
 # -------- Sensores --------
 sensor:
@@ -364,7 +365,10 @@ sensor:
     pin: GPIO34
     name: "Soil Voltage"
     id: soil_raw
-    update_interval: 5s
+    attenuation: 12db
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+    update_interval: 500ms
     filters:
       - multiply: 3.3
 
@@ -372,7 +376,8 @@ sensor:
     name: "Soil Humidity"
     id: soil_hum
     unit_of_measurement: "%"
-    update_interval: 5s
+    accuracy_decimals: 1
+    update_interval: 500ms
     lambda: |-
       float v = id(soil_raw).state;
       // Valores base (ajustables). Mide para afinar wet_v/dry_v si es posible.
@@ -437,13 +442,7 @@ sensor:
     lambda: |-
       return id(server_umbral);
 
-  - platform: adc
-    pin: GPIO35
-    name: "Lluvia Test"
-    id: lluvia_test
-    update_interval: 5s
-    filters:
-      - multiply: 3.3
+
 
 # -------- LED RGB Addressable 6812 (Solo para automations, sin control manual) --------
 light:
