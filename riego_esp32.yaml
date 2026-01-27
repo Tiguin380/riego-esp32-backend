@@ -351,8 +351,8 @@ display:
     lambda: |-
       // Línea 1: Humedad y voltaje
       it.printf(0, 0, id(oled_font), "Humedad: %.1f%% Volt: %.2fV", id(soil_hum).state, id(soil_raw).state);
-      // Línea 2: Umbral configurado
-      it.printf(0, 16, id(oled_font), "Umbral: %.1f%%", id(server_threshold).state);
+      // Línea 2: Umbral configurado (mostrar valor que usa la lógica de control)
+      it.printf(0, 16, id(oled_font), "Umbral: %.1f%%", id(humidity_low).state);
       // Línea 3: Estado válvula
       if (!id(valve_relay).state) it.printf(0, 32, id(oled_font), "VALVULA: ON "); else it.printf(0, 32, id(oled_font), "VALVULA: OFF");
       // Línea 4: Lectura lluvia
