@@ -61,7 +61,7 @@ script:
               id(soil_raw).state,
               0.0,
               id(humidity_low).state,
-              (id(valve_relay).state ? "ON" : "OFF"),
+              (!id(valve_relay).state ? "ON" : "OFF"),
               id(color_critical).state.c_str(),
               id(color_low).state.c_str()
             );
@@ -383,7 +383,7 @@ display:
       // Línea 1: lectura actual
       it.printf(0, 0, id(oled_font), "V: %.2f  H: %.0f%%", id(soil_raw).state, id(soil_hum).state);
       // Línea 2: estado válvula
-      if (id(valve_relay).state) it.printf(0, 16, id(oled_font), "VALVULA: ON");
+      if (!id(valve_relay).state) it.printf(0, 16, id(oled_font), "VALVULA: ON");
       else it.printf(0, 16, id(oled_font), "VALVULA: OFF");
       // Línea 3: umbral
       it.printf(0, 32, id(oled_font), "Umbral: %.0f%%", id(humidity_low).state);

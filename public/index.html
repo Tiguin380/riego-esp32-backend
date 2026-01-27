@@ -78,14 +78,6 @@
         </div>
 
         <div class="section">
-            <h2> ESTADO DE VÁLVULA</h2>
-            <div class="valve-indicator" style="margin-top: 0;">
-                <div class="valve-dot" id="valveDotBig"></div>
-                <div class="valve-text" id="valveTextBig">--</div>
-            </div>
-        </div>
-
-        <div class="section">
             <h2> CONFIGURACIÓN AUTOMÁTICA</h2>
             <div class="control-row">
                 <label>Umbral Humedad Baja:</label>
@@ -195,34 +187,26 @@
                 document.getElementById('temp').textContent = parseFloat(data.temperature).toFixed(1);
                 document.getElementById('humidity').textContent = parseFloat(data.humidity).toFixed(1);
 
-                const rawValve = (data.valve_state || data.led_status || '').toString().toUpperCase();
+                const rawValve = (data.valve_state || '').toString().toUpperCase();
                 const isOn = rawValve === 'ON' || rawValve === '1' || rawValve === 'TRUE';
                 const isOff = rawValve === 'OFF' || rawValve === '0' || rawValve === 'FALSE';
                 const valveDot = document.getElementById('valveDot');
-                const valveDotBig = document.getElementById('valveDotBig');
                 const valveText = document.getElementById('valveText');
-                const valveTextBig = document.getElementById('valveTextBig');
                 const valveValue = document.getElementById('valve');
 
                 if (isOn) {
                     valveDot.className = 'valve-dot on';
-                    if (valveDotBig) valveDotBig.className = 'valve-dot on';
                     valveText.textContent = 'ENCENDIDA';
-                    if (valveTextBig) valveTextBig.textContent = 'ENCENDIDA';
                     valveValue.textContent = 'ON';
                     valveValue.style.color = '#33cc33';
                 } else if (isOff) {
                     valveDot.className = 'valve-dot off';
-                    if (valveDotBig) valveDotBig.className = 'valve-dot off';
                     valveText.textContent = 'APAGADA';
-                    if (valveTextBig) valveTextBig.textContent = 'APAGADA';
                     valveValue.textContent = 'OFF';
                     valveValue.style.color = '#ff3333';
                 } else {
                     valveDot.className = 'valve-dot';
-                    if (valveDotBig) valveDotBig.className = 'valve-dot';
                     valveText.textContent = 'SIN DATOS';
-                    if (valveTextBig) valveTextBig.textContent = 'SIN DATOS';
                     valveValue.textContent = '--';
                     valveValue.style.color = '#aaa';
                 }
