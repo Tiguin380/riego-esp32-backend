@@ -85,10 +85,108 @@
             </div>
         </div>
 
+        <div class="section">
+            <h2> CONFIGURACIÓN AUTOMÁTICA</h2>
+            <div class="control-row">
+                <label>Umbral Humedad Baja:</label>
+                <input type="range" id="threshold" min="1" max="100" value="25">
+                <span id="thresholdValue" style="width:50px;text-align:right">25%</span>
+            </div>
+            <div class="control-row">
+                <label>Color si Humedad BAJA:</label>
+                <select id="colorBuena">
+                    <option value="Rojo">Rojo</option>
+                    <option value="Verde">Verde</option>
+                    <option value="Azul">Azul</option>
+                    <option value="Amarillo">Amarillo</option>
+                    <option value="Cian">Cian</option>
+                    <option value="Magenta">Magenta</option>
+                    <option value="Blanco">Blanco</option>
+                </select>
+            </div>
+            <div class="control-row">
+                <label>Color si Humedad BUENA:</label>
+                <select id="colorBaja">
+                    <option value="Rojo">Rojo</option>
+                    <option value="Verde" selected>Verde</option>
+                    <option value="Azul">Azul</option>
+                    <option value="Amarillo">Amarillo</option>
+                    <option value="Cian">Cian</option>
+                    <option value="Magenta">Magenta</option>
+                    <option value="Blanco">Blanco</option>
+                </select>
+            </div>
+            <button class="btn btn-save" onclick="guardar()"> GUARDAR CONFIGURACION</button>
+        </div>
+
         <div class="status" id="status">Conectando...</div>
     </div>
 
     <script>
+        let config = { threshold: 25, colorB: 'Rojo', colorG: 'Verde' };
+
+        async function cargarConfig() {
+            try {
+                const res = await fetch('/api/config/RIEGO_001');
+                const cfg = await res.json();
+
+                let threshold = parseFloat(cfg.humidity_low_threshold);
+                if (isNaN(threshold) || threshold < 1) threshold = 25;
+                if (threshold > 100) threshold = 100;
+
+                config.threshold = threshold;
+                config.colorB = cfg.humidity_low_color || 'Rojo';
+                config.colorG = cfg.humidity_good_color || 'Verde';
+
+                const thresholdEl = document.getElementById('threshold');
+                const thresholdValueEl = document.getElementById('thresholdValue');
+                const colorBuenaEl = document.getElementById('colorBuena');
+                const colorBajaEl = document.getElementById('colorBaja');
+
+                thresholdEl.value = config.threshold;
+                thresholdValueEl.textContent = config.threshold + '%';
+                colorBuenaEl.value = config.colorB;
+                colorBajaEl.value = config.colorG;
+            } catch (e) {
+                console.log('Error cargando config');
+            }
+        }
+
+        document.getElementById('threshold').addEventListener('input', (e) => {
+            config.threshold = parseInt(e.target.value);
+            document.getElementById('thresholdValue').textContent = config.threshold + '%';
+        });
+
+        document.getElementById('colorBuena').addEventListener('change', (e) => {
+            config.colorB = e.target.value;
+        });
+
+        document.getElementById('colorBaja').addEventListener('change', (e) => {
+            config.colorG = e.target.value;
+        });
+
+        async function guardar() {
+            try {
+                const res = await fetch('/api/config/RIEGO_001', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        humidity_low_threshold: config.threshold,
+                        humidity_low_color: config.colorB,
+                        humidity_good_color: config.colorG
+                    })
+                });
+
+                if (res.ok) {
+                    alert(' Configuracion guardada!\nEl ESP32 aplicara los cambios en 10 segundos.');
+                } else {
+                    alert(' Error al guardar');
+                }
+            } catch (e) {
+                alert(' Error de conexion');
+            }
+        }
+
         async function actualizarSensores() {
             try {
                 const res = await fetch('/api/sensor/latest/RIEGO_001');
@@ -136,6 +234,8 @@
                 document.getElementById('status').className = 'status offline';
             }
         }
+
+        cargarConfig();
         actualizarSensores();
         setInterval(actualizarSensores, 5000);
     </script>
