@@ -90,6 +90,9 @@ script:
                           ESP_LOGI("CONFIG", "Parsed umbral: %.1f", umbral);
                           id(server_umbral) = umbral;
                           id(server_threshold).publish_state(umbral);
+                          // Aplicar inmediatamente al control local para garantizar coherencia
+                          id(humidity_low).publish_state(umbral);
+                          ESP_LOGI("CONFIG", "Published umbral to humidity_low: %.1f", umbral);
                         }
                       }
                     }
