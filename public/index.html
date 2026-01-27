@@ -51,6 +51,7 @@
 <body>
     <div class="container">
         <h1> Riego Automatico ESP32</h1>
+        <div class="status" style="margin-bottom: 12px;">UI v2026-01-27</div>
         
         <div class="section">
             <h2> SENSORES EN TIEMPO REAL</h2>
@@ -77,151 +78,17 @@
         </div>
 
         <div class="section">
-            <h2> CONTROL DE LEDS</h2>
-            <div class="leds-container">
-                <div class="led" id="led1"></div>
-                <div class="led" id="led2"></div>
-                <div class="led" id="led3"></div>
-                <div class="led" id="led4"></div>
+            <h2> ESTADO DE VÁLVULA</h2>
+            <div class="valve-indicator" style="margin-top: 0;">
+                <div class="valve-dot" id="valveDotBig"></div>
+                <div class="valve-text" id="valveTextBig">--</div>
             </div>
-            <div class="current-color">Color actual: <span id="colorActual">--</span></div>
-            <div class="btn-grid">
-                <button class="btn btn-rojo" onclick="setColor('Rojo')">ROJO</button>
-                <button class="btn btn-verde" onclick="setColor('Verde')">VERDE</button>
-                <button class="btn btn-azul" onclick="setColor('Azul')">AZUL</button>
-                <button class="btn btn-amarillo" onclick="setColor('Amarillo')">AMARILLO</button>
-                <button class="btn btn-cian" onclick="setColor('Cian')">CIAN</button>
-                <button class="btn btn-magenta" onclick="setColor('Magenta')">MAGENTA</button>
-                <button class="btn btn-blanco" onclick="setColor('Blanco')">BLANCO</button>
-                <button class="btn btn-off" onclick="setColor('Off')">APAGAR</button>
-            </div>
-        <div class="section">
-            <h2> MODO LED</h2>
-            <div class="control-row">
-                <label>Modo:</label>
-                <select id="ledMode">
-                    <option value="auto">Automático (basado en humedad)</option>
-                    <option value="manual">Manual</option>
-                </select>
-            </div>
-            <div class="control-row" id="manualColorRow" style="display: none;">
-                <label>Color Manual:</label>
-                <select id="manualColor">
-                    <option value="Rojo">Rojo</option>
-                    <option value="Verde">Verde</option>
-                    <option value="Azul">Azul</option>
-                    <option value="Amarillo">Amarillo</option>
-                    <option value="Cian">Cian</option>
-                    <option value="Magenta">Magenta</option>
-                    <option value="Blanco">Blanco</option>
-                    <option value="Off">Apagado</option>
-                </select>
-            </div>
-        </div>
-            <div class="control-row">
-                <label>Umbral Humedad Baja:</label>
-                <input type="range" id="threshold" min="1" max="100" value="25">
-                <span id="thresholdValue" style="width:50px;text-align:right">25%</span>
-            </div>
-            <div class="control-row">
-                <label>Color si Humedad BAJA:</label>
-                <select id="colorBuena">
-                    <option value="Rojo">Rojo</option>
-                    <option value="Verde">Verde</option>
-                    <option value="Azul">Azul</option>
-                    <option value="Amarillo">Amarillo</option>
-                    <option value="Cian">Cian</option>
-                    <option value="Magenta">Magenta</option>
-                    <option value="Blanco">Blanco</option>
-                </select>
-            </div>
-            <div class="control-row">
-                <label>Color si Humedad BUENA:</label>
-                <select id="colorBaja">
-                    <option value="Rojo">Rojo</option>
-                    <option value="Verde" selected>Verde</option>
-                    <option value="Azul">Azul</option>
-                    <option value="Amarillo">Amarillo</option>
-                    <option value="Cian">Cian</option>
-                    <option value="Magenta">Magenta</option>
-                    <option value="Blanco">Blanco</option>
-                </select>
-            </div>
-            <button class="btn btn-save" onclick="guardar()"> GUARDAR CONFIGURACION</button>
         </div>
 
         <div class="status" id="status">Conectando...</div>
     </div>
 
     <script>
-        const colorMap = {
-            'Rojo': '#ff3333', 'Verde': '#33ff33', 'Azul': '#3366ff',
-            'Amarillo': '#ffff00', 'Cian': '#00ffff', 'Magenta': '#ff00ff', 
-            'Blanco': '#ffffff', 'Off': '#222222'
-        };
-        
-        let config = { threshold: 25, colorB: 'Rojo', colorG: 'Verde', ledMode: 'auto', manualColor: 'Off' };
-        let currentLedColor = 'Verde';
-
-        function updateLeds(color) {
-            const c = colorMap[color] || '#333';
-            for (let i = 1; i <= 4; i++) {
-                document.getElementById('led' + i).style.background = c;
-                document.getElementById('led' + i).style.boxShadow = '0 0 25px ' + c;
-            }
-            document.getElementById('colorActual').textContent = color;
-            document.getElementById('colorActual').style.color = c;
-        }
-
-        async function setColor(color) {
-            currentLedColor = color;
-            updateLeds(color);
-            
-            // Guardar en servidor para que ESP32 lo lea
-            try {
-                await fetch('/api/config/RIEGO_001', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        humidity_low_threshold: config.threshold,
-                        humidity_low_color: color,
-                        humidity_good_color: config.colorG
-                    })
-                });
-                document.getElementById('status').textContent = ' Color enviado: ' + color + ' - ' + new Date().toLocaleTimeString();
-                document.getElementById('status').className = 'status online';
-            } catch(e) {
-                document.getElementById('status').textContent = ' Error enviando color';
-                document.getElementById('status').className = 'status offline';
-            }
-        }
-
-        async function cargarConfig() {
-            try {
-                const res = await fetch('/api/config/RIEGO_001');
-                const cfg = await res.json();
-                let threshold = parseFloat(cfg.humidity_low_threshold);
-                if (isNaN(threshold) || threshold < 1) threshold = 25;
-                if (threshold > 100) threshold = 100;
-                config.threshold = threshold;
-                config.colorB = cfg.humidity_low_color || 'Rojo';
-                config.colorG = cfg.humidity_good_color || 'Verde';
-                config.ledMode = cfg.led_mode || 'auto';
-                config.manualColor = cfg.led_manual_color || 'Off';
-                document.getElementById('threshold').value = config.threshold;
-                document.getElementById('thresholdValue').textContent = config.threshold + '%';
-                document.getElementById('colorBuena').value = config.colorB;
-                document.getElementById('colorBaja').value = config.colorG;
-                document.getElementById('ledMode').value = config.ledMode;
-                document.getElementById('manualColor').value = config.manualColor;
-                toggleManualColor();
-                currentLedColor = config.ledMode === 'manual' ? config.manualColor : config.colorB;
-                updateLeds(currentLedColor);
-            } catch(e) {
-                console.log('Error cargando config');
-            }
-        }
-
         async function actualizarSensores() {
             try {
                 const res = await fetch('/api/sensor/latest/RIEGO_001');
@@ -234,22 +101,30 @@
                 const isOn = rawValve === 'ON' || rawValve === '1' || rawValve === 'TRUE';
                 const isOff = rawValve === 'OFF' || rawValve === '0' || rawValve === 'FALSE';
                 const valveDot = document.getElementById('valveDot');
+                const valveDotBig = document.getElementById('valveDotBig');
                 const valveText = document.getElementById('valveText');
+                const valveTextBig = document.getElementById('valveTextBig');
                 const valveValue = document.getElementById('valve');
 
                 if (isOn) {
                     valveDot.className = 'valve-dot on';
+                    if (valveDotBig) valveDotBig.className = 'valve-dot on';
                     valveText.textContent = 'ENCENDIDA';
+                    if (valveTextBig) valveTextBig.textContent = 'ENCENDIDA';
                     valveValue.textContent = 'ON';
                     valveValue.style.color = '#33cc33';
                 } else if (isOff) {
                     valveDot.className = 'valve-dot off';
+                    if (valveDotBig) valveDotBig.className = 'valve-dot off';
                     valveText.textContent = 'APAGADA';
+                    if (valveTextBig) valveTextBig.textContent = 'APAGADA';
                     valveValue.textContent = 'OFF';
                     valveValue.style.color = '#ff3333';
                 } else {
                     valveDot.className = 'valve-dot';
+                    if (valveDotBig) valveDotBig.className = 'valve-dot';
                     valveText.textContent = 'SIN DATOS';
+                    if (valveTextBig) valveTextBig.textContent = 'SIN DATOS';
                     valveValue.textContent = '--';
                     valveValue.style.color = '#aaa';
                 }
@@ -261,72 +136,6 @@
                 document.getElementById('status').className = 'status offline';
             }
         }
-
-        document.getElementById('threshold').addEventListener('input', (e) => {
-            config.threshold = parseInt(e.target.value);
-            document.getElementById('thresholdValue').textContent = config.threshold + '%';
-        });
-        
-        document.getElementById('colorBuena').addEventListener('change', (e) => {
-            config.colorB = e.target.value;
-        });
-        
-        document.getElementById('colorBaja').addEventListener('change', (e) => {
-            config.colorG = e.target.value;
-        });
-
-        function toggleManualColor() {
-            const manualRow = document.getElementById('manualColorRow');
-            if (config.ledMode === 'manual') {
-                manualRow.style.display = 'flex';
-            } else {
-                manualRow.style.display = 'none';
-            }
-        }
-
-        document.getElementById('ledMode').addEventListener('change', (e) => {
-            config.ledMode = e.target.value;
-            toggleManualColor();
-            if (config.ledMode === 'manual') {
-                currentLedColor = config.manualColor;
-            } else {
-                currentLedColor = config.colorB;
-            }
-            updateLeds(currentLedColor);
-        });
-
-        document.getElementById('manualColor').addEventListener('change', (e) => {
-            config.manualColor = e.target.value;
-            if (config.ledMode === 'manual') {
-                currentLedColor = config.manualColor;
-                updateLeds(currentLedColor);
-            }
-        });
-
-        async function guardar() {
-            try {
-                const res = await fetch('/api/config/RIEGO_001', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        humidity_low_threshold: config.threshold,
-                        humidity_low_color: config.colorB,
-                        humidity_good_color: config.colorG,
-                        led_mode: config.ledMode,
-                        led_manual_color: config.manualColor
-                    })
-                });
-                if (res.ok) {
-                    alert(' Configuracion guardada!\nEl ESP32 aplicara los cambios en 10 segundos.');
-                } else {
-                    alert(' Error al guardar');
-                }
-            } catch(e) {
-                alert(' Error de conexion');
-            }
-        }
-
-        cargarConfig();
         actualizarSensores();
         setInterval(actualizarSensores, 5000);
     </script>

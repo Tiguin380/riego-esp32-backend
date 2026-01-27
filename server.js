@@ -416,6 +416,10 @@ app.get('/', (req, res) => {
 
 // Servir dashboard
 app.get('/panel/:device_code', (req, res) => {
+  // Evitar caché agresiva (especialmente en despliegues/CDN)
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
   res.sendFile(__dirname + '/public/index.html');
 });
 
