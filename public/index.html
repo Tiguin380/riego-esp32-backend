@@ -46,6 +46,14 @@
         .status.offline { color: #ff3333; }
         .current-color { text-align: center; padding: 10px; background: #0f3460; border-radius: 8px; margin: 10px 0; }
         .current-color span { font-weight: bold; color: #4CAF50; }
+        /* Gráficas en horizontal siempre (en móvil hace scroll) */
+        .charts-grid { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 6px; -webkit-overflow-scrolling: touch; }
+        .chart-box { text-align: left; flex: 0 0 360px; }
+        @media (max-width: 420px) {
+            .chart-box { flex-basis: 320px; }
+        }
+        .chart-wrap { position: relative; width: 100%; height: clamp(160px, 22vh, 240px); }
+        .chart-wrap canvas { width: 100% !important; height: 100% !important; display: block; }
     </style>
 </head>
 <body>
@@ -79,12 +87,14 @@
 
         <div class="section">
             <h2> GRÁFICAS EN TIEMPO REAL</h2>
-            <div style="display:grid; grid-template-columns: 1fr; gap: 16px;">
-                <div class="sensor-card" style="text-align:left;">
+            <div class="charts-grid">
+                <div class="sensor-card chart-box">
                     <div class="sensor-label">Humedad del suelo (%)</div>
-                    <canvas id="humChart" height="140"></canvas>
+                    <div class="chart-wrap">
+                        <canvas id="humChart"></canvas>
+                    </div>
                 </div>
-                <div class="sensor-card" style="text-align:left;">
+                <div class="sensor-card chart-box">
                     <div class="sensor-label">Válvula (ON/OFF) + tiempo activa</div>
                     <div style="display:flex; justify-content:space-between; align-items:center; gap: 10px; margin: 8px 0 6px;">
                         <div class="valve-indicator" style="margin-top: 0; justify-content:flex-start;">
@@ -93,7 +103,9 @@
                         </div>
                         <div class="sensor-unit" id="valveOnTime">Tiempo ON: --</div>
                     </div>
-                    <canvas id="valveChart" height="140"></canvas>
+                    <div class="chart-wrap">
+                        <canvas id="valveChart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
