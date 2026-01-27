@@ -375,17 +375,59 @@ sensor:
     update_interval: 5s
     lambda: |-
       float v = id(soil_raw).state;
-      // CALIBRACION RAPIDA: reemplaza wet_v/dry_v con tus mediciones si las tienes
-      float wet_v = 0.40;   // voltaje en suelo MUY húmedo (ajusta si mides otro)
-      float dry_v = 3.50;   // voltaje en suelo SECO (ajusta si mides otro)
-      if (isnan(v)) return 0.0f;
-      if (v < wet_v) v = wet_v;
-      if (v > dry_v) v = dry_v;
-      float pct = (1.0f - (v - wet_v) / (dry_v - wet_v)) * 100.0f;
-      if (pct < 0.0f) pct = 0.0f; if (pct > 100.0f) pct = 100.0f;
-      // Log breve para verificar en el monitor serial
-      ESP_LOGD("CAL", "Soil V=%.3f -> Hum=%2.1f", v, pct);
-      return pct;
+      // Valores base (ajustables). Mide para afinar wet_v/dry_v si es posible.
+      const float wet_v = 0.40f;   // voltaje en suelo MUY húmedo (esperado)
+      const float dry_v = 3.50f;   // voltaje en suelo SECO (esperado)
+
+      if (isnan(v)) {
+        ESP_LOGW("CAL", "Soil V=NaN -> returning previous state");
+        return id(soil_hum).state;
+      }
+
+      // Mapeo A (normal): menor voltaje = más humedad
+      float v_a = v;
+      if (v_a < wet_v) v_a = wet_v;
+      if (v_a > dry_v) v_a = dry_v;
+      float pct_a = (1.0f - (v_a - wet_v) / (dry_v - wet_v)) * 100.0f;
+
+      // Mapeo B (invertido): mayor voltaje = más humedad (algunos módulos/plásticos se comportan así)
+      float v_b = v;
+      float pct_b = ( (v_b - wet_v) / (dry_v - wet_v) ) * 100.0f; // inverted scale
+
+      // Clamp
+      pct_a = constrain(pct_a, 0.0f, 100.0f);
+      pct_b = constrain(pct_b, 0.0f, 100.0f);
+
+      // Selección automática del mejor mapeo:
+      // - Si pct_a casi 0 pero pct_b alto -> usar invertido
+      // - Si pct_a está en rango razonable -> usar normal
+      // - Si ambos plausibles, elegir el más cercano al estado anterior
+      float last = id(soil_hum).state;
+      bool a_plausible = (pct_a > 5.0f && pct_a < 98.0f);
+      bool b_plausible = (pct_b > 5.0f && pct_b < 98.0f);
+
+      float chosen = pct_a;
+      const char *mode = "A";
+      if (!a_plausible && b_plausible) {
+        chosen = pct_b; mode = "B";
+      } else if (a_plausible && !b_plausible) {
+        chosen = pct_a; mode = "A";
+      } else if (!a_plausible && !b_plausible) {
+        // ambos fuera de rango: si lectura está por encima de dry_v usamos invertido
+        if (v > dry_v - 0.05f && pct_b > pct_a) { chosen = pct_b; mode = "B"; }
+        else { chosen = pct_a; mode = "A"; }
+      } else {
+        // ambos plausibles: elige el que esté más cerca del último valor para estabilidad
+        chosen = (fabs(pct_a - last) < fabs(pct_b - last)) ? pct_a : pct_b;
+        mode = (chosen == pct_a) ? "A" : "B";
+      }
+
+      // Suavizado exponencial ligero para evitar saltos bruscos
+      float alpha = 0.35f;
+      float smooth = last * (1.0f - alpha) + chosen * alpha;
+
+      ESP_LOGD("CAL", "Soil V=%.3f pctA=%.1f pctB=%.1f chosen=%s -> smooth=%.1f", v, pct_a, pct_b, mode, smooth);
+      return smooth;
 
   - platform: template
     name: "Umbral Servidor"
