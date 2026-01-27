@@ -16,6 +16,11 @@
         .sensor-label { font-size: 11px; color: #888; text-transform: uppercase; margin-bottom: 5px; }
         .sensor-value { font-size: 32px; font-weight: bold; color: #4CAF50; }
         .sensor-unit { font-size: 14px; color: #666; }
+        .valve-indicator { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 8px; }
+        .valve-dot { width: 14px; height: 14px; border-radius: 50%; background: #666; box-shadow: 0 0 10px #000; }
+        .valve-dot.on { background: #33cc33; box-shadow: 0 0 18px #33cc33; }
+        .valve-dot.off { background: #ff3333; box-shadow: 0 0 18px #ff3333; }
+        .valve-text { font-size: 14px; font-weight: bold; color: #ddd; }
         .leds-container { display: flex; justify-content: center; gap: 15px; margin: 20px 0; }
         .led { width: 40px; height: 40px; border-radius: 50%; border: 3px solid #333; transition: all 0.3s; }
         .control-row { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
@@ -61,9 +66,12 @@
                     <div class="sensor-unit">%</div>
                 </div>
                 <div class="sensor-card">
-                    <div class="sensor-label">Lluvia</div>
-                    <div class="sensor-value" id="rain">--</div>
-                    <div class="sensor-unit">V</div>
+                    <div class="sensor-label">Válvula</div>
+                    <div class="sensor-value" id="valve">--</div>
+                    <div class="valve-indicator">
+                        <div class="valve-dot" id="valveDot"></div>
+                        <div class="valve-text" id="valveText">--</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -221,7 +229,30 @@
                 
                 document.getElementById('temp').textContent = parseFloat(data.temperature).toFixed(1);
                 document.getElementById('humidity').textContent = parseFloat(data.humidity).toFixed(1);
-                document.getElementById('rain').textContent = parseFloat(data.rain_level).toFixed(2);
+
+                const rawValve = (data.valve_state || data.led_status || '').toString().toUpperCase();
+                const isOn = rawValve === 'ON' || rawValve === '1' || rawValve === 'TRUE';
+                const isOff = rawValve === 'OFF' || rawValve === '0' || rawValve === 'FALSE';
+                const valveDot = document.getElementById('valveDot');
+                const valveText = document.getElementById('valveText');
+                const valveValue = document.getElementById('valve');
+
+                if (isOn) {
+                    valveDot.className = 'valve-dot on';
+                    valveText.textContent = 'ENCENDIDA';
+                    valveValue.textContent = 'ON';
+                    valveValue.style.color = '#33cc33';
+                } else if (isOff) {
+                    valveDot.className = 'valve-dot off';
+                    valveText.textContent = 'APAGADA';
+                    valveValue.textContent = 'OFF';
+                    valveValue.style.color = '#ff3333';
+                } else {
+                    valveDot.className = 'valve-dot';
+                    valveText.textContent = 'SIN DATOS';
+                    valveValue.textContent = '--';
+                    valveValue.style.color = '#aaa';
+                }
                 
                 document.getElementById('status').textContent = ' Online - ' + new Date().toLocaleTimeString();
                 document.getElementById('status').className = 'status online';

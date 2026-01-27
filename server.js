@@ -41,6 +41,7 @@ async function initDB() {
         humidity DECIMAL(5,2),
         rain_level DECIMAL(5,2),
         led_status VARCHAR(20),
+        valve_state VARCHAR(10),
         humidity_low_threshold DECIMAL(5,2),
         humidity_low_color VARCHAR(20),
         humidity_good_color VARCHAR(20),
@@ -65,6 +66,7 @@ async function initDB() {
     // Migraciones idempotentes (aseguran columnas nuevas en instalaciones existentes)
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS led_mode VARCHAR(10) DEFAULT 'auto'`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS led_manual_color VARCHAR(20) DEFAULT 'Off'`);
+    await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS valve_state VARCHAR(10)`);
 
     console.log('Database initialized (auto)');
   } catch (error) {
@@ -101,6 +103,7 @@ app.get('/api/init', async (req, res) => {
         humidity DECIMAL(5,2),
         rain_level DECIMAL(5,2),
         led_status VARCHAR(20),
+        valve_state VARCHAR(10),
         humidity_low_threshold DECIMAL(5,2),
         humidity_low_color VARCHAR(20),
         humidity_good_color VARCHAR(20),
@@ -158,7 +161,17 @@ app.post('/api/device/register', async (req, res) => {
 // Enviar datos del sensor (desde ESP32)
 app.post('/api/sensor/data', async (req, res) => {
   try {
-    const { device_code, temperature, humidity, rain_level, led_status, humidity_low_threshold, humidity_low_color, humidity_good_color } = req.body;
+    const {
+      device_code,
+      temperature,
+      humidity,
+      rain_level,
+      led_status,
+      valve_state,
+      humidity_low_threshold,
+      humidity_low_color,
+      humidity_good_color
+    } = req.body;
     const device = await pool.query(
       'SELECT id FROM devices WHERE device_code = $1',
       [device_code]
@@ -170,10 +183,22 @@ app.post('/api/sensor/data', async (req, res) => {
 
     const device_id = device.rows[0].id;
 
+    const resolved_valve_state = valve_state || led_status || null;
+
     await pool.query(
-      `INSERT INTO sensor_data (device_id, temperature, humidity, rain_level, led_status, humidity_low_threshold, humidity_low_color, humidity_good_color)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [device_id, temperature, humidity, rain_level, led_status, humidity_low_threshold, humidity_low_color, humidity_good_color]
+      `INSERT INTO sensor_data (device_id, temperature, humidity, rain_level, led_status, valve_state, humidity_low_threshold, humidity_low_color, humidity_good_color)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        device_id,
+        temperature,
+        humidity,
+        rain_level,
+        led_status || null,
+        resolved_valve_state,
+        humidity_low_threshold,
+        humidity_low_color,
+        humidity_good_color
+      ]
     );
 
     res.json({ status: 'Datos guardados' });

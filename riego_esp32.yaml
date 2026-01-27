@@ -382,11 +382,11 @@ display:
     lambda: |-
       // Línea 1: lectura actual
       it.printf(0, 0, id(oled_font), "V: %.2f  H: %.0f%%", id(soil_raw).state, id(soil_hum).state);
-      // Línea 2: calibración
-      it.printf(0, 16, id(oled_font), "Wet:%.2f Dry:%.2f", id(soil_wet_v).state, id(soil_dry_v).state);
-      // Línea 3: umbral + válvula
-      if (!id(valve_relay).state) it.printf(0, 32, id(oled_font), "Umbral:%.0f  VAL:ON", id(humidity_low).state);
-      else it.printf(0, 32, id(oled_font), "Umbral:%.0f  VAL:OFF", id(humidity_low).state);
+      // Línea 2: estado válvula
+      if (id(valve_relay).state) it.printf(0, 16, id(oled_font), "VALVULA: ON");
+      else it.printf(0, 16, id(oled_font), "VALVULA: OFF");
+      // Línea 3: umbral
+      it.printf(0, 32, id(oled_font), "Umbral: %.0f%%", id(humidity_low).state);
       // Línea 4: min/max observados
       it.printf(0, 48, id(oled_font), "Min:%.2f Max:%.2f", id(soil_v_min), id(soil_v_max));
 
