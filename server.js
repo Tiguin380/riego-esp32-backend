@@ -1433,6 +1433,7 @@ app.get('/api/sensor/latest/:device_code', async (req, res) => {
     const result = await pool.query(
       `SELECT
          sd.*,
+         (sd.created_at AT TIME ZONE current_setting('TIMEZONE')) AS created_at_utc,
          COALESCE(dc.reboot_count_offset, 0) AS reboot_count_offset,
          GREATEST(0, COALESCE(sd.reboot_count, 0) - COALESCE(dc.reboot_count_offset, 0))::int AS reboot_count_display
        FROM sensor_data sd
@@ -1449,6 +1450,10 @@ app.get('/api/sensor/latest/:device_code', async (req, res) => {
     }
 
     const out = { ...result.rows[0] };
+    if (out.created_at_utc) {
+      out.created_at = out.created_at_utc;
+      delete out.created_at_utc;
+    }
     const now = new Date();
     out.server_now = now.toISOString();
     out.server_now_madrid = fmtEsLabel.format(now);
@@ -1507,7 +1512,7 @@ app.get('/api/devices', async (req, res) => {
            d.name,
            d.location,
            d.created_at,
-           MAX(sd.created_at) AS last_seen
+           MAX(sd.created_at AT TIME ZONE current_setting('TIMEZONE')) AS last_seen
          FROM user_devices ud
          JOIN devices d ON d.id = ud.device_id
          LEFT JOIN sensor_data sd ON sd.device_id = d.id
@@ -1536,7 +1541,7 @@ app.get('/api/devices', async (req, res) => {
          d.name,
          d.location,
          d.created_at,
-         MAX(sd.created_at) AS last_seen
+         MAX(sd.created_at AT TIME ZONE current_setting('TIMEZONE')) AS last_seen
        FROM devices d
        LEFT JOIN sensor_data sd ON sd.device_id = d.id
        GROUP BY d.id
@@ -1722,7 +1727,7 @@ app.get('/api/channel/history/:device_code/:channel_id', async (req, res) => {
 
     if (step === 'raw') {
       const r = await pool.query(
-        `SELECT ts, value, state
+        `SELECT (ts AT TIME ZONE current_setting('TIMEZONE')) AS ts, value, state
          FROM channel_samples
          WHERE channel_id = $1 AND ts >= $2 AND ts <= $3
          ORDER BY ts ASC
@@ -1739,10 +1744,12 @@ app.get('/api/channel/history/:device_code/:channel_id', async (req, res) => {
       });
     }
 
+    // Truncado en UTC para que los buckets sean consistentes, independientemente de la TZ del servidor/DB.
+    // Primero convertimos el TIMESTAMP (sin TZ) a timestamptz usando la TZ de la sesión, luego a UTC.
     let trunc;
-    if (step === '1m') trunc = "date_trunc('minute', ts)";
-    else if (step === '1h') trunc = "date_trunc('hour', ts)";
-    else if (step === '1d') trunc = "date_trunc('day', ts)";
+    if (step === '1m') trunc = "date_trunc('minute', (ts AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'";
+    else if (step === '1h') trunc = "date_trunc('hour', (ts AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'";
+    else if (step === '1d') trunc = "date_trunc('day', (ts AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'";
     else return res.status(400).json({ error: 'step inválido (raw|1m|1h|1d)' });
 
     const r = await pool.query(
@@ -2029,7 +2036,7 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
     if (step === 'raw') {
       const result = await pool.query(
         `SELECT
-           created_at AS ts,
+           (created_at AT TIME ZONE current_setting('TIMEZONE')) AS ts,
            temperature, humidity, valve_state, voltage, wifi_rssi, uptime_s,
            reboot_count,
            COALESCE(dc.reboot_count_offset, 0) AS reboot_count_offset,
@@ -2051,9 +2058,9 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
     }
 
     let trunc;
-    if (step === '1m') trunc = "date_trunc('minute', created_at)";
-    else if (step === '1h') trunc = "date_trunc('hour', created_at)";
-    else if (step === '1d') trunc = "date_trunc('day', created_at)";
+    if (step === '1m') trunc = "date_trunc('minute', (created_at AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'";
+    else if (step === '1h') trunc = "date_trunc('hour', (created_at AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'";
+    else if (step === '1d') trunc = "date_trunc('day', (created_at AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'";
     else return res.status(400).json({ error: 'step inválido (raw|1m|1h|1d)' });
 
     const result = await pool.query(
@@ -2099,7 +2106,7 @@ app.get('/api/sensor/export/:device_code', async (req, res) => {
     const device_id = dev.id;
 
     const q = await pool.query(
-      `SELECT created_at AS ts, temperature, humidity, valve_state, voltage, wifi_rssi, uptime_s, reboot_count
+      `SELECT (created_at AT TIME ZONE current_setting('TIMEZONE')) AS ts, temperature, humidity, valve_state, voltage, wifi_rssi, uptime_s, reboot_count
        FROM sensor_data
        WHERE device_id = $1 AND created_at >= $2 AND created_at <= $3
        ORDER BY created_at ASC
@@ -2382,7 +2389,7 @@ app.get('/api/alerts/:device_code', async (req, res) => {
     if (!dev) return;
 
     const r = await pool.query(
-      `SELECT ae.kind, ae.message, ae.created_at
+      `SELECT ae.kind, ae.message, (ae.created_at AT TIME ZONE current_setting('TIMEZONE')) AS created_at
        FROM alert_events ae
        JOIN devices d ON ae.device_id = d.id
        WHERE d.device_code = $1
