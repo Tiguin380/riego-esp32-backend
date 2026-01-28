@@ -158,6 +158,25 @@ async function getChannelId(device_id, kind, channel_index) {
   return r.rows[0]?.id || null;
 }
 
+async function ensureChannel(device_id, kind, channel_index) {
+  if (kind !== 'soil_sensor' && kind !== 'valve') return null;
+  const idx = Number(channel_index);
+  if (!Number.isInteger(idx) || idx < 1 || idx > 32) return null;
+
+  const existing = await getChannelId(device_id, kind, idx);
+  if (existing) return existing;
+
+  const id = uuidv4();
+  const name = kind === 'valve' ? `Válvula ${idx}` : `Sensor ${idx}`;
+  await pool.query(
+    `INSERT INTO device_channels (id, device_id, kind, channel_index, name)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (device_id, kind, channel_index) DO NOTHING`,
+    [id, device_id, kind, idx, name]
+  );
+  return (await getChannelId(device_id, kind, idx)) || null;
+}
+
 async function markAlertState(device_id, kind) {
   await pool.query(
     `INSERT INTO alert_state (device_id, kind, last_sent_at)
@@ -243,7 +262,21 @@ const SensorDataSchema = z
     uptime_s: z.coerce.number().int().optional().nullable(),
     reboot_count: z.coerce.number().int().optional().nullable(),
     heap_free: z.coerce.number().int().optional().nullable(),
-    ip: z.string().optional().nullable()
+    ip: z.string().optional().nullable(),
+
+    // Nuevo: canales múltiples (sensores/válvulas). Retrocompatible.
+    channels: z
+      .array(
+        z
+          .object({
+            kind: z.enum(['soil_sensor', 'valve']),
+            index: z.coerce.number().int().min(1).max(32),
+            value: z.coerce.number().optional().nullable(),
+            state: z.coerce.number().int().optional().nullable()
+          })
+          .passthrough()
+      )
+      .optional()
   })
   .passthrough();
 
@@ -500,7 +533,8 @@ app.post('/api/sensor/data', async (req, res) => {
       uptime_s,
       reboot_count,
       heap_free,
-      ip
+      ip,
+      channels
     } = parsed.data;
     const device = await pool.query(
       'SELECT id FROM devices WHERE device_code = $1',
@@ -544,31 +578,59 @@ app.post('/api/sensor/data', async (req, res) => {
       ]
     );
 
-    // Guardar muestras por canal (compatibilidad con canal 1)
+    // Guardar muestras por canal
     try {
       const now = new Date();
 
-      // Sensor humedad 1
-      if (typeof humidity === 'number' && Number.isFinite(humidity)) {
-        const ch = await getChannelId(device_id, 'soil_sensor', 1);
-        if (ch) {
-          await pool.query(
-            `INSERT INTO channel_samples (channel_id, ts, value) VALUES ($1, $2, $3)`,
-            [ch, now, humidity]
-          );
-        }
-      }
+      const chArr = Array.isArray(channels) ? channels : [];
+      if (chArr.length > 0) {
+        for (const c of chArr) {
+          const kind = c?.kind;
+          const idx = Number(c?.index);
+          if ((kind !== 'soil_sensor' && kind !== 'valve') || !Number.isInteger(idx)) continue;
 
-      // Válvula 1
-      if (resolved_valve_state) {
-        const ch = await getChannelId(device_id, 'valve', 1);
-        if (ch) {
-          const vs = String(resolved_valve_state).toUpperCase();
-          const state = vs === 'ON' || vs === '1' || vs === 'TRUE' ? 1 : 0;
-          await pool.query(
-            `INSERT INTO channel_samples (channel_id, ts, state) VALUES ($1, $2, $3)`,
-            [ch, now, state]
-          );
+          const channelId = await ensureChannel(device_id, kind, idx);
+          if (!channelId) continue;
+
+          if (kind === 'soil_sensor') {
+            const v = c?.value;
+            const num = typeof v === 'number' ? v : Number(v);
+            if (!Number.isFinite(num)) continue;
+            await pool.query(
+              `INSERT INTO channel_samples (channel_id, ts, value) VALUES ($1, $2, $3)`,
+              [channelId, now, num]
+            );
+          } else {
+            const s = c?.state;
+            const st = typeof s === 'number' ? s : Number(s);
+            if (!Number.isFinite(st)) continue;
+            await pool.query(
+              `INSERT INTO channel_samples (channel_id, ts, state) VALUES ($1, $2, $3)`,
+              [channelId, now, st >= 1 ? 1 : 0]
+            );
+          }
+        }
+      } else {
+        // Compatibilidad con canal 1
+        if (typeof humidity === 'number' && Number.isFinite(humidity)) {
+          const ch = await getChannelId(device_id, 'soil_sensor', 1);
+          if (ch) {
+            await pool.query(
+              `INSERT INTO channel_samples (channel_id, ts, value) VALUES ($1, $2, $3)`,
+              [ch, now, humidity]
+            );
+          }
+        }
+        if (resolved_valve_state) {
+          const ch = await getChannelId(device_id, 'valve', 1);
+          if (ch) {
+            const vs = String(resolved_valve_state).toUpperCase();
+            const state = vs === 'ON' || vs === '1' || vs === 'TRUE' ? 1 : 0;
+            await pool.query(
+              `INSERT INTO channel_samples (channel_id, ts, state) VALUES ($1, $2, $3)`,
+              [ch, now, state]
+            );
+          }
         }
       }
     } catch (e) {

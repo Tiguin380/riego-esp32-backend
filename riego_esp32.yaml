@@ -20,6 +20,22 @@ globals:
     type: float
     initial_value: '0.0'
 
+  - id: soil2_v_min
+    type: float
+    initial_value: '1000.0'
+
+  - id: soil2_v_max
+    type: float
+    initial_value: '0.0'
+
+  - id: soil3_v_min
+    type: float
+    initial_value: '1000.0'
+
+  - id: soil3_v_max
+    type: float
+    initial_value: '0.0'
+
   - id: reboot_count
     type: int
     restore_value: true
@@ -63,7 +79,7 @@ script:
           request_headers:
             Content-Type: application/json
           body: !lambda |-
-            char json[768];
+            char json[1400];
 
             float rssi_f = id(wifi_rssi).state;
             int rssi_i = (rssi_f == rssi_f) ? (int) lroundf(rssi_f) : 0;
@@ -76,8 +92,25 @@ script:
 
             const char* ip = id(ip_address).state.empty() ? "" : id(ip_address).state.c_str();
 
+            // Canales múltiples (sensores humedad). Si algún sensor no está conectado o da NaN, no se envía.
+            std::string channels = "[";
+            bool first = true;
+            auto add_soil = [&](int idx, float h) {
+              if (!(h == h)) return; // NaN
+              char buf[120];
+              snprintf(buf, sizeof(buf), "{\"kind\":\"soil_sensor\",\"index\":%d,\"value\":%.2f}", idx, h);
+              if (!first) channels += ",";
+              channels += buf;
+              first = false;
+            };
+
+            add_soil(1, id(soil_hum).state);
+            add_soil(2, id(soil2_hum).state);
+            add_soil(3, id(soil3_hum).state);
+            channels += "]";
+
             snprintf(json, sizeof(json),
-              "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"voltage\":%.3f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"valve_state\":\"%s\",\"humidity_low_color\":\"%s\",\"humidity_good_color\":\"%s\",\"wifi_rssi\":%d,\"uptime_s\":%u,\"reboot_count\":%d,\"heap_free\":%u,\"ip\":\"%s\"}",
+              "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"voltage\":%.3f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"valve_state\":\"%s\",\"humidity_low_color\":\"%s\",\"humidity_good_color\":\"%s\",\"wifi_rssi\":%d,\"uptime_s\":%u,\"reboot_count\":%d,\"heap_free\":%u,\"ip\":\"%s\",\"channels\":%s}",
               0.0,
               id(soil_hum).state,
               id(soil_raw).state,
@@ -90,7 +123,8 @@ script:
               up_i,
               id(reboot_count),
               heap_i,
-              ip
+              ip,
+              channels.c_str()
             );
             return std::string(json);
 
@@ -338,6 +372,50 @@ number:
     restore_value: true
     optimistic: true
 
+  - platform: template
+    name: "Suelo2 - Voltaje Mojado (100%)"
+    id: soil2_wet_v
+    min_value: 0.0
+    max_value: 3.3
+    step: 0.01
+    initial_value: 0.60
+    unit_of_measurement: "V"
+    restore_value: true
+    optimistic: true
+
+  - platform: template
+    name: "Suelo2 - Voltaje Seco (0%)"
+    id: soil2_dry_v
+    min_value: 0.0
+    max_value: 3.3
+    step: 0.01
+    initial_value: 2.12
+    unit_of_measurement: "V"
+    restore_value: true
+    optimistic: true
+
+  - platform: template
+    name: "Suelo3 - Voltaje Mojado (100%)"
+    id: soil3_wet_v
+    min_value: 0.0
+    max_value: 3.3
+    step: 0.01
+    initial_value: 0.60
+    unit_of_measurement: "V"
+    restore_value: true
+    optimistic: true
+
+  - platform: template
+    name: "Suelo3 - Voltaje Seco (0%)"
+    id: soil3_dry_v
+    min_value: 0.0
+    max_value: 3.3
+    step: 0.01
+    initial_value: 2.12
+    unit_of_measurement: "V"
+    restore_value: true
+    optimistic: true
+
 # -------- Selector de Color --------
 select:
   - platform: template
@@ -454,6 +532,35 @@ sensor:
           window_size: 8
           send_every: 1
 
+  # Sensores extra listos para conectar (ADC1):
+  # - Soil2: GPIO35 (solo entrada)
+  # - Soil3: GPIO32
+  - platform: adc
+    pin: GPIO35
+    name: "Soil2 Voltage"
+    id: soil2_raw
+    attenuation: 12db
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+    update_interval: 500ms
+    filters:
+      - sliding_window_moving_average:
+          window_size: 8
+          send_every: 1
+
+  - platform: adc
+    pin: GPIO32
+    name: "Soil3 Voltage"
+    id: soil3_raw
+    attenuation: 12db
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+    update_interval: 500ms
+    filters:
+      - sliding_window_moving_average:
+          window_size: 8
+          send_every: 1
+
   - platform: template
     name: "Soil Humidity"
     id: soil_hum
@@ -501,6 +608,78 @@ sensor:
       if (is_nan(smooth)) smooth = chosen;
 
       ESP_LOGD("CAL", "Soil V=%.3f wet=%.3f dry=%.3f -> %.1f (smooth %.1f)", v, wet_v, dry_v, chosen, smooth);
+      return smooth;
+
+  - platform: template
+    name: "Soil2 Humidity"
+    id: soil2_hum
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 500ms
+    lambda: |-
+      float v = id(soil2_raw).state;
+      float wet_v = id(soil2_wet_v).state;
+      float dry_v = id(soil2_dry_v).state;
+      float last_state = id(soil2_hum).state;
+
+      auto is_nan = [](float x) -> bool { return x != x; };
+      if (is_nan(v) || is_nan(wet_v) || is_nan(dry_v)) {
+        return is_nan(last_state) ? 0.0f : last_state;
+      }
+      float lo = fminf(wet_v, dry_v);
+      float hi = fmaxf(wet_v, dry_v);
+      if ((hi - lo) < 0.02f) {
+        return is_nan(last_state) ? 0.0f : last_state;
+      }
+      if (v < id(soil2_v_min)) id(soil2_v_min) = v;
+      if (v > id(soil2_v_max)) id(soil2_v_max) = v;
+      float vc = v;
+      if (vc < lo) vc = lo;
+      if (vc > hi) vc = hi;
+      float t = (vc - lo) / (hi - lo);
+      float chosen = (wet_v < dry_v) ? ((1.0f - t) * 100.0f) : (t * 100.0f);
+      if (chosen < 0.0f) chosen = 0.0f;
+      if (chosen > 100.0f) chosen = 100.0f;
+      float alpha = 0.35f;
+      float last = is_nan(last_state) ? chosen : last_state;
+      float smooth = last * (1.0f - alpha) + chosen * alpha;
+      if (is_nan(smooth)) smooth = chosen;
+      return smooth;
+
+  - platform: template
+    name: "Soil3 Humidity"
+    id: soil3_hum
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 500ms
+    lambda: |-
+      float v = id(soil3_raw).state;
+      float wet_v = id(soil3_wet_v).state;
+      float dry_v = id(soil3_dry_v).state;
+      float last_state = id(soil3_hum).state;
+
+      auto is_nan = [](float x) -> bool { return x != x; };
+      if (is_nan(v) || is_nan(wet_v) || is_nan(dry_v)) {
+        return is_nan(last_state) ? 0.0f : last_state;
+      }
+      float lo = fminf(wet_v, dry_v);
+      float hi = fmaxf(wet_v, dry_v);
+      if ((hi - lo) < 0.02f) {
+        return is_nan(last_state) ? 0.0f : last_state;
+      }
+      if (v < id(soil3_v_min)) id(soil3_v_min) = v;
+      if (v > id(soil3_v_max)) id(soil3_v_max) = v;
+      float vc = v;
+      if (vc < lo) vc = lo;
+      if (vc > hi) vc = hi;
+      float t = (vc - lo) / (hi - lo);
+      float chosen = (wet_v < dry_v) ? ((1.0f - t) * 100.0f) : (t * 100.0f);
+      if (chosen < 0.0f) chosen = 0.0f;
+      if (chosen > 100.0f) chosen = 100.0f;
+      float alpha = 0.35f;
+      float last = is_nan(last_state) ? chosen : last_state;
+      float smooth = last * (1.0f - alpha) + chosen * alpha;
+      if (is_nan(smooth)) smooth = chosen;
       return smooth;
 
   - platform: template
