@@ -3,12 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Riego Automatico</title>
+    <title>AgroSense · Panel</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background: #1a1a2e; color: #eee; padding: 16px; min-height: 100vh; }
+        body { font-family: Arial, sans-serif; background: #0b1220; color: #e9eef7; padding: 16px; min-height: 100vh; }
         .container { width: 100%; max-width: none; margin: 0; }
-        h1 { color: #4CAF50; margin-bottom: 20px; text-align: center; font-size: 28px; }
+        h1 { color: #dff7e3; margin-bottom: 6px; text-align: center; font-size: 18px; }
+        .brand-header { display:flex; align-items:center; justify-content:center; gap: 12px; margin: 6px 0 10px; flex-wrap: wrap; }
+        .brand-header img { width: 44px; height: 44px; object-fit: contain; filter: drop-shadow(0 10px 22px rgba(0,0,0,0.35)); }
+        .brand-title { text-align:center; }
+        .brand-title .product { font-weight: 900; color:#4CAF50; font-size: 20px; letter-spacing: 0.2px; }
+        .brand-title .tagline { color:#b8c4d6; font-size: 12px; margin-top: 2px; }
         .section { background: #16213e; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
         .section h2 { color: #4CAF50; font-size: 16px; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
         /* Rejilla responsive: evita que en móvil se “salgan” las tarjetas */
@@ -80,7 +85,13 @@
 </head>
 <body>
     <div class="container">
-        <h1> Riego Automatico ESP32</h1>
+        <div class="brand-header">
+            <img src="/logo.png" alt="AgroSense" onerror="this.style.display='none'" />
+            <div class="brand-title">
+                <div class="product">AgroSense</div>
+                <div class="tagline">Control Inteligente de Riego y Suelo</div>
+            </div>
+        </div>
         <div class="status" style="margin-bottom: 12px;">UI v2026-01-28</div>
 
         <div class="section" id="deviceSection" style="padding: 14px 20px;">

@@ -3,29 +3,39 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Acceso · Riego ESP32</title>
+  <title>Acceso · AgroSense</title>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: Arial, sans-serif; background:#1a1a2e; color:#eee; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px; }
-    .card { width: 100%; max-width: 440px; background:#16213e; border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:18px; box-shadow: 0 18px 44px rgba(0,0,0,0.35); }
-    h1 { margin: 0 0 6px; color:#4CAF50; font-size: 22px; text-align:center; }
-    .sub { text-align:center; color:#aaa; font-size: 12px; margin-bottom: 14px; }
+    body { margin: 0; font-family: Arial, sans-serif; background:#0b1220; color:#e9eef7; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:18px; }
+    .card { width: 100%; max-width: 520px; background: radial-gradient(1200px 600px at 20% 0%, rgba(76,175,80,0.20), transparent 55%), #101b33; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:18px; box-shadow: 0 22px 60px rgba(0,0,0,0.45); }
+    .brand { display:flex; align-items:center; gap: 12px; justify-content:center; margin-bottom: 10px; }
+    .brand img { width: 44px; height: 44px; object-fit: contain; filter: drop-shadow(0 10px 22px rgba(0,0,0,0.35)); }
+    h1 { margin: 0; color:#dff7e3; font-size: 18px; text-align:center; letter-spacing: 0.2px; }
+    .sub { text-align:center; color:#b8c4d6; font-size: 12px; margin: 6px 0 14px; }
+    .product { text-align:center; color:#4CAF50; font-weight: 800; font-size: 16px; margin-bottom: 4px; }
     label { display:block; font-size: 12px; color:#bbb; margin: 10px 0 6px; }
-    input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background:#0f3460; color:#fff; font-size: 14px; }
+    input { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); background:#0b2a55; color:#fff; font-size: 14px; outline: none; }
+    input:focus { border-color: rgba(76,175,80,0.55); box-shadow: 0 0 0 4px rgba(76,175,80,0.12); }
     .row { display:flex; gap: 10px; margin-top: 12px; }
     button { flex:1; padding: 12px; border-radius: 10px; border: none; cursor: pointer; font-weight: bold; }
-    .btn-primary { background:#4CAF50; color:#0b1a12; }
-    .btn-secondary { background: rgba(255,255,255,0.10); color:#ddd; border:1px solid rgba(255,255,255,0.14); }
+    .btn-primary { background: linear-gradient(135deg, #4CAF50, #22c55e); color:#06210f; }
+    .btn-secondary { background: rgba(255,255,255,0.08); color:#dbe7ff; border:1px solid rgba(255,255,255,0.14); }
     .msg { margin-top: 12px; min-height: 18px; font-size: 12px; color:#bbb; text-align:center; }
     .msg.err { color:#ff9a9a; }
-    .hint { margin-top: 10px; font-size: 12px; color:#aaa; line-height: 1.35; }
+    .hint { margin-top: 12px; font-size: 12px; color:#b8c4d6; line-height: 1.35; }
     a { color:#b8f5c1; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>Riego ESP32</h1>
-    <div class="sub">Accede con tu cuenta</div>
+    <div class="brand">
+      <img src="/logo.png" alt="AgroSense" onerror="this.style.display='none'" />
+      <div>
+        <div class="product">AgroSense</div>
+        <h1>Control Inteligente de Riego y Suelo</h1>
+      </div>
+    </div>
+    <div class="sub">Inicia sesión o crea tu cuenta</div>
 
     <label for="email">Email</label>
     <input id="email" type="email" autocomplete="email" placeholder="tu@email.com" />
