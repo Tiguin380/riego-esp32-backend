@@ -9,12 +9,10 @@
     body { margin:0; font-family: Arial, sans-serif; background:#0b1220; color:#e9eef7; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:18px; }
     .card { width:100%; max-width:560px; background: radial-gradient(1200px 600px at 20% 0%, rgba(76,175,80,0.18), transparent 55%), #101b33; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:18px; box-shadow: 0 22px 60px rgba(0,0,0,0.45); }
     :root {
-      --logo-size: clamp(96px, 18vw, 150px);
-      --product-size: clamp(28px, 5.8vw, 44px);
-      --tagline-size: clamp(13px, 2.6vw, 18px);
+      --logo-w: clamp(260px, 72vw, 520px);
     }
     .brand { display:flex; align-items:center; justify-content:flex-start; margin-bottom: 12px; }
-    .brand img { width: var(--logo-size); height: var(--logo-size); object-fit: contain; display:block; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55)); }
+    .brand img { width: var(--logo-w); max-width: 100%; height: auto; object-fit: contain; display:block; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55)); }
     .brand .product, .brand .tagline { display:none; }
     h1 { margin:0 0 10px; color:#dff7e3; font-size:20px; }
     p { margin: 8px 0; color:#ccc; line-height:1.35; }
@@ -27,8 +25,8 @@
   <div class="card">
     <div class="brand">
       <img
-        src="/logo.png?v=20260128"
-        srcset="/logo.png?v=20260128 1x, /logo@2x.png?v=20260128 2x"
+        src="/logo-wide.png?v=20260128r"
+        srcset="/logo-wide.png?v=20260128r 1x, /logo-wide@2x.png?v=20260128r 2x"
         alt="AgroSense"
         onerror="this.style.display='none'"
       />

@@ -10,12 +10,10 @@
         .container { width: 100%; max-width: none; margin: 0; }
         h1 { color: #dff7e3; margin-bottom: 6px; text-align: center; font-size: 18px; }
         :root {
-            --logo-size: clamp(96px, 18vw, 150px);
-            --product-size: clamp(28px, 5.8vw, 46px);
-            --tagline-size: clamp(13px, 2.6vw, 18px);
+            --logo-w: clamp(260px, 52vw, 560px);
         }
         .brand-header { display:flex; align-items:center; justify-content:center; margin: 6px 0 10px; }
-        .brand-header img { width: var(--logo-size); height: var(--logo-size); object-fit: contain; display:block; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55)); }
+        .brand-header img { width: var(--logo-w); max-width: 100%; height: auto; object-fit: contain; display:block; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55)); }
         .brand-title { display:none; }
         .section { background: #16213e; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
         .section h2 { color: #4CAF50; font-size: 16px; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
@@ -90,8 +88,8 @@
     <div class="container">
         <div class="brand-header">
             <img
-              src="/logo.png?v=20260128"
-              srcset="/logo.png?v=20260128 1x, /logo@2x.png?v=20260128 2x"
+                            src="/logo-wide.png?v=20260128r"
+                            srcset="/logo-wide.png?v=20260128r 1x, /logo-wide@2x.png?v=20260128r 2x"
               alt="AgroSense"
               onerror="this.style.display='none'"
             />
