@@ -1208,7 +1208,9 @@ app.post('/api/device/claim', async (req, res) => {
 
 // Llamar a initDB si hay DATABASE_URL (deployment) o si la variable AUTO_DB_INIT está activa
 if (process.env.DATABASE_URL || process.env.AUTO_DB_INIT === 'true') {
-  initDB();
+  void initDB().catch((err) => {
+    console.error('initDB failed (will keep server running):', err);
+  });
 } else {
   console.log('DATABASE_URL not set: skipping automatic DB init (use /api/init endpoint to initialize)');
 }
