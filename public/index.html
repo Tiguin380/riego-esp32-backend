@@ -1340,11 +1340,16 @@
             const device_code = (prompt('Código del dispositivo (ej: RIEGO_002):') || '').trim();
             if (!device_code) return;
             const claim_token = (prompt('claim_token (código de emparejamiento):') || '').trim();
+            if (!claim_token) {
+                alert('Debes pegar el claim_token (token del ESP32) para emparejar.');
+                return;
+            }
             try {
                 // Preferido (multi-tenant): claim
                 let r = await fetch('/api/device/claim', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify({ device_code, claim_token })
                 });
 
@@ -1361,6 +1366,7 @@
                     r = await fetch('/api/device/register', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
                         body: JSON.stringify({ device_code, name, location: locationTxt || null })
                     });
                 }
