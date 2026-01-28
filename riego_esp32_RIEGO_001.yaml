@@ -1,0 +1,8 @@
+substitutions:
+  device_name: riegoesp32001
+  device_code: RIEGO_001
+  # Token único por dispositivo (recomendado para multi-ESP32)
+  device_token: !secret device_token_RIEGO_001
+
+packages:
+  base: !include riego_esp32_base.yaml

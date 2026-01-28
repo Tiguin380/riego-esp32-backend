@@ -56,9 +56,37 @@ Variables necesarias (Railway → Variables):
 
 **¿Dónde saco el `device_code` y el `device_token`?**
 
-- `device_code`: es el “nombre/código” del equipo. En este repo está en la cabecera de `riego_esp32.yaml` (por defecto `RIEGO_001`). Normalmente también se pone en una etiqueta del dispositivo.
-- `device_token`: es un secreto compartido. No lo genera la web: lo defines tú en `riego_esp32.yaml` y ese mismo valor se pega en “Añadir dispositivo”.
+- `device_code`: es el “nombre/código” del equipo. En este repo está en `substitutions.device_code` (por defecto `RIEGO_001`). Normalmente también se pone en una etiqueta del dispositivo.
+- `device_token`: es un secreto compartido. No lo genera la web: lo defines tú (en `secrets.yaml` local) y ese mismo valor se pega en “Añadir dispositivo”.
 - Requisitos: mínimo 12 caracteres y NO puede ser `CAMBIA_ESTE_TOKEN`.
+
+### Multi-ESP32 (tokens distintos por dispositivo) ✅
+
+Este repo soporta múltiples ESP32 con tokens distintos **sin** subir secretos a Git:
+
+- Config común: [riego_esp32_base.yaml](riego_esp32_base.yaml)
+- Archivos por dispositivo: en la raíz del repo (para que todos usen el mismo `secrets.yaml`)
+  - Ejemplo: [riego_esp32_RIEGO_001.yaml](riego_esp32_RIEGO_001.yaml)
+
+En tu `secrets.yaml` (local, ignorado por git) pon un token por dispositivo, por ejemplo:
+
+```yaml
+device_token_RIEGO_001: "<token-largo>"
+device_token_RIEGO_002: "<token-largo>"
+```
+
+Luego, cada archivo de `devices/` referencia su secreto:
+
+```yaml
+device_token: !secret device_token_RIEGO_001
+```
+
+Compilar/subir:
+
+```bash
+esphome compile riego_esp32_RIEGO_001.yaml
+esphome upload riego_esp32_RIEGO_001.yaml --device <IP-o-hostname>
+```
 
 Generar un token recomendado (64 chars hex):
 
