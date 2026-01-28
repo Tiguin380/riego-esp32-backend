@@ -4,7 +4,7 @@ substitutions:
   # Opción B (simple): este token es el secreto que usa el ESP32 en la cabecera X-Device-Token.
   # Importante: la web NO lo genera; lo defines tú aquí y luego lo pegas en "Añadir dispositivo".
   # Debe tener 12+ caracteres y no puede ser CAMBIA_ESTE_TOKEN.
-  device_token: "CAMBIA_ESTE_TOKEN"
+  device_token: !secret device_token
 
 esphome:
   name: ${device_name}
@@ -57,15 +57,15 @@ esp32:   # <- Aquí se define la plataforma correcta
 
 # -------- WiFi --------
 wifi:
-  ssid: "AvanzaFibra_K733"
-  password: "ju4SgPKk"
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
   reboot_timeout: 15min
 
 # -------- OTA y API --------
 ota:
   platform: esphome
 api:
-  password: "ju4SgPKk"
+  password: !secret api_password
 
 web_server:
   port: 80
