@@ -1,7 +1,10 @@
 substitutions:
   device_name: riegoesp32001
   device_code: RIEGO_001
-  device_token: "CAMBIA_ESTE_TOKEN"  # pega aquí el api_token del dispositivo
+  # Opción B (simple): este token es el secreto que usa el ESP32 en la cabecera X-Device-Token.
+  # Importante: la web NO lo genera; lo defines tú aquí y luego lo pegas en "Añadir dispositivo".
+  # Debe tener 12+ caracteres y no puede ser CAMBIA_ESTE_TOKEN.
+  device_token: "CAMBIA_ESTE_TOKEN"
 
 esphome:
   name: ${device_name}

@@ -54,6 +54,18 @@ Variables necesarias (Railway → Variables):
 - Ese mismo token se puede usar como “código de emparejamiento” en la pantalla “Añadir dispositivo”.
 - Además, el backend auto-provisiona el dispositivo cuando el ESP32 envía datos por primera vez (crea el registro en `devices` si no existe).
 
+**¿Dónde saco el `device_code` y el `device_token`?**
+
+- `device_code`: es el “nombre/código” del equipo. En este repo está en la cabecera de `riego_esp32.yaml` (por defecto `RIEGO_001`). Normalmente también se pone en una etiqueta del dispositivo.
+- `device_token`: es un secreto compartido. No lo genera la web: lo defines tú en `riego_esp32.yaml` y ese mismo valor se pega en “Añadir dispositivo”.
+- Requisitos: mínimo 12 caracteres y NO puede ser `CAMBIA_ESTE_TOKEN`.
+
+Generar un token recomendado (64 chars hex):
+
+```bash
+npm run gen:device-token
+```
+
 **Provisioning (admin)**
 
 - Obtener/rotar `claim_token`:

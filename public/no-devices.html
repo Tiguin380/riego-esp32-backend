@@ -40,10 +40,10 @@
     <h1>No tienes dispositivos aún</h1>
     <p id="noAccess" style="display:none;">No tienes acceso a ese dispositivo. Puedes <b>asignar (claim)</b> uno a tu cuenta.</p>
     <p>Para ver tu panel, primero tienes que <b>asignar (claim)</b> un ESP32 a tu cuenta.</p>
-    <p class="muted">Necesitas el <b>device_code</b> y el <b>token del dispositivo</b> (es el mismo que usa el ESP32 como <b>X-Device-Token</b> / <b>device_token</b>).</p>
+    <p class="muted">Necesitas el <b>código del dispositivo (device_code)</b> y el <b>token del dispositivo (device_token)</b> (es el mismo que usa el ESP32 como <b>X-Device-Token</b>).</p>
 
-    <input id="deviceCode" placeholder="device_code (ej: RIEGO_001)" autocomplete="off" />
-    <input id="claimToken" placeholder="token del dispositivo (device_token)" autocomplete="off" />
+    <input id="deviceCode" placeholder="Código del dispositivo (ej: RIEGO_001)" autocomplete="off" />
+    <input id="claimToken" placeholder="Token del dispositivo (device_token)" autocomplete="off" />
 
     <div class="row">
       <button id="claim">Asignar dispositivo</button>
@@ -51,7 +51,19 @@
     </div>
     <div class="msg" id="msg"></div>
 
-    <p class="muted">Ese token está en tu ESPHome (campo <b>device_token</b>) y se envía al backend como <b>X-Device-Token</b>.</p>
+    <details style="margin-top:12px;" class="muted">
+      <summary style="cursor:pointer;">¿Dónde están estos datos?</summary>
+      <div style="margin-top:8px; line-height:1.45;">
+        <div><b>1)</b> Abre tu firmware ESPHome (archivo <b>riego_esp32.yaml</b>).</div>
+        <div><b>2)</b> Arriba verás algo como:</div>
+        <div style="margin:6px 0; padding:8px; border:1px dashed rgba(255,255,255,0.12); border-radius:10px; background: rgba(0,0,0,0.15);">
+          <div><b>device_code:</b> RIEGO_001</div>
+          <div><b>device_token:</b> (un texto largo)</div>
+        </div>
+        <div><b>3)</b> El <b>device_token</b> no lo “da” la web: lo defines tú (instalación). Debe tener <b>12+ caracteres</b> y no puede ser <b>CAMBIA_ESTE_TOKEN</b>.</div>
+        <div><b>4)</b> Flashea el ESP32 con ese firmware. Luego pega aquí <b>ese mismo token</b>.</div>
+      </div>
+    </details>
   </div>
 
   <script>
@@ -73,7 +85,7 @@
       const device_code = (document.getElementById('deviceCode').value || '').trim();
       const claim_token = (document.getElementById('claimToken').value || '').trim();
       if (!device_code) return setMsg('Falta device_code', true);
-      if (!claim_token) return setMsg('Falta claim_token', true);
+      if (!claim_token) return setMsg('Falta el token del dispositivo', true);
 
       const r = await fetch('/api/device/claim', {
         method: 'POST',
