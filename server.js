@@ -34,6 +34,57 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL
 });
 
+// --- Zona horaria España (Europe/Madrid) en backend ---
+// Devolvemos etiquetas ya formateadas para evitar dependencias del navegador.
+const TZ_ES = 'Europe/Madrid';
+const fmtEsParts = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: TZ_ES,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23'
+});
+const fmtEsLabel = new Intl.DateTimeFormat('es-ES', {
+  timeZone: TZ_ES,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false
+});
+
+function getMadridParts(date) {
+  const parts = fmtEsParts.formatToParts(date);
+  const m = Object.fromEntries(parts.map(p => [p.type, p.value]));
+  return {
+    y: m.year,
+    mo: m.month,
+    d: m.day,
+    h: m.hour,
+    mi: m.minute,
+    s: m.second
+  };
+}
+
+function enrichRowWithMadridTs(row) {
+  const d = row && row.ts ? new Date(row.ts) : null;
+  if (!d || Number.isNaN(d.getTime())) return row;
+  const p = getMadridParts(d);
+  return {
+    ...row,
+    ts: d.toISOString(),
+    ts_madrid: fmtEsLabel.format(d),
+    ts_madrid_label: `${p.d} ${p.h}:${p.mi}:${p.s}`,
+    ts_madrid_day_key: `${p.y}-${p.mo}-${p.d}`,
+    ts_madrid_month_key: `${p.y}-${p.mo}`
+  };
+}
+
 function getDeviceTokenFromReq(req) {
   return (
     req.get('x-device-token') ||
@@ -214,6 +265,7 @@ async function initDB() {
         led_manual_color VARCHAR(20) DEFAULT 'Off',
         wet_v DECIMAL(6,3),
         dry_v DECIMAL(6,3),
+        reboot_count_offset INTEGER DEFAULT 0,
         alert_humidity_low_minutes INTEGER DEFAULT 0,
         alert_valve_on_max_minutes INTEGER DEFAULT 0,
         alert_sensor_dead_minutes INTEGER DEFAULT 0,
@@ -262,6 +314,7 @@ async function initDB() {
 
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS wet_v DECIMAL(6,3)`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS dry_v DECIMAL(6,3)`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS reboot_count_offset INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_humidity_low_minutes INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_valve_on_max_minutes INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_sensor_dead_minutes INTEGER DEFAULT 0`);
@@ -437,8 +490,13 @@ app.get('/api/sensor/latest/:device_code', async (req, res) => {
     const { device_code } = req.params;
 
     const result = await pool.query(
-      `SELECT sd.* FROM sensor_data sd
+      `SELECT
+         sd.*,
+         COALESCE(dc.reboot_count_offset, 0) AS reboot_count_offset,
+         GREATEST(0, COALESCE(sd.reboot_count, 0) - COALESCE(dc.reboot_count_offset, 0))::int AS reboot_count_display
+       FROM sensor_data sd
        JOIN devices d ON sd.device_id = d.id
+       LEFT JOIN device_config dc ON dc.device_id = d.id
        WHERE d.device_code = $1
        ORDER BY sd.created_at DESC
        LIMIT 1`,
@@ -453,6 +511,43 @@ app.get('/api/sensor/latest/:device_code', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Reset lógico del contador de reinicios (offset) para UI
+app.post('/api/device/reboots/reset/:device_code', async (req, res) => {
+  try {
+    const { device_code } = req.params;
+    const token = getDeviceTokenFromReq(req);
+
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    if (dev.api_token && token !== dev.api_token) return res.status(401).json({ error: 'Token inválido (X-Device-Token)' });
+
+    const last = await pool.query(
+      `SELECT reboot_count FROM sensor_data WHERE device_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [dev.id]
+    );
+    const current = Number(last.rows[0]?.reboot_count ?? 0);
+
+    const existing = await pool.query('SELECT id FROM device_config WHERE device_id = $1', [dev.id]);
+    if (existing.rows.length === 0) {
+      const config_id = uuidv4();
+      await pool.query(
+        `INSERT INTO device_config (id, device_id, reboot_count_offset) VALUES ($1, $2, $3)`,
+        [config_id, dev.id, current]
+      );
+    } else {
+      await pool.query(
+        `UPDATE device_config SET reboot_count_offset = $1, updated_at = CURRENT_TIMESTAMP WHERE device_id = $2`,
+        [current, dev.id]
+      );
+    }
+
+    res.json({ status: 'OK', device_code, reboot_count_offset: current });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -728,14 +823,26 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
 
     if (step === 'raw') {
       const result = await pool.query(
-        `SELECT created_at AS ts, temperature, humidity, valve_state, voltage, wifi_rssi, uptime_s, reboot_count
-         FROM sensor_data
-         WHERE device_id = $1 AND created_at >= $2 AND created_at <= $3
-         ORDER BY created_at ASC
+        `SELECT
+           created_at AS ts,
+           temperature, humidity, valve_state, voltage, wifi_rssi, uptime_s,
+           reboot_count,
+           COALESCE(dc.reboot_count_offset, 0) AS reboot_count_offset,
+           GREATEST(0, COALESCE(reboot_count, 0) - COALESCE(dc.reboot_count_offset, 0))::int AS reboot_count_display
+         FROM sensor_data sd
+         LEFT JOIN device_config dc ON dc.device_id = sd.device_id
+         WHERE sd.device_id = $1 AND sd.created_at >= $2 AND sd.created_at <= $3
+         ORDER BY sd.created_at ASC
          LIMIT $4`,
         [device_id, from, to, limit]
       );
-      return res.json({ device_code, step, range: { from: from.toISOString(), to: to.toISOString() }, rows: result.rows });
+      return res.json({
+        device_code,
+        step,
+        range: { from: from.toISOString(), to: to.toISOString() },
+        server_now: new Date().toISOString(),
+        rows: result.rows.map(enrichRowWithMadridTs)
+      });
     }
 
     let trunc;
@@ -760,7 +867,13 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
       [device_id, from, to, limit]
     );
 
-    res.json({ device_code, step, range: { from: from.toISOString(), to: to.toISOString() }, rows: result.rows });
+    res.json({
+      device_code,
+      step,
+      range: { from: from.toISOString(), to: to.toISOString() },
+      server_now: new Date().toISOString(),
+      rows: result.rows.map(enrichRowWithMadridTs)
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message });

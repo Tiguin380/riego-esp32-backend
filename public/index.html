@@ -71,6 +71,11 @@
         .summary { display:flex; justify-content:space-between; gap: 12px; flex-wrap: wrap; margin: 8px 0 0; }
         .summary .k { color: #888; font-size: 11px; text-transform: uppercase; }
         .summary .v { color: #ddd; font-weight: bold; }
+
+        .mini-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); color: #ddd; padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; }
+        .mini-btn:hover { background: rgba(255,255,255,0.12); }
+        .mini-btn.danger { border-color: rgba(255,77,77,0.35); color: #ffb3b3; }
+        .mini-btn.primary { border-color: rgba(76,175,80,0.35); color: #b8f5c1; }
     </style>
 </head>
 <body>
@@ -83,6 +88,11 @@
             <div class="control-row" style="margin-bottom: 0;">
                 <label>Seleccionar:</label>
                 <select id="deviceSelect"></select>
+            </div>
+            <div style="display:flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+                <button class="mini-btn primary" id="btnAddDevice" type="button">+ Añadir dispositivo</button>
+                <button class="mini-btn" id="btnAddValve" type="button">+ Añadir válvula</button>
+                <button class="mini-btn" id="btnAddSensor" type="button">+ Añadir sensor humedad</button>
             </div>
             <div class="status" style="margin-top: 10px;" id="deviceMeta">--</div>
         </div>
@@ -126,6 +136,9 @@
                     <div class="sensor-label">Reinicios</div>
                     <div class="sensor-value" id="reboots">--</div>
                     <div class="sensor-unit">#</div>
+                    <div style="margin-top: 10px;">
+                        <button class="mini-btn danger" id="resetRebootsBtn" type="button">Reset a 0</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -408,7 +421,17 @@
             if (!el) return;
             const t = Number(config.threshold);
             el.textContent = Number.isFinite(t) ? String(Math.round(t)) : '--';
-            setMetricStateById('uptime', 'metric-neutral', 'Umbral de humedad baja configurado');
+            // Colorear el valor del umbral para que destaque
+            // (bajo = verde, medio = amarillo, alto = rojo)
+            if (!Number.isFinite(t)) {
+                setMetricStateById('uptime', 'metric-neutral', 'Umbral de humedad baja configurado');
+            } else if (t <= 30) {
+                setMetricStateById('uptime', 'metric-good', 'Umbral bajo');
+            } else if (t <= 50) {
+                setMetricStateById('uptime', 'metric-warn', 'Umbral medio');
+            } else {
+                setMetricStateById('uptime', 'metric-bad', 'Umbral alto');
+            }
         }
 
         // --- Persistencia ("datos que va recibiendo") ---
@@ -728,8 +751,11 @@
                     const d = parseTsToDate(r.ts);
                     if (!d) continue;
 
-                    const p = getMadridPartsFull(d);
-                    labels.push(`${p.d} ${p.h}:${p.mi}:${p.s}`);
+                    // Preferir etiqueta calculada por el backend (evita fallos de TZ en el navegador)
+                    labels.push(r.ts_madrid_label || (() => {
+                        const p = getMadridPartsFull(d);
+                        return `${p.d} ${p.h}:${p.mi}:${p.s}`;
+                    })());
 
                     const h = r.humidity == null ? null : Number(r.humidity);
                     hum.push(h == null || Number.isNaN(h) ? null : Number(h.toFixed(2)));
@@ -971,7 +997,8 @@
                 const rssi = (data.wifi_rssi == null ? null : Number(data.wifi_rssi));
                 document.getElementById('rssi').textContent = (rssi == null || Number.isNaN(rssi) ? '--' : String(Math.trunc(rssi)));
 
-                const rb = (data.reboot_count == null ? null : Number(data.reboot_count));
+                const rbRaw = (data.reboot_count_display != null ? data.reboot_count_display : data.reboot_count);
+                const rb = (rbRaw == null ? null : Number(rbRaw));
                 document.getElementById('reboots').textContent = (rb == null || Number.isNaN(rb) ? '--' : String(Math.trunc(rb)));
 
                 // Colores por umbral (valores típicos; además se respetan min/max de alertas si están configurados)
@@ -1108,6 +1135,7 @@
 
         loadDevices();
         cargarConfig();
+        updateThresholdCard();
         rebuildCharts();
         cargarAlertas();
         actualizarSensores();
@@ -1115,6 +1143,53 @@
         setInterval(actualizarSensores, 15000);
         setInterval(rebuildCharts, 60000);
         setInterval(cargarAlertas, 60000);
+
+        // --- UI acciones rápidas ---
+        document.getElementById('btnAddDevice')?.addEventListener('click', async () => {
+            const device_code = (prompt('Código del dispositivo (ej: RIEGO_002):') || '').trim();
+            if (!device_code) return;
+            const name = (prompt('Nombre (opcional):') || 'ESP32 Riego').trim();
+            const location = (prompt('Ubicación (opcional):') || '').trim();
+            try {
+                const r = await fetch('/api/device/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_code, name, location: location || null })
+                });
+                if (!r.ok) throw new Error('register failed');
+                window.location.href = `/panel/${encodeURIComponent(device_code)}`;
+            } catch {
+                alert('No se pudo añadir el dispositivo');
+            }
+        });
+
+        document.getElementById('btnAddValve')?.addEventListener('click', () => {
+            alert('Añadir válvulas múltiples requiere actualizar firmware + backend (lo hago en el siguiente paso).');
+        });
+        document.getElementById('btnAddSensor')?.addEventListener('click', () => {
+            alert('Añadir sensores múltiples requiere actualizar firmware + backend (lo hago en el siguiente paso).');
+        });
+
+        document.getElementById('resetRebootsBtn')?.addEventListener('click', async () => {
+            if (!confirm('¿Poner el contador de reinicios a 0 (solo en el panel)?')) return;
+            const headers = { 'Content-Type': 'application/json' };
+            const saved = (getSavedToken(deviceCode) || '').trim();
+            if (saved) headers['X-Device-Token'] = saved;
+            let r = await fetch(`/api/device/reboots/reset/${encodeURIComponent(deviceCode)}`, { method: 'POST', headers });
+            if ((r.status === 401 || r.status === 403) && !saved) {
+                const t = (prompt('Este dispositivo requiere token para resetear reinicios. Pégalo aquí:') || '').trim();
+                if (t) {
+                    saveToken(deviceCode, t);
+                    r = await fetch(`/api/device/reboots/reset/${encodeURIComponent(deviceCode)}`, { method: 'POST', headers: { ...headers, 'X-Device-Token': t } });
+                }
+            }
+            if (r.ok) {
+                actualizarSensores();
+                alert('OK: reinicios reseteados a 0 en el panel');
+            } else {
+                alert('No se pudo resetear');
+            }
+        });
     </script>
 </body>
 </html>
