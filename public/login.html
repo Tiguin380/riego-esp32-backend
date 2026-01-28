@@ -150,6 +150,11 @@
       const password = (document.getElementById('password').value || '').trim();
       const { r, j } = await postJson('/api/auth/login', { email, password });
       if (!r.ok) return setMsg(msg, j.error || 'No se pudo iniciar sesión', true);
+      // Verifica que la cookie de sesión quedó guardada (en HTTP se bloquea si es Secure).
+      const me = await fetch('/api/auth/me', { credentials: 'include' }).catch(() => null);
+      if (!me || me.status === 401) {
+        return setMsg(msg, `No se pudo establecer la sesión. Abre la web en https (no http) y permite cookies para ${location.host}.`, true);
+      }
       location.href = nextUrl();
     });
 

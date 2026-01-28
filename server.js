@@ -14,6 +14,25 @@ const app = express();
 // Railway/Proxies: necesario para que rate-limit y req.ip funcionen bien
 app.set('trust proxy', 1);
 
+// En producción, la cookie de sesión es Secure. Si el usuario entra por HTTP,
+// el navegador rechazará la cookie y parecerá que “no inicia sesión”.
+// Forzamos HTTPS para evitar ese bucle.
+app.use((req, res, next) => {
+  const cookieSecure = envBool('COOKIE_SECURE', process.env.NODE_ENV === 'production');
+  if (!cookieSecure) return next();
+
+  const xfProto = String(req.get('x-forwarded-proto') || '')
+    .split(',')[0]
+    .trim()
+    .toLowerCase();
+  const isHttps = Boolean(req.secure) || xfProto === 'https';
+  if (isHttps) return next();
+
+  const host = req.get('x-forwarded-host') || req.get('host');
+  if (!host) return res.status(400).send('HTTPS required');
+  return res.redirect(308, `https://${host}${req.originalUrl || '/'}`);
+});
+
 function envBool(name, defaultValue) {
   const raw = process.env[name];
   if (raw == null || raw === '') return defaultValue;
