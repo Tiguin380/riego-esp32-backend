@@ -13,10 +13,22 @@
         .section h2 { color: #4CAF50; font-size: 16px; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
         /* Rejilla responsive: evita que en móvil se “salgan” las tarjetas */
         .sensor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 15px; }
-        .sensor-card { background: #0f3460; padding: 15px; border-radius: 8px; text-align: center; min-width: 0; }
+        .sensor-card { background: #0f3460; padding: 15px; border-radius: 8px; text-align: center; min-width: 0; border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 10px 26px rgba(0,0,0,0.25); transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease; }
+        .sensor-card:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.12); box-shadow: 0 14px 32px rgba(0,0,0,0.30); }
         .sensor-label { font-size: 11px; color: #888; text-transform: uppercase; margin-bottom: 5px; }
         .sensor-value { font-size: clamp(22px, 6vw, 32px); font-weight: bold; color: #4CAF50; }
         .sensor-unit { font-size: 14px; color: #666; }
+
+        /* Estado visual para métricas (voltaje/RSSI/uptime/reinicios) */
+        .metric-good .sensor-value { color: #33cc33; }
+        .metric-warn .sensor-value { color: #ffcc00; }
+        .metric-bad  .sensor-value { color: #ff4d4d; }
+        .metric-neutral .sensor-value { color: #aaa; }
+
+        .metric-good { border-color: rgba(51,204,51,0.25); box-shadow: 0 12px 28px rgba(51,204,51,0.08), 0 10px 26px rgba(0,0,0,0.25); }
+        .metric-warn { border-color: rgba(255,204,0,0.25); box-shadow: 0 12px 28px rgba(255,204,0,0.08), 0 10px 26px rgba(0,0,0,0.25); }
+        .metric-bad  { border-color: rgba(255,77,77,0.30); box-shadow: 0 12px 28px rgba(255,77,77,0.10), 0 10px 26px rgba(0,0,0,0.25); }
+        .metric-neutral { border-color: rgba(255,255,255,0.08); }
         .valve-indicator { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
         .valve-dot { width: 14px; height: 14px; border-radius: 50%; background: #666; box-shadow: 0 0 10px #000; }
         .valve-dot.on { background: #33cc33; box-shadow: 0 0 18px #33cc33; }
@@ -108,7 +120,7 @@
                 <div class="sensor-card">
                     <div class="sensor-label">Uptime</div>
                     <div class="sensor-value" id="uptime">--</div>
-                    <div class="sensor-unit">seg</div>
+                    <div class="sensor-unit">tiempo</div>
                 </div>
                 <div class="sensor-card">
                     <div class="sensor-label">Reinicios</div>
@@ -170,10 +182,6 @@
 
         <div class="section">
             <h2> CONFIGURACIÓN AUTOMÁTICA</h2>
-            <div class="control-row">
-                <label>Token (para guardar):</label>
-                <input id="deviceToken" type="password" placeholder="X-Device-Token" />
-            </div>
             <div class="control-row">
                 <label>Umbral Humedad Baja:</label>
                 <input type="range" id="threshold" min="1" max="100" value="25">
@@ -268,11 +276,22 @@
         function saveToken(code, token) {
             try { localStorage.setItem(tokenStorageKey(code), token || ''); } catch {}
         }
-        function getToken() {
-            const el = document.getElementById('deviceToken');
-            const v = (el && el.value ? el.value : getSavedToken(deviceCode)).trim();
-            return v || '';
+
+        function consumeTokenFromUrl() {
+            try {
+                const params = new URLSearchParams(location.search);
+                const t = (params.get('token') || params.get('t') || '').trim();
+                if (!t) return;
+                saveToken(deviceCode, t);
+                params.delete('token');
+                params.delete('t');
+                const qs = params.toString();
+                const next = location.pathname + (qs ? `?${qs}` : '') + location.hash;
+                history.replaceState({}, '', next);
+            } catch {}
         }
+
+        consumeTokenFromUrl();
 
         async function loadDevices() {
             const section = document.getElementById('deviceSection');
@@ -299,7 +318,7 @@
                 select.value = deviceCode;
 
                 const current = list.find(d => d.device_code === deviceCode);
-                const lastSeen = current?.last_seen ? new Date(current.last_seen).toLocaleString('es-ES') : '--';
+                const lastSeen = current?.last_seen ? new Date(current.last_seen).toLocaleString('es-ES', { timeZone: TZ, hour12: false }) : '--';
                 meta.textContent = `${current?.name || deviceCode}${current?.location ? ' · ' + current.location : ''} · Último dato: ${lastSeen}`;
 
                 select.addEventListener('change', () => {
@@ -307,11 +326,6 @@
                     if (next && next !== deviceCode) window.location.href = `/panel/${encodeURIComponent(next)}`;
                 });
 
-                const tokenEl = document.getElementById('deviceToken');
-                if (tokenEl) {
-                    tokenEl.value = getSavedToken(deviceCode);
-                    tokenEl.addEventListener('input', () => saveToken(deviceCode, tokenEl.value.trim()));
-                }
             } catch {
                 if (section) section.style.display = 'none';
             }
@@ -322,7 +336,8 @@
         const fmtNowEs = new Intl.DateTimeFormat('es-ES', {
             timeZone: TZ,
             year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            hour12: false
         });
         const fmtDateEs = new Intl.DateTimeFormat('es-ES', {
             timeZone: TZ,
@@ -333,12 +348,18 @@
             const parts = new Intl.DateTimeFormat('sv-SE', {
                 timeZone: TZ,
                 year: 'numeric', month: '2-digit', day: '2-digit',
-                hour: '2-digit', minute: '2-digit'
+                hour: '2-digit', minute: '2-digit',
+                hourCycle: 'h23'
             }).formatToParts(date);
             const m = Object.fromEntries(parts.map(p => [p.type, p.value]));
             return { y: m.year, mo: m.month, d: m.day, h: m.hour, mi: m.minute };
         }
         function pad2(n) { return String(n).padStart(2, '0'); }
+        function formatUptimeSeconds(sec) {
+            const n = Number(sec);
+            if (!Number.isFinite(n) || n < 0) return '--';
+            return formatDuration(n * 1000);
+        }
         function formatDuration(ms) {
             const s = Math.floor(ms / 1000);
             const hh = Math.floor(s / 3600);
@@ -347,6 +368,15 @@
             if (hh > 0) return `${hh}h ${pad2(mm)}m ${pad2(ss)}s`;
             if (mm > 0) return `${mm}m ${pad2(ss)}s`;
             return `${ss}s`;
+        }
+
+        function setMetricStateById(valueId, state, title) {
+            const valueEl = document.getElementById(valueId);
+            const card = valueEl ? valueEl.closest('.sensor-card') : null;
+            if (!card) return;
+            card.classList.remove('metric-good', 'metric-warn', 'metric-bad', 'metric-neutral');
+            card.classList.add(state);
+            if (title) card.title = title;
         }
 
         // --- Persistencia ("datos que va recibiendo") ---
@@ -782,9 +812,6 @@
                 colorBajaEl.value = config.colorG;
 
                 // Campos avanzados
-                const tokenEl = document.getElementById('deviceToken');
-                if (tokenEl) tokenEl.value = getSavedToken(deviceCode);
-
                 document.getElementById('wetV').value = (cfg.wet_v == null ? '' : cfg.wet_v);
                 document.getElementById('dryV').value = (cfg.dry_v == null ? '' : cfg.dry_v);
                 document.getElementById('alertHumLowMin').value = cfg.alert_humidity_low_minutes ?? 0;
@@ -814,10 +841,7 @@
 
         async function guardar() {
             try {
-                const headers = { 'Content-Type': 'application/json' };
-                const t = getToken();
-                if (t) headers['X-Device-Token'] = t;
-                saveToken(deviceCode, t);
+                const headersBase = { 'Content-Type': 'application/json' };
 
                 const wetV = document.getElementById('wetV').value;
                 const dryV = document.getElementById('dryV').value;
@@ -829,24 +853,46 @@
                 const notifyWebhook = document.getElementById('notifyWebhook').value;
                 const notifyTelegram = document.getElementById('notifyTelegram').value;
 
-                const res = await fetch(`/api/config/${encodeURIComponent(deviceCode)}`, {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify({
-                        humidity_low_threshold: config.threshold,
-                        humidity_low_color: config.colorB,
-                        humidity_good_color: config.colorG,
-                        wet_v: wetV === '' ? undefined : Number(wetV),
-                        dry_v: dryV === '' ? undefined : Number(dryV),
-                        alert_humidity_low_minutes: Number(alertHumLowMin || 0),
-                        alert_valve_on_max_minutes: Number(alertValveMaxMin || 0),
-                        alert_sensor_dead_minutes: Number(alertDeadMin || 0),
-                        alert_voltage_min: alertVmin === '' ? null : Number(alertVmin),
-                        alert_voltage_max: alertVmax === '' ? null : Number(alertVmax),
-                        notify_webhook_url: notifyWebhook === '' ? null : String(notifyWebhook),
-                        notify_telegram_chat_id: notifyTelegram === '' ? null : String(notifyTelegram)
-                    })
-                });
+                const body = {
+                    humidity_low_threshold: config.threshold,
+                    humidity_low_color: config.colorB,
+                    humidity_good_color: config.colorG,
+                    wet_v: wetV === '' ? undefined : Number(wetV),
+                    dry_v: dryV === '' ? undefined : Number(dryV),
+                    alert_humidity_low_minutes: Number(alertHumLowMin || 0),
+                    alert_valve_on_max_minutes: Number(alertValveMaxMin || 0),
+                    alert_sensor_dead_minutes: Number(alertDeadMin || 0),
+                    alert_voltage_min: alertVmin === '' ? null : Number(alertVmin),
+                    alert_voltage_max: alertVmax === '' ? null : Number(alertVmax),
+                    notify_webhook_url: notifyWebhook === '' ? null : String(notifyWebhook),
+                    notify_telegram_chat_id: notifyTelegram === '' ? null : String(notifyTelegram)
+                };
+
+                async function doSave(headers) {
+                    return fetch(`/api/config/${encodeURIComponent(deviceCode)}`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify(body)
+                    });
+                }
+
+                const saved = (getSavedToken(deviceCode) || '').trim();
+                const headers1 = { ...headersBase };
+                if (saved) headers1['X-Device-Token'] = saved;
+
+                let res = await doSave(headers1);
+
+                if (res.status === 401 || res.status === 403) {
+                    const msg = saved
+                        ? 'Token guardado inválido o caducado. Pega el token correcto:'
+                        : 'Este dispositivo requiere token para guardar. Pégalo aquí:';
+                    const t = (prompt(msg) || '').trim();
+                    if (t) {
+                        saveToken(deviceCode, t);
+                        const headers2 = { ...headersBase, 'X-Device-Token': t };
+                        res = await doSave(headers2);
+                    }
+                }
 
                 if (res.ok) {
                     alert(' Configuracion guardada!\nEl ESP32 aplicara los cambios en 10 segundos.');
@@ -866,10 +912,55 @@
                 document.getElementById('temp').textContent = parseFloat(data.temperature).toFixed(1);
                 document.getElementById('humidity').textContent = parseFloat(data.humidity).toFixed(1);
 
-                document.getElementById('voltage').textContent = (data.voltage == null ? '--' : Number(data.voltage).toFixed(2));
-                document.getElementById('rssi').textContent = (data.wifi_rssi == null ? '--' : String(data.wifi_rssi));
-                document.getElementById('uptime').textContent = (data.uptime_s == null ? '--' : String(data.uptime_s));
-                document.getElementById('reboots').textContent = (data.reboot_count == null ? '--' : String(data.reboot_count));
+                const v = (data.voltage == null ? null : Number(data.voltage));
+                document.getElementById('voltage').textContent = (v == null || Number.isNaN(v) ? '--' : v.toFixed(2));
+
+                const rssi = (data.wifi_rssi == null ? null : Number(data.wifi_rssi));
+                document.getElementById('rssi').textContent = (rssi == null || Number.isNaN(rssi) ? '--' : String(Math.trunc(rssi)));
+
+                const up = (data.uptime_s == null ? null : Number(data.uptime_s));
+                document.getElementById('uptime').textContent = formatUptimeSeconds(up);
+
+                const rb = (data.reboot_count == null ? null : Number(data.reboot_count));
+                document.getElementById('reboots').textContent = (rb == null || Number.isNaN(rb) ? '--' : String(Math.trunc(rb)));
+
+                // Colores por umbral (valores típicos; además se respetan min/max de alertas si están configurados)
+                const alertVminRaw = document.getElementById('alertVmin')?.value;
+                const alertVmaxRaw = document.getElementById('alertVmax')?.value;
+                const alertVmin = Number(alertVminRaw);
+                const alertVmax = Number(alertVmaxRaw);
+                const hasVmin = !!(alertVminRaw != null && alertVminRaw.trim() !== '' && Number.isFinite(alertVmin));
+                const hasVmax = !!(alertVmaxRaw != null && alertVmaxRaw.trim() !== '' && Number.isFinite(alertVmax));
+                if (v == null || Number.isNaN(v)) {
+                    setMetricStateById('voltage', 'metric-neutral');
+                } else if ((hasVmin && v < alertVmin) || (hasVmax && v > alertVmax)) {
+                    setMetricStateById('voltage', 'metric-bad', `Fuera de rango (${hasVmin ? alertVmin : '-'} – ${hasVmax ? alertVmax : '-' } V)`);
+                } else {
+                    // fallback si no hay min/max
+                    const st = v < 1.0 ? 'metric-bad' : (v < 1.8 ? 'metric-warn' : 'metric-good');
+                    setMetricStateById('voltage', st);
+                }
+
+                if (rssi == null || Number.isNaN(rssi)) {
+                    setMetricStateById('rssi', 'metric-neutral');
+                } else {
+                    const st = rssi >= -60 ? 'metric-good' : (rssi >= -75 ? 'metric-warn' : 'metric-bad');
+                    setMetricStateById('rssi', st);
+                }
+
+                if (up == null || Number.isNaN(up)) {
+                    setMetricStateById('uptime', 'metric-neutral');
+                } else {
+                    const st = up < 60 ? 'metric-bad' : (up < 600 ? 'metric-warn' : 'metric-good');
+                    setMetricStateById('uptime', st);
+                }
+
+                if (rb == null || Number.isNaN(rb)) {
+                    setMetricStateById('reboots', 'metric-neutral');
+                } else {
+                    const st = rb === 0 ? 'metric-good' : (rb <= 2 ? 'metric-warn' : 'metric-bad');
+                    setMetricStateById('reboots', st);
+                }
 
                 const rawValve = (data.valve_state || '').toString().toUpperCase();
                 const isOn = rawValve === 'ON' || rawValve === '1' || rawValve === 'TRUE';
@@ -942,7 +1033,7 @@
                     item.className = 'sensor-card';
                     item.style.textAlign = 'left';
                     item.innerHTML = `
-                        <div class="sensor-label">${a.kind} · ${new Date(a.created_at).toLocaleString('es-ES')}</div>
+                        <div class="sensor-label">${a.kind} · ${new Date(a.created_at).toLocaleString('es-ES', { timeZone: TZ, hour12: false })}</div>
                         <div style="color:#ddd; font-weight:bold;">${a.message}</div>
                     `;
                     listEl.appendChild(item);
