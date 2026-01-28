@@ -8,17 +8,18 @@
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Arial, sans-serif; background:#0b1220; color:#e9eef7; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:18px; }
     .card { width: 100%; max-width: 520px; background: radial-gradient(1200px 600px at 20% 0%, rgba(76,175,80,0.20), transparent 55%), #101b33; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:18px; box-shadow: 0 22px 60px rgba(0,0,0,0.45); }
-    .brand { display:flex; align-items:center; gap: 12px; justify-content:center; margin-bottom: 10px; }
-    .brand img { width: 78px; height: 78px; object-fit: contain; filter: drop-shadow(0 12px 26px rgba(0,0,0,0.45)); }
-    h1 { margin: 0; color:#dff7e3; font-size: 14px; text-align:center; letter-spacing: 0.2px; }
-    .sub { text-align:center; color:#b8c4d6; font-size: 12px; margin: 6px 0 14px; }
-    .product { text-align:center; color:#4CAF50; font-weight: 900; font-size: 30px; line-height: 1.05; margin-bottom: 2px; letter-spacing: 0.3px; }
-
-    @media (max-width: 420px) {
-      .brand img { width: 64px; height: 64px; }
-      .product { font-size: 26px; }
-      h1 { font-size: 13px; }
+    :root {
+      --logo-size: clamp(96px, 20vw, 150px);
+      --product-size: clamp(28px, 6.2vw, 44px);
+      --tagline-size: clamp(13px, 2.9vw, 18px);
+      --sub-size: clamp(12px, 2.6vw, 14px);
     }
+    .brand { display:flex; align-items:center; gap: clamp(10px, 2.4vw, 16px); justify-content:center; margin-bottom: 10px; flex-wrap: wrap; }
+    .brand img { width: var(--logo-size); height: var(--logo-size); object-fit: contain; display:block; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55)); }
+    .brand > div { min-width: 220px; }
+    .product { text-align:center; color:#4CAF50; font-weight: 950; font-size: var(--product-size); line-height: 1.02; margin-bottom: 2px; letter-spacing: 0.3px; }
+    h1 { margin: 0; color:#dff7e3; font-size: var(--tagline-size); text-align:center; letter-spacing: 0.2px; }
+    .sub { text-align:center; color:#b8c4d6; font-size: var(--sub-size); margin: 8px 0 14px; }
     label { display:block; font-size: 12px; color:#bbb; margin: 10px 0 6px; }
     input { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); background:#0b2a55; color:#fff; font-size: 14px; outline: none; }
     input:focus { border-color: rgba(76,175,80,0.55); box-shadow: 0 0 0 4px rgba(76,175,80,0.12); }
