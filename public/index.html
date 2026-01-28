@@ -16,6 +16,14 @@
         .brand-header img { width: var(--logo-w); max-width: 100%; height: auto; object-fit: contain; display:block; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55)); }
         .brand-title { display:none; }
         .section { background: #16213e; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+        /* Header fijo (sticky) */
+        #deviceSection { position: sticky; top: 10px; z-index: 50; backdrop-filter: blur(8px); background: rgba(22,33,62,0.92); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 18px 40px rgba(0,0,0,0.30); }
+        #deviceSection h2 { margin-bottom: 10px; }
+        .topbar-mini { display:flex; justify-content:space-between; gap: 10px; flex-wrap: wrap; align-items:center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
+        .topbar-mini .mini-k { font-size: 11px; color:#8fa3bf; text-transform: uppercase; letter-spacing: .02em; margin-right: 6px; }
+        .topbar-mini .mini-v { font-weight: 700; color:#e9eef7; }
+        .topbar-mini .right { display:flex; gap: 10px; align-items:center; flex-wrap: wrap; justify-content:flex-end; }
+        .pill { display:inline-flex; gap: 8px; align-items:center; padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.10); background: rgba(0,0,0,0.10); font-size: 12px; color:#c9d1d9; }
         .section h2 { color: #4CAF50; font-size: 16px; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
         /* Rejilla responsive: evita que en móvil se “salgan” las tarjetas */
         .sensor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 15px; }
@@ -88,6 +96,22 @@
         .dot.online { background: #22c55e; }
         .dot.offline { background: #ef4444; }
         .dot.unknown { background: #6b7280; }
+
+        /* Secciones plegables */
+        .section-head { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
+        .collapse-btn { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color:#dbe7ff; padding: 6px 10px; border-radius: 10px; cursor:pointer; font-size: 12px; }
+        .collapse-btn:hover { background: rgba(255,255,255,0.10); }
+        .section.collapsed .section-body { display:none; }
+
+        /* Compacto en móvil */
+        @media (max-width: 640px) {
+            body { padding: 10px; }
+            .section { padding: 14px; margin-bottom: 14px; }
+            #deviceSection { top: 8px; }
+            .sensor-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+            .sensor-card { padding: 12px; }
+            .btn-grid { grid-template-columns: repeat(2, 1fr); }
+        }
     </style>
 </head>
 <body>
@@ -115,6 +139,20 @@
                 <button class="mini-btn" id="btnAddSensor" type="button">+ Añadir sensor humedad</button>
             </div>
             <div class="status" style="margin-top: 10px;" id="deviceMeta">--</div>
+
+            <div class="topbar-mini">
+                <div class="left">
+                    <span class="mini-k">España</span>
+                    <span class="mini-v" id="topNowEs">--</span>
+                </div>
+                <div class="right">
+                    <span class="pill" title="Conexión del dispositivo">
+                        <span class="dot unknown" id="topConnDot"></span>
+                        <span id="topConnText">--</span>
+                    </span>
+                    <span class="pill" id="topStatusText">Conectando...</span>
+                </div>
+            </div>
         </div>
         <div class="section">
             <h2> SENSORES EN TIEMPO REAL</h2>
@@ -303,7 +341,7 @@
                 <label>Telegram Chat ID:</label>
                 <input id="notifyTelegram" type="text" placeholder="123456789" />
             </div>
-            <button class="btn btn-save" onclick="guardar()"> GUARDAR CONFIGURACION</button>
+            <button class="btn btn-save" id="btnSaveConfig" onclick="guardar()"> GUARDAR CONFIGURACION</button>
         </div>
 
         <div class="section">
@@ -510,21 +548,110 @@
             return new Date(Date.now() + (serverClockOffsetMs == null ? 0 : serverClockOffsetMs));
         }
 
-        const connDot = document.getElementById('connDot');
-        const connText = document.getElementById('connText');
         function setConnectionUI(status) {
             const s = (status || 'unknown').toString().toLowerCase();
-            if (!connDot || !connText) return;
-            connDot.classList.remove('online', 'offline', 'unknown');
+            const pairs = [
+                { dot: document.getElementById('connDot'), text: document.getElementById('connText') },
+                { dot: document.getElementById('topConnDot'), text: document.getElementById('topConnText') }
+            ].filter(p => p.dot && p.text);
+            if (!pairs.length) return;
+
+            for (const { dot, text } of pairs) {
+                dot.classList.remove('online', 'offline', 'unknown');
+                if (s === 'online') {
+                    dot.classList.add('online');
+                    text.textContent = 'Online';
+                } else if (s === 'offline') {
+                    dot.classList.add('offline');
+                    text.textContent = 'Offline';
+                } else {
+                    dot.classList.add('unknown');
+                    text.textContent = '--';
+                }
+            }
+
             if (s === 'online') {
-                connDot.classList.add('online');
-                connText.textContent = 'Online';
             } else if (s === 'offline') {
-                connDot.classList.add('offline');
-                connText.textContent = 'Offline';
             } else {
-                connDot.classList.add('unknown');
-                connText.textContent = '--';
+            }
+        }
+
+        function setStatusText(text) {
+            const st = document.getElementById('status');
+            const top = document.getElementById('topStatusText');
+            if (st) st.textContent = text;
+            if (top) top.textContent = text;
+        }
+
+        function setStatusClass(isOnline) {
+            const st = document.getElementById('status');
+            if (!st) return;
+            st.className = isOnline ? 'status online' : 'status offline';
+        }
+
+        async function withBusy(btn, busyText, fn) {
+            if (!btn) return fn();
+            const prevText = btn.textContent;
+            const prevDisabled = btn.disabled;
+            btn.disabled = true;
+            if (busyText) btn.textContent = busyText;
+            try { return await fn(); }
+            finally {
+                btn.disabled = prevDisabled;
+                btn.textContent = prevText;
+            }
+        }
+
+        function initCollapsibles() {
+            const sections = Array.from(document.querySelectorAll('.section'));
+            for (const sec of sections) {
+                if (sec.id === 'deviceSection') continue;
+                if (sec.dataset.collapsibleInit === '1') continue;
+
+                const h2 = sec.querySelector('h2');
+                if (!h2) continue;
+
+                const head = document.createElement('div');
+                head.className = 'section-head';
+
+                const body = document.createElement('div');
+                body.className = 'section-body';
+
+                const title = (h2.textContent || '').trim() || 'section';
+                const key = `ui:collapsed:${title}`;
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'collapse-btn';
+                const applyState = (collapsed) => {
+                    sec.classList.toggle('collapsed', !!collapsed);
+                    btn.textContent = collapsed ? 'Mostrar' : 'Ocultar';
+                    try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch {}
+                };
+
+                const stored = (() => {
+                    try { return localStorage.getItem(key); } catch { return null; }
+                })();
+                const initialCollapsed = stored === '1';
+                applyState(initialCollapsed);
+
+                btn.addEventListener('click', () => applyState(!sec.classList.contains('collapsed')));
+
+                // Reestructurar DOM: h2 + botón en head; el resto dentro de body
+                head.appendChild(h2);
+                head.appendChild(btn);
+
+                const toMove = [];
+                for (const child of Array.from(sec.childNodes)) {
+                    if (child === h2) continue;
+                    if (child.nodeType === 3 && String(child.textContent || '').trim() === '') continue;
+                    toMove.push(child);
+                }
+                for (const n of toMove) body.appendChild(n);
+
+                sec.appendChild(head);
+                sec.appendChild(body);
+                sec.dataset.collapsibleInit = '1';
             }
         }
 
@@ -1080,7 +1207,10 @@
         }
 
         function tickClock() {
-            document.getElementById('nowEs').textContent = fmtNowEs.format(nowAdjusted());
+            const t = fmtNowEs.format(nowAdjusted());
+            document.getElementById('nowEs').textContent = t;
+            const topNow = document.getElementById('topNowEs');
+            if (topNow) topNow.textContent = t;
         }
         tickClock();
         setInterval(tickClock, 1000);
@@ -1140,8 +1270,11 @@
         });
 
         async function guardar() {
+            const btn = document.getElementById('btnSaveConfig');
+            return withBusy(btn, 'Guardando...', async () => {
             try {
                 const headersBase = { 'Content-Type': 'application/json' };
+                setStatusText(' Guardando configuración...');
 
                 const wetV = document.getElementById('wetV').value;
                 const dryV = document.getElementById('dryV').value;
@@ -1172,6 +1305,7 @@
                     return fetch(`/api/config/${encodeURIComponent(deviceCode)}`, {
                         method: 'POST',
                         headers,
+                        credentials: 'include',
                         body: JSON.stringify(body)
                     });
                 }
@@ -1195,13 +1329,17 @@
                 }
 
                 if (res.ok) {
+                    setStatusText(' Configuración guardada');
                     alert(' Configuracion guardada!\nEl ESP32 aplicara los cambios en 10 segundos.');
                 } else {
+                    setStatusText(' Error al guardar');
                     alert(' Error al guardar');
                 }
             } catch (e) {
+                setStatusText(' Error de conexión');
                 alert(' Error de conexion');
             }
+            });
         }
 
         async function actualizarSensores() {
@@ -1333,18 +1471,17 @@
                 // Rendimiento: no forzar rebuild de gráficas en cada tick
                 // (se reconstruyen con throttle por SSE/intervalos)
                 
-                const stEl = document.getElementById('status');
                 if (deviceOnline === false) {
-                    stEl.textContent = ' Offline (datos antiguos) - ' + fmtNowEs.format(nowAdjusted());
-                    stEl.className = 'status offline';
+                    setStatusText(' Offline (datos antiguos) - ' + fmtNowEs.format(nowAdjusted()));
+                    setStatusClass(false);
                 } else {
-                    stEl.textContent = ' Online - ' + fmtNowEs.format(nowAdjusted());
-                    stEl.className = 'status online';
+                    setStatusText(' Online - ' + fmtNowEs.format(nowAdjusted()));
+                    setStatusClass(true);
                 }
             } catch(e) {
                 setConnectionUI('offline');
-                document.getElementById('status').textContent = ' Sin conexion';
-                document.getElementById('status').className = 'status offline';
+                setStatusText(' Sin conexion');
+                setStatusClass(false);
             }
         }
 
@@ -1391,6 +1528,7 @@
         }
 
         async function boot() {
+            initCollapsibles();
             const ok = await loadDevices();
             if (!ok) return;
             if (!hasDevices) return;
@@ -1412,6 +1550,8 @@
 
         // --- UI acciones rápidas ---
         document.getElementById('btnAddDevice')?.addEventListener('click', async () => {
+            const btn = document.getElementById('btnAddDevice');
+            await withBusy(btn, 'Añadiendo...', async () => {
             const deviceRaw = prompt('Código del dispositivo (ej: RIEGO_002):');
             if (deviceRaw === null) return; // Cancel
             const device_code = String(deviceRaw || '').trim();
@@ -1458,10 +1598,13 @@
             } catch {
                 alert('No se pudo añadir el dispositivo (verifica el claim_token)');
             }
+            });
         });
 
         document.getElementById('btnAddValve')?.addEventListener('click', () => {
             (async () => {
+                const btn = document.getElementById('btnAddValve');
+                await withBusy(btn, 'Añadiendo...', async () => {
                 const nameRaw = prompt('Nombre de la nueva válvula (ej: Válvula 2):');
                 if (nameRaw === null) return; // Cancel
                 const name = String(nameRaw || '').trim();
@@ -1492,10 +1635,13 @@
                 await loadChannels();
                 scheduleChartsRebuild();
                 alert('Válvula añadida. La gráfica aparecerá cuando el ESP32 envíe datos de esa válvula.');
+                });
             })();
         });
         document.getElementById('btnAddSensor')?.addEventListener('click', () => {
             (async () => {
+                const btn = document.getElementById('btnAddSensor');
+                await withBusy(btn, 'Añadiendo...', async () => {
                 const nameRaw = prompt('Nombre del nuevo sensor (ej: Sensor 2):');
                 if (nameRaw === null) return; // Cancel
                 const name = String(nameRaw || '').trim();
@@ -1526,6 +1672,7 @@
                 await loadChannels();
                 scheduleChartsRebuild();
                 alert('Sensor añadido. La gráfica aparecerá cuando el ESP32 envíe datos de ese sensor.');
+                });
             })();
         });
 
