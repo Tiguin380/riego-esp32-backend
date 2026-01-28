@@ -1154,7 +1154,20 @@ app.post('/api/device/claim', async (req, res) => {
 
     const matchesClaim = dev.claim_token && String(dev.claim_token) === String(claim_token);
     const matchesApi = dev.api_token && String(dev.api_token) === String(claim_token);
-    if (!matchesClaim && !matchesApi) return res.status(401).json({ error: 'Token inválido' });
+    if (!matchesClaim && !matchesApi) {
+      // Si el dispositivo existe pero aún no tiene dueño, permitimos “reclamar” con el token
+      // y lo fijamos como api_token/claim_token (Opción B). Evita bloqueos por provisioning inicial.
+      const owned = await pool.query('SELECT 1 FROM user_devices WHERE device_id = $1 LIMIT 1', [dev.id]);
+      const isOwned = owned.rows.length > 0;
+      if (!isOwned && isValidDeviceToken(claim_token)) {
+        await pool.query(
+          'UPDATE devices SET api_token = $1, claim_token = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [String(claim_token).trim(), dev.id]
+        );
+      } else {
+        return res.status(401).json({ error: 'Token inválido' });
+      }
+    }
 
     await pool.query(
       `INSERT INTO user_devices (user_id, device_id, role)
