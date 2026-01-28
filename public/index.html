@@ -456,7 +456,10 @@
 
                 const current = list.find(d => d.device_code === deviceCode);
                 const lastSeen = current?.last_seen_madrid || (current?.last_seen ? new Date(current.last_seen).toLocaleString('es-ES', { timeZone: TZ, hour12: false }) : '--');
-                meta.textContent = `${current?.name || deviceCode}${current?.location ? ' · ' + current.location : ''} · Último dato: ${lastSeen}`;
+                const lastSeenDate = current?.last_seen ? parseTsToDate(current.last_seen) : null;
+                const ageMin = lastSeenDate ? Math.max(0, Math.round((nowAdjusted().getTime() - lastSeenDate.getTime()) / 60000)) : null;
+                const ageText = ageMin == null ? '' : ` (hace ${ageMin} min)`;
+                meta.textContent = `${current?.name || deviceCode}${current?.location ? ' · ' + current.location : ''} · Último dato: ${lastSeen}${ageText}`;
 
                 select.addEventListener('change', () => {
                     const next = select.value;
@@ -1462,6 +1465,9 @@
                         ? deadMin * 60000
                         : 3 * 60000;
                     const ageMs = sampleDate ? (nowAdjusted().getTime() - sampleDate.getTime()) : Infinity;
+                    const lastSampleLabel = (data && data.created_at_madrid)
+                        ? String(data.created_at_madrid)
+                        : (sampleDate ? sampleDate.toLocaleString('es-ES', { timeZone: TZ, hour12: false }) : '--');
                     deviceOnline = ageMs <= maxAgeMs;
                     setConnectionUI(deviceOnline ? 'online' : 'offline');
                 } catch {
@@ -1471,11 +1477,17 @@
                 // Rendimiento: no forzar rebuild de gráficas en cada tick
                 // (se reconstruyen con throttle por SSE/intervalos)
                 
+                // Mostrar también la hora del último dato para detectar desfases/datos viejos
+                const sampleDateForUi = parseTsToDate(data?.created_at);
+                const lastSampleUi = (data && data.created_at_madrid)
+                    ? String(data.created_at_madrid)
+                    : (sampleDateForUi ? sampleDateForUi.toLocaleString('es-ES', { timeZone: TZ, hour12: false }) : '--');
+
                 if (deviceOnline === false) {
-                    setStatusText(' Offline (datos antiguos) - ' + fmtNowEs.format(nowAdjusted()));
+                    setStatusText(` Offline (datos antiguos) · Último: ${lastSampleUi} · Ahora: ${fmtNowEs.format(nowAdjusted())}`);
                     setStatusClass(false);
                 } else {
-                    setStatusText(' Online - ' + fmtNowEs.format(nowAdjusted()));
+                    setStatusText(` Online · Último: ${lastSampleUi} · Ahora: ${fmtNowEs.format(nowAdjusted())}`);
                     setStatusClass(true);
                 }
             } catch(e) {
@@ -1498,8 +1510,9 @@
                     const item = document.createElement('div');
                     item.className = 'sensor-card';
                     item.style.textAlign = 'left';
+                    const when = a.created_at_madrid || (a.created_at ? new Date(a.created_at).toLocaleString('es-ES', { timeZone: TZ, hour12: false }) : '--');
                     item.innerHTML = `
-                        <div class="sensor-label">${a.kind} · ${new Date(a.created_at).toLocaleString('es-ES', { timeZone: TZ, hour12: false })}</div>
+                        <div class="sensor-label">${a.kind} · ${when}</div>
                         <div style="color:#ddd; font-weight:bold;">${a.message}</div>
                     `;
                     listEl.appendChild(item);

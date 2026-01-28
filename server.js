@@ -1466,11 +1466,17 @@ app.get('/api/sensor/latest/:device_code', async (req, res) => {
     }
 
     const out = { ...result.rows[0] };
-    const createdAt = epochMsToDate(out.created_at_ms);
-    if (createdAt) out.created_at = createdAt.toISOString();
     const now = new Date();
     out.server_now = now.toISOString();
     out.server_now_madrid = fmtEsLabel.format(now);
+
+    const createdAt = epochMsToDate(out.created_at_ms);
+    if (createdAt) {
+      out.created_at = createdAt.toISOString();
+      out.created_at_madrid = fmtEsLabel.format(createdAt);
+      out.age_ms = Math.max(0, now.getTime() - createdAt.getTime());
+      out.age_minutes = Math.round(out.age_ms / 60000);
+    }
     res.json(out);
   } catch (error) {
     console.error(error);
