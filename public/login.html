@@ -84,6 +84,10 @@
       } catch { return '/app'; }
     }
 
+    function isValidEmail(email) {
+      return typeof email === 'string' && email.includes('@') && email.includes('.') && email.length <= 255;
+    }
+
     document.getElementById('btnLogin').addEventListener('click', async () => {
       setMsg('Entrando...');
       const email = (document.getElementById('email').value || '').trim();
@@ -94,9 +98,13 @@
     });
 
     document.getElementById('btnRegister').addEventListener('click', async () => {
-      setMsg('Creando cuenta...');
       const email = (document.getElementById('email').value || '').trim();
       const password = (document.getElementById('password').value || '').trim();
+
+      if (!isValidEmail(email)) return setMsg('Email inválido.', true);
+      if (password.length < 8) return setMsg('La contraseña debe tener al menos 8 caracteres.', true);
+
+      setMsg('Creando cuenta...');
       const { r, j } = await postJson('/api/auth/register', { email, password });
       if (!r.ok) return setMsg(j.error || 'No se pudo crear la cuenta', true);
       location.href = nextUrl();

@@ -659,6 +659,19 @@ const LoginSchema = z.object({
   password: z.string().min(1).max(200)
 });
 
+function friendlyZodAuthError(issues) {
+  const first = Array.isArray(issues) ? issues[0] : null;
+  if (!first) return 'Datos inválidos. Revisa email y contraseña.';
+  const field = Array.isArray(first.path) && first.path.length ? String(first.path[0]) : '';
+
+  if (field === 'email') return 'Email inválido.';
+  if (field === 'password') {
+    if (first.code === 'too_small') return 'La contraseña debe tener al menos 8 caracteres.';
+    return 'Contraseña inválida.';
+  }
+  return 'Datos inválidos. Revisa email y contraseña.';
+}
+
 app.get('/api/auth/me', async (req, res) => {
   if (!req.user?.id) return res.status(401).json({ error: 'No autenticado' });
   res.json({ id: req.user.id, email: req.user.email });
@@ -668,7 +681,7 @@ app.post('/api/auth/register', async (req, res) => {
   try {
     const parsed = RegisterSchema.safeParse(req.body || {});
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Payload inválido', details: parsed.error.issues });
+      return res.status(400).json({ error: friendlyZodAuthError(parsed.error.issues), details: parsed.error.issues });
     }
     const email = String(parsed.data.email).trim().toLowerCase();
     const password_hash = await bcrypt.hash(parsed.data.password, 10);
@@ -696,7 +709,7 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const parsed = LoginSchema.safeParse(req.body || {});
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Payload inválido', details: parsed.error.issues });
+      return res.status(400).json({ error: friendlyZodAuthError(parsed.error.issues), details: parsed.error.issues });
     }
     const email = String(parsed.data.email).trim().toLowerCase();
     const r = await pool.query('SELECT id, email, password_hash FROM users WHERE email = $1', [email]);
