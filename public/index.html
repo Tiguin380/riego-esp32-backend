@@ -76,7 +76,7 @@
 <body>
     <div class="container">
         <h1> Riego Automatico ESP32</h1>
-        <div class="status" style="margin-bottom: 12px;">UI v2026-01-27</div>
+        <div class="status" style="margin-bottom: 12px;">UI v2026-01-28</div>
 
         <div class="section" id="deviceSection" style="padding: 14px 20px;">
             <h2> DISPOSITIVO</h2>
@@ -118,9 +118,9 @@
                     <div class="sensor-unit">dBm</div>
                 </div>
                 <div class="sensor-card">
-                    <div class="sensor-label">Uptime</div>
+                    <div class="sensor-label">Umbral Humedad Baja</div>
                     <div class="sensor-value" id="uptime">--</div>
-                    <div class="sensor-unit">tiempo</div>
+                    <div class="sensor-unit">%</div>
                 </div>
                 <div class="sensor-card">
                     <div class="sensor-label">Reinicios</div>
@@ -403,6 +403,14 @@
             if (title) card.title = title;
         }
 
+        function updateThresholdCard() {
+            const el = document.getElementById('uptime');
+            if (!el) return;
+            const t = Number(config.threshold);
+            el.textContent = Number.isFinite(t) ? String(Math.round(t)) : '--';
+            setMetricStateById('uptime', 'metric-neutral', 'Umbral de humedad baja configurado');
+        }
+
         // --- Persistencia ("datos que va recibiendo") ---
         const STORE_KEY = 'riego_stats_v1';
         function loadStore() {
@@ -675,7 +683,7 @@
         function rangeForMode(mode) {
             const now = new Date();
             // DÍA: usar RAW para que se vea en tiempo real (segundos) y no “a saltos” por minuto.
-            if (mode === 'day') return { from: new Date(Date.now() - 24 * 3600 * 1000), to: now, step: 'raw', bucketMs: null };
+            if (mode === 'day') return { from: null, to: null, step: 'raw', bucketMs: null };
             if (mode === 'month') return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now, step: '1h', bucketMs: 3600000 };
             return { from: new Date(now.getFullYear(), 0, 1), to: now, step: '1h', bucketMs: 3600000 }; // year
         }
@@ -691,7 +699,10 @@
 
         async function rebuildChartsFromServer() {
             const { from, to, step, bucketMs } = rangeForMode(viewMode);
-            const url = `/api/sensor/history/${encodeURIComponent(deviceCode)}?step=${encodeURIComponent(step)}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&limit=20000`;
+            let url = `/api/sensor/history/${encodeURIComponent(deviceCode)}?step=${encodeURIComponent(step)}&limit=20000`;
+            if (from && to) {
+                url = `/api/sensor/history/${encodeURIComponent(deviceCode)}?step=${encodeURIComponent(step)}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&limit=20000`;
+            }
             const res = await fetch(url);
             if (!res.ok) throw new Error('history failed');
             const payload = await res.json();
@@ -706,7 +717,8 @@
 
             if (viewMode === 'day') {
                 document.getElementById('periodLabel').textContent = 'Día';
-                document.getElementById('periodValue').textContent = `${fmtDateEs.format(new Date())} (últimas 24h, tiempo real)`;
+                const rangeTo = parseTsToDate(payload?.range?.to) || new Date();
+                document.getElementById('periodValue').textContent = `${fmtDateEs.format(rangeTo)} (últimas 24h, tiempo real)`;
 
                 // step=raw: rows = { ts, humidity, valve_state, ... }
                 let prevT = null;
@@ -849,6 +861,8 @@
                 colorBuenaEl.value = config.colorB;
                 colorBajaEl.value = config.colorG;
 
+                updateThresholdCard();
+
                 // Campos avanzados
                 document.getElementById('wetV').value = (cfg.wet_v == null ? '' : cfg.wet_v);
                 document.getElementById('dryV').value = (cfg.dry_v == null ? '' : cfg.dry_v);
@@ -867,6 +881,7 @@
         document.getElementById('threshold').addEventListener('input', (e) => {
             config.threshold = parseInt(e.target.value);
             document.getElementById('thresholdValue').textContent = config.threshold + '%';
+            updateThresholdCard();
         });
 
         document.getElementById('colorBuena').addEventListener('change', (e) => {
@@ -956,9 +971,6 @@
                 const rssi = (data.wifi_rssi == null ? null : Number(data.wifi_rssi));
                 document.getElementById('rssi').textContent = (rssi == null || Number.isNaN(rssi) ? '--' : String(Math.trunc(rssi)));
 
-                const up = (data.uptime_s == null ? null : Number(data.uptime_s));
-                document.getElementById('uptime').textContent = formatUptimeSeconds(up);
-
                 const rb = (data.reboot_count == null ? null : Number(data.reboot_count));
                 document.getElementById('reboots').textContent = (rb == null || Number.isNaN(rb) ? '--' : String(Math.trunc(rb)));
 
@@ -986,12 +998,8 @@
                     setMetricStateById('rssi', st);
                 }
 
-                if (up == null || Number.isNaN(up)) {
-                    setMetricStateById('uptime', 'metric-neutral');
-                } else {
-                    const st = up < 60 ? 'metric-bad' : (up < 600 ? 'metric-warn' : 'metric-good');
-                    setMetricStateById('uptime', st);
-                }
+                // Tarjeta "uptime" ahora muestra el umbral configurado
+                updateThresholdCard();
 
                 if (rb == null || Number.isNaN(rb)) {
                     setMetricStateById('reboots', 'metric-neutral');
