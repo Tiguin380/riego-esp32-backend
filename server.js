@@ -81,6 +81,11 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL
 });
 
+// Forzar TZ consistente en la sesión (evita desfases al usar columnas TIMESTAMP sin zona).
+pool.on('connect', (client) => {
+  client.query("SET TIME ZONE 'UTC'").catch(() => {});
+});
+
 // --- Email (SMTP) ---
 function hasSmtpConfigured() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_FROM);
@@ -2411,6 +2416,80 @@ app.get('/api/alerts/:device_code', async (req, res) => {
     });
 
     res.json({ device_code, rows });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Diagnóstico de hora/último dato (útil para detectar “dato viejo” vs “desfase horario”)
+app.get('/api/debug/time/:device_code', async (req, res) => {
+  try {
+    const { device_code } = req.params;
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+
+    // Auth: admin, usuario dueño, o token del dispositivo
+    if (!hasValidAdminKey(req)) {
+      if (REQUIRE_USER_LOGIN && req.user?.id) {
+        const owned = await pool.query(
+          `SELECT 1 FROM user_devices WHERE user_id = $1 AND device_id = $2 LIMIT 1`,
+          [req.user.id, dev.id]
+        );
+        if (owned.rows.length === 0) {
+          // permitir fallback por token
+          const token = getDeviceTokenFromReq(req);
+          if (!token || token !== dev.api_token) return res.status(403).json({ error: 'No tienes acceso a este dispositivo' });
+        }
+      } else if (!REQUIRE_USER_LOGIN) {
+        // modo abierto: permitir
+      } else {
+        const token = getDeviceTokenFromReq(req);
+        if (!token || token !== dev.api_token) return res.status(401).json({ error: 'No autenticado' });
+      }
+    }
+
+    const dbInfo = await pool.query(
+      `SELECT
+         current_setting('TIMEZONE') AS timezone,
+         NOW() AS now_tz,
+         (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint AS now_ms`
+    );
+    const tz = dbInfo.rows[0]?.timezone || null;
+    const dbNowMs = Number(dbInfo.rows[0]?.now_ms || 0);
+
+    const latest = await pool.query(
+      `SELECT
+         sd.created_at AS created_at_raw,
+         (EXTRACT(EPOCH FROM (sd.created_at AT TIME ZONE current_setting('TIMEZONE'))) * 1000)::bigint AS created_at_ms
+       FROM sensor_data sd
+       WHERE sd.device_id = $1
+       ORDER BY sd.created_at DESC
+       LIMIT 1`,
+      [dev.id]
+    );
+
+    const createdAtMs = Number(latest.rows[0]?.created_at_ms || 0);
+    const createdAt = epochMsToDate(createdAtMs);
+    const ageMs = (dbNowMs && createdAtMs) ? Math.max(0, dbNowMs - createdAtMs) : null;
+
+    const serverNow = new Date();
+    res.json({
+      device_code,
+      server_now: serverNow.toISOString(),
+      server_now_madrid: fmtEsLabel.format(serverNow),
+      db: {
+        timezone: tz,
+        now: dbInfo.rows[0]?.now_tz ? new Date(dbInfo.rows[0].now_tz).toISOString() : null,
+        now_ms: dbNowMs || null
+      },
+      latest_sensor: {
+        created_at_raw: latest.rows[0]?.created_at_raw ?? null,
+        created_at: createdAt ? createdAt.toISOString() : null,
+        created_at_madrid: createdAt ? fmtEsLabel.format(createdAt) : null,
+        age_minutes: ageMs == null ? null : Math.round(ageMs / 60000)
+      }
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
