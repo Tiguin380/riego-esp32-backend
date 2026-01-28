@@ -207,6 +207,14 @@ function getJwtFromReq(req) {
   return typeof c === 'string' && c.trim() ? c.trim() : null;
 }
 
+function getBearerJwtFromReq(req) {
+  const h = String(req.get('authorization') || '').trim();
+  if (!h) return null;
+  const m = /^Bearer\s+(.+)$/i.exec(h);
+  const token = m && m[1] ? String(m[1]).trim() : '';
+  return token ? token : null;
+}
+
 app.get('/api/debug/session', (req, res) => {
   const xfProto = String(req.get('x-forwarded-proto') || '').split(',')[0].trim().toLowerCase();
   const xfHost = String(req.get('x-forwarded-host') || '').split(',')[0].trim();
@@ -241,20 +249,42 @@ function signUserJwt(user) {
 }
 
 function authMiddleware(req, _res, next) {
-  const token = getJwtFromReq(req);
-  if (!token) {
-    req.user = null;
-    return next();
+  const cookieToken = getJwtFromReq(req);
+  const bearerToken = getBearerJwtFromReq(req);
+  req.user = null;
+  req.auth = {
+    has_cookie: Boolean(cookieToken),
+    has_bearer: Boolean(bearerToken),
+    source: null,
+    valid: false,
+    error: null
+  };
+
+  const tryVerify = (token, source) => {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      req.user = { id: decoded.sub, email: decoded.email || null };
+      req.auth.source = source;
+      req.auth.valid = true;
+      req.auth.error = null;
+      return true;
+    } catch (e) {
+      req.user = null;
+      req.auth.source = source;
+      req.auth.valid = false;
+      req.auth.error = 'invalid_jwt';
+      return false;
+    }
+  };
+
+  // Prioriza cookie (para navegación normal). Si falla y hay bearer, intenta bearer.
+  if (cookieToken) {
+    if (tryVerify(cookieToken, 'cookie')) return next();
   }
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = {
-      id: decoded.sub,
-      email: decoded.email || null
-    };
-  } catch {
-    req.user = null;
+  if (bearerToken) {
+    if (tryVerify(bearerToken, 'bearer')) return next();
   }
+  if (!cookieToken && !bearerToken) req.auth.error = 'missing';
   return next();
 }
 
@@ -264,7 +294,17 @@ function requireUser(req, res) {
   if (hasValidAdminKey(req)) return true;
   if (!REQUIRE_USER_LOGIN) return true;
   if (req.user && req.user.id) return true;
-  res.status(401).json({ error: 'No autenticado' });
+  res.status(401).json({
+    error: 'No autenticado',
+    auth: {
+      has_cookie: Boolean(req.auth?.has_cookie),
+      has_bearer: Boolean(req.auth?.has_bearer),
+      source: req.auth?.source || null,
+      error: req.auth?.error || null,
+      cookie_samesite: COOKIE_SAMESITE,
+      cookie_secure: Boolean(COOKIE_SECURE || COOKIE_SAMESITE === 'none')
+    }
+  });
   return false;
 }
 
@@ -2410,8 +2450,14 @@ app.get('/app', async (req, res) => {
       );
       const first = r.rows[0]?.device_code;
       if (first) return res.redirect(`/panel/${encodeURIComponent(first)}`);
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
       return res.sendFile(__dirname + '/public/no-devices.html');
     } catch {
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
       return res.sendFile(__dirname + '/public/no-devices.html');
     }
   }

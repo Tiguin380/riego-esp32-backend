@@ -94,7 +94,10 @@
         body: JSON.stringify({ device_code, claim_token })
       });
       const j = await r.json().catch(() => ({}));
-      if (r.status === 401) return location.href = `/login?next=${encodeURIComponent('/app')}`;
+      if (r.status === 401) {
+        const detail = j && j.auth ? ` (auth: ${JSON.stringify(j.auth)})` : '';
+        return setMsg((j && j.error ? j.error : 'No autenticado') + detail + ' — Si acabas de registrarte, recarga la página (Ctrl+F5) y asegúrate de estar en https.', true);
+      }
       if (!r.ok) return setMsg(j.error || 'No se pudo asignar el dispositivo', true);
       location.href = '/app';
     });
