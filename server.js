@@ -451,6 +451,26 @@ async function ensureDeviceProvisionedFromToken(device_code, token) {
 
   const existing = await getDeviceByCode(device_code);
   if (existing) {
+    // Si existe pero tiene otro api_token, normalmente es un error de provisioning inicial.
+    // Permitimos reprovisionar SOLO si el dispositivo aún no está asignado a ningún usuario
+    // y además venía del modo simple (claim_token == api_token) para no romper el flujo admin.
+    if (existing.api_token && String(existing.api_token).trim() && String(existing.api_token) !== t) {
+      try {
+        const owned = await pool.query('SELECT 1 FROM user_devices WHERE device_id = $1 LIMIT 1', [existing.id]);
+        const isOwned = owned.rows.length > 0;
+        const simpleProvision = existing.claim_token && String(existing.claim_token) === String(existing.api_token);
+        if (!isOwned && simpleProvision) {
+          await pool.query(
+            'UPDATE devices SET api_token = $1, claim_token = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [t, existing.id]
+          );
+          return await getDeviceByCode(device_code);
+        }
+      } catch {
+        // si falla el check, no reprovisionamos
+      }
+    }
+
     // En modo Opción B, si no hay claim_token o api_token, los rellenamos con el token del ESP32.
     if (!existing.api_token || !String(existing.api_token).trim() || !existing.claim_token || !String(existing.claim_token).trim()) {
       await pool.query(
