@@ -1,6 +1,11 @@
 esphome:
   name: riegoesp32001
   comment: "Riego automático prueba ESP32"
+  on_boot:
+    priority: 600
+    then:
+      - lambda: |-
+          id(reboot_count) += 1;
 
 globals:
   - id: server_umbral
@@ -14,6 +19,11 @@ globals:
   - id: soil_v_max
     type: float
     initial_value: '0.0'
+
+  - id: reboot_count
+    type: int
+    restore_value: true
+    initial_value: '0'
 
 esp32:   # <- Aquí se define la plataforma correcta
   board: esp32dev
@@ -53,9 +63,21 @@ script:
           request_headers:
             Content-Type: application/json
           body: !lambda |-
-            char json[512];
-            snprintf(json, sizeof(json), 
-              "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"soil_voltage\":%.2f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"valve_state\":\"%s\",\"humidity_low_color\":\"%s\",\"humidity_good_color\":\"%s\"}",
+            char json[768];
+
+            float rssi_f = id(wifi_rssi).state;
+            int rssi_i = (rssi_f == rssi_f) ? (int) lroundf(rssi_f) : 0;
+
+            float up_f = id(uptime_s).state;
+            unsigned int up_i = (up_f == up_f && up_f > 0) ? (unsigned int) up_f : 0;
+
+            float heap_f = id(heap_free).state;
+            unsigned int heap_i = (heap_f == heap_f && heap_f > 0) ? (unsigned int) heap_f : 0;
+
+            const char* ip = id(ip_address).state.empty() ? "" : id(ip_address).state.c_str();
+
+            snprintf(json, sizeof(json),
+              "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"voltage\":%.3f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"valve_state\":\"%s\",\"humidity_low_color\":\"%s\",\"humidity_good_color\":\"%s\",\"wifi_rssi\":%d,\"uptime_s\":%u,\"reboot_count\":%d,\"heap_free\":%u,\"ip\":\"%s\"}",
               0.0,
               id(soil_hum).state,
               id(soil_raw).state,
@@ -63,7 +85,12 @@ script:
               id(humidity_low).state,
               (id(valve_relay).state ? "ON" : "OFF"),
               id(color_critical).state.c_str(),
-              id(color_low).state.c_str()
+              id(color_low).state.c_str(),
+              rssi_i,
+              up_i,
+              id(reboot_count),
+              heap_i,
+              ip
             );
             return std::string(json);
 
@@ -393,6 +420,25 @@ display:
 
 # -------- Sensores --------
 sensor:
+  - platform: wifi_signal
+    name: "WiFi RSSI"
+    id: wifi_rssi
+    update_interval: 30s
+
+  - platform: uptime
+    name: "Uptime"
+    id: uptime_s
+    update_interval: 30s
+
+  - platform: template
+    name: "Heap Free"
+    id: heap_free
+    unit_of_measurement: "B"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: |-
+      return (float) esp_get_free_heap_size();
+
   - platform: adc
     pin: GPIO34
     name: "Soil Voltage"
@@ -464,6 +510,12 @@ sensor:
     update_interval: 5s
     lambda: |-
       return id(server_umbral);
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "IP Address"
+      id: ip_address
 
 
 
