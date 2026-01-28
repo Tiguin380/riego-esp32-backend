@@ -297,6 +297,21 @@
         let humChannelId = null;
         let valveChannelId = null;
 
+        let lastRebootsBase = null;
+
+        function rebootsOffsetKey(code) { return `rebootsOffset:${code}`; }
+        function getLocalRebootsOffset(code) {
+            try {
+                const v = localStorage.getItem(rebootsOffsetKey(code));
+                if (v == null || v === '') return 0;
+                const n = Number(v);
+                return Number.isFinite(n) && n >= 0 ? n : 0;
+            } catch { return 0; }
+        }
+        function setLocalRebootsOffset(code, offset) {
+            try { localStorage.setItem(rebootsOffsetKey(code), String(Math.max(0, Number(offset) || 0))); } catch {}
+        }
+
         let chartsRebuildTimer = null;
         function scheduleChartsRebuild() {
             if (chartsRebuildTimer) return;
@@ -1130,7 +1145,10 @@
 
                 const rbRaw = (data.reboot_count_display != null ? data.reboot_count_display : data.reboot_count);
                 const rb = (rbRaw == null ? null : Number(rbRaw));
-                document.getElementById('reboots').textContent = (rb == null || Number.isNaN(rb) ? '--' : String(Math.trunc(rb)));
+                lastRebootsBase = (rb == null || Number.isNaN(rb)) ? null : Math.trunc(rb);
+                const localOffset = getLocalRebootsOffset(deviceCode);
+                const rbShown = (lastRebootsBase == null) ? null : Math.max(0, lastRebootsBase - localOffset);
+                document.getElementById('reboots').textContent = (rbShown == null ? '--' : String(Math.trunc(rbShown)));
 
                 // Colores por umbral (valores típicos; además se respetan min/max de alertas si están configurados)
                 const alertVminRaw = document.getElementById('alertVmin')?.value;
@@ -1159,10 +1177,10 @@
                 // Tarjeta "uptime" ahora muestra el umbral configurado
                 updateThresholdCard();
 
-                if (rb == null || Number.isNaN(rb)) {
+                if (rbShown == null) {
                     setMetricStateById('reboots', 'metric-neutral');
                 } else {
-                    const st = rb === 0 ? 'metric-good' : (rb <= 2 ? 'metric-warn' : 'metric-bad');
+                    const st = rbShown === 0 ? 'metric-good' : (rbShown <= 2 ? 'metric-warn' : 'metric-bad');
                     setMetricStateById('reboots', st);
                 }
 
@@ -1382,24 +1400,20 @@
         document.getElementById('btnRenameValve')?.addEventListener('click', () => renameChannel(valveChannelId, 'la válvula'));
 
         document.getElementById('resetRebootsBtn')?.addEventListener('click', async () => {
-            if (!confirm('¿Poner el contador de reinicios a 0 (solo en el panel)?')) return;
-            const headers = { 'Content-Type': 'application/json' };
-            const saved = (getSavedToken(deviceCode) || '').trim();
-            if (saved) headers['X-Device-Token'] = saved;
-            let r = await fetch(`/api/device/reboots/reset/${encodeURIComponent(deviceCode)}`, { method: 'POST', headers });
-            if ((r.status === 401 || r.status === 403) && !saved) {
-                const t = (prompt('Este dispositivo requiere token para resetear reinicios. Pégalo aquí:') || '').trim();
-                if (t) {
-                    saveToken(deviceCode, t);
-                    r = await fetch(`/api/device/reboots/reset/${encodeURIComponent(deviceCode)}`, { method: 'POST', headers: { ...headers, 'X-Device-Token': t } });
-                }
+            if (!confirm('¿Poner el contador de reinicios a 0 (solo en el panel web)?')) return;
+            if (lastRebootsBase == null) {
+                alert('Aún no hay datos de reinicios para este dispositivo');
+                return;
             }
-            if (r.ok) {
-                actualizarSensores();
-                alert('OK: reinicios reseteados a 0 en el panel');
-            } else {
-                alert('No se pudo resetear');
-            }
+
+            // Reset local (sin token): guardamos un offset por dispositivo
+            setLocalRebootsOffset(deviceCode, lastRebootsBase);
+            actualizarSensores();
+
+            // Best-effort: si el backend admite reset sin auth, lo intentamos, pero nunca pedimos token.
+            try {
+                await fetch(`/api/device/reboots/reset/${encodeURIComponent(deviceCode)}`, { method: 'POST' });
+            } catch {}
         });
     </script>
 </body>
