@@ -432,7 +432,10 @@
                 // Si no existe canal 1, mostramos todos para no dejar la UI vacía.
                 let hums = allHums.filter(c => Number(c.channel_index) === 1);
                 if (hums.length === 0) hums = allHums;
-                const valves = channels.filter(c => c.kind === 'valve');
+                const allValves = channels.filter(c => c.kind === 'valve');
+                // Por defecto mostramos solo la válvula 1 (instalación típica con una válvula).
+                let valves = allValves.filter(c => Number(c.channel_index) === 1);
+                if (valves.length === 0) valves = allValves;
 
                 const humSel = document.getElementById('humChannelSelect');
                 const valveSel = document.getElementById('valveChannelSelect');
@@ -1341,9 +1344,14 @@
 
         // --- UI acciones rápidas ---
         document.getElementById('btnAddDevice')?.addEventListener('click', async () => {
-            const device_code = (prompt('Código del dispositivo (ej: RIEGO_002):') || '').trim();
+            const deviceRaw = prompt('Código del dispositivo (ej: RIEGO_002):');
+            if (deviceRaw === null) return; // Cancel
+            const device_code = String(deviceRaw || '').trim();
             if (!device_code) return;
-            const claim_token = (prompt('claim_token (código de emparejamiento):') || '').trim();
+
+            const tokenRaw = prompt('claim_token (código de emparejamiento):');
+            if (tokenRaw === null) return; // Cancel
+            const claim_token = String(tokenRaw || '').trim();
             if (!claim_token) {
                 alert('Debes pegar el claim_token (token del ESP32) para emparejar.');
                 return;
@@ -1386,7 +1394,9 @@
 
         document.getElementById('btnAddValve')?.addEventListener('click', () => {
             (async () => {
-                const name = (prompt('Nombre de la nueva válvula (ej: Válvula 2):') || '').trim();
+                const nameRaw = prompt('Nombre de la nueva válvula (ej: Válvula 2):');
+                if (nameRaw === null) return; // Cancel
+                const name = String(nameRaw || '').trim();
                 const headers = { 'Content-Type': 'application/json' };
                 const saved = (getSavedToken(deviceCode) || '').trim();
                 if (saved) headers['X-Device-Token'] = saved;
@@ -1396,7 +1406,9 @@
                     body: JSON.stringify({ kind: 'valve', name: name || undefined })
                 });
                 if ((r.status === 401 || r.status === 403) && !saved) {
-                    const t = (prompt('Este dispositivo requiere token para añadir válvulas. Pégalo aquí:') || '').trim();
+                    const tRaw = prompt('Este dispositivo requiere token para añadir válvulas. Pégalo aquí:');
+                    if (tRaw === null) return; // Cancel
+                    const t = String(tRaw || '').trim();
                     if (t) {
                         saveToken(deviceCode, t);
                         r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}`, {
@@ -1414,7 +1426,9 @@
         });
         document.getElementById('btnAddSensor')?.addEventListener('click', () => {
             (async () => {
-                const name = (prompt('Nombre del nuevo sensor (ej: Sensor 2):') || '').trim();
+                const nameRaw = prompt('Nombre del nuevo sensor (ej: Sensor 2):');
+                if (nameRaw === null) return; // Cancel
+                const name = String(nameRaw || '').trim();
                 const headers = { 'Content-Type': 'application/json' };
                 const saved = (getSavedToken(deviceCode) || '').trim();
                 if (saved) headers['X-Device-Token'] = saved;
@@ -1424,7 +1438,9 @@
                     body: JSON.stringify({ kind: 'soil_sensor', name: name || undefined })
                 });
                 if ((r.status === 401 || r.status === 403) && !saved) {
-                    const t = (prompt('Este dispositivo requiere token para añadir sensores. Pégalo aquí:') || '').trim();
+                    const tRaw = prompt('Este dispositivo requiere token para añadir sensores. Pégalo aquí:');
+                    if (tRaw === null) return; // Cancel
+                    const t = String(tRaw || '').trim();
                     if (t) {
                         saveToken(deviceCode, t);
                         r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}`, {
