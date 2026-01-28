@@ -156,8 +156,17 @@ function getMadridParts(date) {
   };
 }
 
+function epochMsToDate(ms) {
+  const n = Number(ms);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const d = new Date(n);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function enrichRowWithMadridTs(row) {
-  const d = row && row.ts ? new Date(row.ts) : null;
+  const d = row && row.ts_ms != null
+    ? epochMsToDate(row.ts_ms)
+    : (row && row.ts ? new Date(row.ts) : null);
   if (!d || Number.isNaN(d.getTime())) return row;
   const p = getMadridParts(d);
   return {
@@ -1433,7 +1442,7 @@ app.get('/api/sensor/latest/:device_code', async (req, res) => {
     const result = await pool.query(
       `SELECT
          sd.*,
-         (sd.created_at AT TIME ZONE current_setting('TIMEZONE')) AS created_at_utc,
+         (EXTRACT(EPOCH FROM (sd.created_at AT TIME ZONE current_setting('TIMEZONE'))) * 1000) AS created_at_ms,
          COALESCE(dc.reboot_count_offset, 0) AS reboot_count_offset,
          GREATEST(0, COALESCE(sd.reboot_count, 0) - COALESCE(dc.reboot_count_offset, 0))::int AS reboot_count_display
        FROM sensor_data sd
@@ -1450,10 +1459,8 @@ app.get('/api/sensor/latest/:device_code', async (req, res) => {
     }
 
     const out = { ...result.rows[0] };
-    if (out.created_at_utc) {
-      out.created_at = out.created_at_utc;
-      delete out.created_at_utc;
-    }
+    const createdAt = epochMsToDate(out.created_at_ms);
+    if (createdAt) out.created_at = createdAt.toISOString();
     const now = new Date();
     out.server_now = now.toISOString();
     out.server_now_madrid = fmtEsLabel.format(now);
@@ -1512,7 +1519,7 @@ app.get('/api/devices', async (req, res) => {
            d.name,
            d.location,
            d.created_at,
-           MAX(sd.created_at AT TIME ZONE current_setting('TIMEZONE')) AS last_seen
+           (MAX(EXTRACT(EPOCH FROM (sd.created_at AT TIME ZONE current_setting('TIMEZONE')))) * 1000) AS last_seen_ms
          FROM user_devices ud
          JOIN devices d ON d.id = ud.device_id
          LEFT JOIN sensor_data sd ON sd.device_id = d.id
@@ -1524,12 +1531,9 @@ app.get('/api/devices', async (req, res) => {
       return res.json(
         result.rows.map((r) => {
           const out = { ...r };
-          if (r.last_seen) {
-            const d = new Date(r.last_seen);
-            out.last_seen_madrid = fmtEsLabel.format(d);
-          } else {
-            out.last_seen_madrid = null;
-          }
+          const d = epochMsToDate(r.last_seen_ms);
+          out.last_seen = d ? d.toISOString() : null;
+          out.last_seen_madrid = d ? fmtEsLabel.format(d) : null;
           return out;
         })
       );
@@ -1541,7 +1545,7 @@ app.get('/api/devices', async (req, res) => {
          d.name,
          d.location,
          d.created_at,
-         MAX(sd.created_at AT TIME ZONE current_setting('TIMEZONE')) AS last_seen
+         (MAX(EXTRACT(EPOCH FROM (sd.created_at AT TIME ZONE current_setting('TIMEZONE')))) * 1000) AS last_seen_ms
        FROM devices d
        LEFT JOIN sensor_data sd ON sd.device_id = d.id
        GROUP BY d.id
@@ -1550,12 +1554,9 @@ app.get('/api/devices', async (req, res) => {
     res.json(
       result.rows.map((r) => {
         const out = { ...r };
-        if (r.last_seen) {
-          const d = new Date(r.last_seen);
-          out.last_seen_madrid = fmtEsLabel.format(d);
-        } else {
-          out.last_seen_madrid = null;
-        }
+        const d = epochMsToDate(r.last_seen_ms);
+        out.last_seen = d ? d.toISOString() : null;
+        out.last_seen_madrid = d ? fmtEsLabel.format(d) : null;
         return out;
       })
     );
@@ -2389,7 +2390,8 @@ app.get('/api/alerts/:device_code', async (req, res) => {
     if (!dev) return;
 
     const r = await pool.query(
-      `SELECT ae.kind, ae.message, (ae.created_at AT TIME ZONE current_setting('TIMEZONE')) AS created_at
+      `SELECT ae.kind, ae.message,
+              (EXTRACT(EPOCH FROM (ae.created_at AT TIME ZONE current_setting('TIMEZONE'))) * 1000) AS created_at_ms
        FROM alert_events ae
        JOIN devices d ON ae.device_id = d.id
        WHERE d.device_code = $1
@@ -2398,7 +2400,17 @@ app.get('/api/alerts/:device_code', async (req, res) => {
       [device_code, limit]
     );
 
-    res.json({ device_code, rows: r.rows });
+    const rows = r.rows.map((row) => {
+      const d = epochMsToDate(row.created_at_ms);
+      return {
+        kind: row.kind,
+        message: row.message,
+        created_at: d ? d.toISOString() : null,
+        created_at_madrid: d ? fmtEsLabel.format(d) : null
+      };
+    });
+
+    res.json({ device_code, rows });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
