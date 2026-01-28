@@ -40,10 +40,10 @@
     <h1>No tienes dispositivos aún</h1>
     <p id="noAccess" style="display:none;">No tienes acceso a ese dispositivo. Puedes <b>asignar (claim)</b> uno a tu cuenta.</p>
     <p>Para ver tu panel, primero tienes que <b>asignar (claim)</b> un ESP32 a tu cuenta.</p>
-    <p class="muted">Necesitas el <b>device_code</b> y el <b>claim_token</b> (código de emparejamiento).</p>
+    <p class="muted">Necesitas el <b>device_code</b> y el <b>token del dispositivo</b> (es el mismo que usa el ESP32 como <b>X-Device-Token</b> / <b>device_token</b>).</p>
 
     <input id="deviceCode" placeholder="device_code (ej: RIEGO_001)" autocomplete="off" />
-    <input id="claimToken" placeholder="claim_token" autocomplete="off" />
+    <input id="claimToken" placeholder="token del dispositivo (device_token)" autocomplete="off" />
 
     <div class="row">
       <button id="claim">Asignar dispositivo</button>
@@ -51,7 +51,7 @@
     </div>
     <div class="msg" id="msg"></div>
 
-    <p class="muted">Si no tienes el claim_token, pídeselo al administrador (endpoint admin) para obtenerlo.</p>
+    <p class="muted">Ese token está en tu ESPHome (campo <b>device_token</b>) y se envía al backend como <b>X-Device-Token</b>.</p>
   </div>
 
   <script>

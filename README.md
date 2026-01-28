@@ -45,8 +45,14 @@ Variables necesarias (Railway → Variables):
 **Flujo recomendado para comercializar**
 
 1. El usuario entra en `/login` y crea cuenta.
-2. Para añadir un ESP32 a su cuenta, usa “+ Añadir dispositivo” y pega el `claim_token`.
+2. Para añadir un ESP32 a su cuenta, usa “+ Añadir dispositivo” y pega el token del dispositivo.
 3. A partir de ahí, `/api/devices` y el panel sólo muestran los dispositivos del usuario.
+
+**Emparejamiento (Opción B - simple, sin admin)**
+
+- El backend acepta que el token del dispositivo sea el mismo que usa el ESP32 en la cabecera `X-Device-Token` (en ESPHome: `device_token`).
+- Ese mismo token se puede usar como “código de emparejamiento” en la pantalla “Añadir dispositivo”.
+- Además, el backend auto-provisiona el dispositivo cuando el ESP32 envía datos por primera vez (crea el registro en `devices` si no existe).
 
 **Provisioning (admin)**
 

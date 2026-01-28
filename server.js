@@ -269,7 +269,9 @@ async function requireDeviceForConfig(req, res, device_code) {
     return dev;
   }
 
-  const dev = await getDeviceByCode(device_code);
+  // Opción B: si el ESP32 llama primero a /api/config, permitimos auto-provisionar con X-Device-Token
+  const token = getDeviceTokenFromReq(req);
+  const dev = (await getDeviceByCode(device_code)) || (await ensureDeviceProvisionedFromToken(device_code, token));
   if (!dev) {
     res.status(404).json({ error: 'Dispositivo no encontrado' });
     return null;
@@ -291,8 +293,7 @@ async function requireDeviceForConfig(req, res, device_code) {
     return dev;
   }
 
-  // Si NO hay usuario, permitimos al ESP32 leer config con X-Device-Token (aunque REQUIRE_DEVICE_TOKEN sea false)
-  const token = getDeviceTokenFromReq(req);
+  // Si NO hay usuario, permitimos al ESP32 leer config con X-Device-Token
   if (dev.api_token && token && token === dev.api_token) return dev;
 
   res.status(401).json({ error: 'No autenticado' });
@@ -337,10 +338,47 @@ async function ensureDeviceTokenForExistingRows() {
 }
 
 async function ensureClaimTokenForExistingRows() {
-  const missing = await pool.query(`SELECT id FROM devices WHERE claim_token IS NULL OR claim_token = ''`);
+  // Opción B: si falta claim_token, por defecto lo igualamos a api_token (token del ESP32).
+  // Si no hay api_token, generamos uno.
+  const missing = await pool.query(`SELECT id, api_token FROM devices WHERE claim_token IS NULL OR claim_token = ''`);
   for (const row of missing.rows) {
-    await pool.query('UPDATE devices SET claim_token = $1 WHERE id = $2', [uuidv4(), row.id]);
+    const tok = row.api_token && String(row.api_token).trim() ? String(row.api_token).trim() : uuidv4();
+    await pool.query('UPDATE devices SET api_token = COALESCE(NULLIF(api_token, \'\'), $1), claim_token = $1 WHERE id = $2', [tok, row.id]);
   }
+}
+
+function isValidDeviceToken(token) {
+  const t = String(token || '').trim();
+  if (!t) return false;
+  if (t === 'CAMBIA_ESTE_TOKEN') return false;
+  // Evitar tokens triviales
+  return t.length >= 12 && t.length <= 2000;
+}
+
+async function ensureDeviceProvisionedFromToken(device_code, token) {
+  const t = String(token || '').trim();
+  if (!isValidDeviceToken(t)) return null;
+
+  const existing = await getDeviceByCode(device_code);
+  if (existing) {
+    // En modo Opción B, si no hay claim_token o api_token, los rellenamos con el token del ESP32.
+    if (!existing.api_token || !String(existing.api_token).trim() || !existing.claim_token || !String(existing.claim_token).trim()) {
+      await pool.query(
+        'UPDATE devices SET api_token = COALESCE(NULLIF(api_token, \'\'), $1), claim_token = COALESCE(NULLIF(claim_token, \'\'), $1), updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [t, existing.id]
+      );
+      return await getDeviceByCode(device_code);
+    }
+    return existing;
+  }
+
+  const id = uuidv4();
+  await pool.query(
+    'INSERT INTO devices (id, device_code, name, location, api_token, claim_token) VALUES ($1, $2, $3, $4, $5, $6)',
+    [id, device_code, 'ESP32 Riego', null, t, t]
+  );
+  await ensureDefaultChannels(id);
+  return await getDeviceByCode(device_code);
 }
 
 async function ensureDefaultChannels(device_id) {
@@ -1003,9 +1041,10 @@ app.post('/api/device/claim', async (req, res) => {
     const claim_token = parsed.data.claim_token;
     const dev = await getDeviceByCode(device_code);
     if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
-    if (!dev.claim_token || dev.claim_token !== claim_token) {
-      return res.status(401).json({ error: 'claim_token inválido' });
-    }
+
+    const matchesClaim = dev.claim_token && String(dev.claim_token) === String(claim_token);
+    const matchesApi = dev.api_token && String(dev.api_token) === String(claim_token);
+    if (!matchesClaim && !matchesApi) return res.status(401).json({ error: 'Token inválido' });
 
     await pool.query(
       `INSERT INTO user_devices (user_id, device_id, role)
@@ -1014,8 +1053,11 @@ app.post('/api/device/claim', async (req, res) => {
       [req.user.id, dev.id]
     );
 
-    // Rotar claim_token para que no se pueda reutilizar
-    await pool.query('UPDATE devices SET claim_token = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [uuidv4(), dev.id]);
+    // Si claim_token es distinto del api_token (modo admin), rotamos.
+    // En Opción B (claim_token == api_token del ESP32) NO rotamos para permitir re-claim tras reset.
+    if (dev.claim_token && dev.api_token && String(dev.claim_token) !== String(dev.api_token)) {
+      await pool.query('UPDATE devices SET claim_token = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [uuidv4(), dev.id]);
+    }
 
     res.json({ status: 'OK', device_code });
   } catch (e) {
@@ -1068,7 +1110,7 @@ app.post('/api/device/register', async (req, res) => {
     if (device.rows.length === 0) {
       const id = uuidv4();
       const api_token = uuidv4();
-      const claim_token = uuidv4();
+      const claim_token = api_token;
       await pool.query(
         'INSERT INTO devices (id, device_code, name, location, api_token, claim_token) VALUES ($1, $2, $3, $4, $5, $6)',
         [id, device_code, name || 'ESP32 Riego', location || null, api_token, claim_token]
@@ -1098,6 +1140,9 @@ app.post('/api/device/register', async (req, res) => {
 // Enviar datos del sensor (desde ESP32)
 app.post('/api/sensor/data', async (req, res) => {
   try {
+    // Opción B: el ESP32 autentica con X-Device-Token (y ese mismo token sirve como claim)
+    const deviceToken = getDeviceTokenFromReq(req);
+
     const parsed = SensorDataSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: 'Payload inválido', details: parsed.error.issues });
@@ -1121,16 +1166,17 @@ app.post('/api/sensor/data', async (req, res) => {
       ip,
       channels
     } = parsed.data;
-    const device = await pool.query(
-      'SELECT id FROM devices WHERE device_code = $1',
-      [device_code]
-    );
-
-    if (device.rows.length === 0) {
-      return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    if (!isValidDeviceToken(deviceToken)) {
+      return res.status(401).json({ error: 'Falta o es inválido X-Device-Token' });
     }
 
-    const device_id = device.rows[0].id;
+    const devRow = await ensureDeviceProvisionedFromToken(device_code, deviceToken);
+    if (!devRow) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    if (devRow.api_token && String(devRow.api_token) !== String(deviceToken)) {
+      return res.status(401).json({ error: 'Token inválido (X-Device-Token)' });
+    }
+
+    const device_id = devRow.id;
 
     // Asegurar canales base
     await ensureDefaultChannels(device_id);
