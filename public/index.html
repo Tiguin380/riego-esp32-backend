@@ -82,6 +82,12 @@
         .mini-btn:hover { background: rgba(255,255,255,0.12); }
         .mini-btn.danger { border-color: rgba(255,77,77,0.35); color: #ffb3b3; }
         .mini-btn.primary { border-color: rgba(76,175,80,0.35); color: #b8f5c1; }
+
+        .conn { display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: #c9d1d9; opacity: 0.95; }
+        .dot { width: 10px; height: 10px; border-radius: 999px; background: #6b7280; box-shadow: 0 0 0 2px rgba(255,255,255,0.08) inset; }
+        .dot.online { background: #22c55e; }
+        .dot.offline { background: #ef4444; }
+        .dot.unknown { background: #6b7280; }
     </style>
 </head>
 <body>
@@ -104,6 +110,7 @@
             </div>
             <div style="display:flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
                 <button class="mini-btn primary" id="btnAddDevice" type="button">+ Añadir dispositivo</button>
+                <button class="mini-btn danger" id="btnDeleteDevice" type="button" title="Quitar este dispositivo de tu cuenta">Eliminar dispositivo</button>
                 <button class="mini-btn" id="btnAddValve" type="button">+ Añadir válvula</button>
                 <button class="mini-btn" id="btnAddSensor" type="button">+ Añadir sensor humedad</button>
             </div>
@@ -162,6 +169,10 @@
                 <div>
                     <div class="sensor-label">FECHA / HORA (ESPAÑA)</div>
                     <div style="font-size: 18px; font-weight: bold; color: #ddd;" id="nowEs">--</div>
+                    <div class="conn" title="Conexión del dispositivo">
+                        <span class="dot unknown" id="connDot"></span>
+                        <span id="connText">--</span>
+                    </div>
                 </div>
                 <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap; justify-content:flex-end;">
                     <button class="btn btn-azul" id="btnDia" type="button">DÍA</button>
@@ -176,6 +187,7 @@
                     <select id="humChannelSelect" title="Seleccionar sensor de humedad"></select>
                     <div style="margin-top: 8px; display:flex; gap: 8px;">
                         <button class="mini-btn" id="btnRenameHum" type="button">Renombrar</button>
+                        <button class="mini-btn danger" id="btnDeleteHum" type="button" title="Eliminar sensores añadidos">Eliminar</button>
                     </div>
                 </div>
                 <div style="min-width: 220px; flex: 1;">
@@ -183,6 +195,7 @@
                     <select id="valveChannelSelect" title="Seleccionar válvula"></select>
                     <div style="margin-top: 8px; display:flex; gap: 8px;">
                         <button class="mini-btn" id="btnRenameValve" type="button">Renombrar</button>
+                        <button class="mini-btn danger" id="btnDeleteValve" type="button" title="Eliminar válvulas añadidas">Eliminar</button>
                     </div>
                 </div>
             </div>
@@ -491,6 +504,30 @@
             year: 'numeric', month: '2-digit', day: '2-digit'
         });
 
+        // Si el reloj del PC está mal, ajustamos con la hora del servidor.
+        let serverClockOffsetMs = null; // server_now_ms - Date.now()
+        function nowAdjusted() {
+            return new Date(Date.now() + (serverClockOffsetMs == null ? 0 : serverClockOffsetMs));
+        }
+
+        const connDot = document.getElementById('connDot');
+        const connText = document.getElementById('connText');
+        function setConnectionUI(status) {
+            const s = (status || 'unknown').toString().toLowerCase();
+            if (!connDot || !connText) return;
+            connDot.classList.remove('online', 'offline', 'unknown');
+            if (s === 'online') {
+                connDot.classList.add('online');
+                connText.textContent = 'Online';
+            } else if (s === 'offline') {
+                connDot.classList.add('offline');
+                connText.textContent = 'Offline';
+            } else {
+                connDot.classList.add('unknown');
+                connText.textContent = '--';
+            }
+        }
+
         function getMadridParts(date) {
             const parts = new Intl.DateTimeFormat('sv-SE', {
                 timeZone: TZ,
@@ -731,7 +768,7 @@
 
         function rebuildChartsFromStore(storeOpt) {
             const store = storeOpt || loadStore();
-            const now = new Date();
+            const now = nowAdjusted();
             const p = getMadridParts(now);
 
             let labels = [];
@@ -838,7 +875,7 @@
         }
 
         function rangeForMode(mode) {
-            const now = new Date();
+            const now = nowAdjusted();
             // DÍA: usar RAW para que se vea en tiempo real (segundos) y no “a saltos” por minuto.
             if (mode === 'day') return { from: null, to: null, step: 'raw', bucketMs: null };
             if (mode === 'month') return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now, step: '1h', bucketMs: 3600000 };
@@ -858,7 +895,7 @@
             // Para rendimiento: limitar puntos en DÍA (raw) y usar canales
             if (!humChannelId && !valveChannelId) throw new Error('no channels');
 
-            const now = new Date();
+            const now = nowAdjusted();
             let step;
             let limit;
             if (viewMode === 'day') { step = 'raw'; limit = 1500; }
@@ -948,7 +985,7 @@
                 valveChart.data.datasets[0].label = 'Válvula (0/1)';
 
             } else if (viewMode === 'month') {
-                const pNow = getMadridParts(new Date());
+                const pNow = getMadridParts(nowAdjusted());
                 document.getElementById('periodLabel').textContent = 'Mes';
                 document.getElementById('periodValue').textContent = `${pNow.mo}/${pNow.y}`;
 
@@ -988,7 +1025,7 @@
                 valveChart.data.datasets[0].label = 'Válvula (horas ON/día)';
 
             } else {
-                const pNow = getMadridParts(new Date());
+                const pNow = getMadridParts(nowAdjusted());
                 document.getElementById('periodLabel').textContent = 'Año';
                 document.getElementById('periodValue').textContent = `${pNow.y}`;
 
@@ -1043,7 +1080,7 @@
         }
 
         function tickClock() {
-            document.getElementById('nowEs').textContent = fmtNowEs.format(new Date());
+            document.getElementById('nowEs').textContent = fmtNowEs.format(nowAdjusted());
         }
         tickClock();
         setInterval(tickClock, 1000);
@@ -1171,6 +1208,14 @@
             try {
                 const res = await fetch(`/api/sensor/latest/${encodeURIComponent(deviceCode)}`);
                 const data = await res.json();
+
+                // Ajuste de reloj (si el backend lo manda)
+                if (data && data.server_now) {
+                    const serverMs = Date.parse(data.server_now);
+                    if (Number.isFinite(serverMs)) {
+                        serverClockOffsetMs = serverMs - Date.now();
+                    }
+                }
                 
                 document.getElementById('temp').textContent = parseFloat(data.temperature).toFixed(1);
                 document.getElementById('humidity').textContent = parseFloat(data.humidity).toFixed(1);
@@ -1261,20 +1306,43 @@
 
                 // --- Mantener el histórico local como fallback y refrescar gráficas del servidor ---
                 try {
-                    const now = new Date();
-                    const nowMs = now.getTime();
+                    const sampleDate = parseTsToDate(data.created_at) || nowAdjusted();
+                    const nowMs = sampleDate.getTime();
                     const hum = Number.parseFloat(data.humidity);
                     const valveVal = isOn ? 1 : (isOff ? 0 : null);
                     const store = loadStore();
                     ingestSample(store, nowMs, hum, valveVal === 1);
                 } catch {}
 
+                // Estado online/offline del dispositivo basado en “último dato”
+                let deviceOnline = null;
+                try {
+                    const sampleDate = parseTsToDate(data.created_at);
+                    const deadRaw = document.getElementById('alertDeadMin')?.value;
+                    const deadMin = Number(deadRaw);
+                    const maxAgeMs = (deadRaw != null && deadRaw.trim() !== '' && Number.isFinite(deadMin) && deadMin > 0)
+                        ? deadMin * 60000
+                        : 3 * 60000;
+                    const ageMs = sampleDate ? (nowAdjusted().getTime() - sampleDate.getTime()) : Infinity;
+                    deviceOnline = ageMs <= maxAgeMs;
+                    setConnectionUI(deviceOnline ? 'online' : 'offline');
+                } catch {
+                    setConnectionUI('unknown');
+                }
+
                 // Rendimiento: no forzar rebuild de gráficas en cada tick
                 // (se reconstruyen con throttle por SSE/intervalos)
                 
-                document.getElementById('status').textContent = ' Online - ' + fmtNowEs.format(new Date());
-                document.getElementById('status').className = 'status online';
+                const stEl = document.getElementById('status');
+                if (deviceOnline === false) {
+                    stEl.textContent = ' Offline (datos antiguos) - ' + fmtNowEs.format(nowAdjusted());
+                    stEl.className = 'status offline';
+                } else {
+                    stEl.textContent = ' Online - ' + fmtNowEs.format(nowAdjusted());
+                    stEl.className = 'status online';
+                }
             } catch(e) {
+                setConnectionUI('offline');
                 document.getElementById('status').textContent = ' Sin conexion';
                 document.getElementById('status').className = 'status offline';
             }
@@ -1403,6 +1471,7 @@
                 let r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}`, {
                     method: 'POST',
                     headers,
+                    credentials: 'include',
                     body: JSON.stringify({ kind: 'valve', name: name || undefined })
                 });
                 if ((r.status === 401 || r.status === 403) && !saved) {
@@ -1414,6 +1483,7 @@
                         r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'X-Device-Token': t },
+                            credentials: 'include',
                             body: JSON.stringify({ kind: 'valve', name: name || undefined })
                         });
                     }
@@ -1435,6 +1505,7 @@
                 let r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}`, {
                     method: 'POST',
                     headers,
+                    credentials: 'include',
                     body: JSON.stringify({ kind: 'soil_sensor', name: name || undefined })
                 });
                 if ((r.status === 401 || r.status === 403) && !saved) {
@@ -1446,6 +1517,7 @@
                         r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'X-Device-Token': t },
+                            credentials: 'include',
                             body: JSON.stringify({ kind: 'soil_sensor', name: name || undefined })
                         });
                     }
@@ -1483,6 +1555,77 @@
 
         document.getElementById('btnRenameHum')?.addEventListener('click', () => renameChannel(humChannelId, 'el sensor'));
         document.getElementById('btnRenameValve')?.addEventListener('click', () => renameChannel(valveChannelId, 'la válvula'));
+
+        async function deleteChannelByIndex(kind, kindLabel) {
+            const candidates = (channels || [])
+                .filter(c => c && c.kind === kind)
+                .filter(c => Number(c.channel_index) !== 1);
+
+            if (!candidates.length) {
+                alert(`No hay ${kindLabel}s añadidos para eliminar.`);
+                return;
+            }
+
+            const indices = candidates.map(c => Number(c.channel_index)).filter(n => Number.isFinite(n)).sort((a,b) => a-b);
+            const raw = prompt(`Índice de ${kindLabel} a eliminar (disponibles: ${indices.join(', ')}):`);
+            if (raw === null) return; // Cancel
+            const idx = Number(String(raw).trim());
+            if (!Number.isInteger(idx)) return;
+
+            const target = candidates.find(c => Number(c.channel_index) === idx);
+            if (!target) {
+                alert('Índice no encontrado.');
+                return;
+            }
+
+            if (!confirm(`¿Eliminar ${kindLabel} ${idx}? Se borrará también su histórico.`)) return;
+
+            const doDelete = async (headers) => {
+                return fetch(`/api/channels/${encodeURIComponent(deviceCode)}/${encodeURIComponent(target.id)}`,
+                    { method: 'DELETE', headers });
+            };
+
+            const baseHeaders = { 'Content-Type': 'application/json' };
+            const saved = (getSavedToken(deviceCode) || '').trim();
+            const headers1 = { ...baseHeaders };
+            if (saved) headers1['X-Device-Token'] = saved;
+
+            let r = await doDelete(headers1);
+
+            if ((r.status === 401 || r.status === 403) && !saved) {
+                const tRaw = prompt('Este dispositivo requiere token para eliminar. Pégalo aquí:');
+                if (tRaw === null) return; // Cancel
+                const t = String(tRaw || '').trim();
+                if (t) {
+                    saveToken(deviceCode, t);
+                    r = await doDelete({ ...baseHeaders, 'X-Device-Token': t });
+                }
+            }
+
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) {
+                alert(j.error || `No se pudo eliminar ${kindLabel}`);
+                return;
+            }
+
+            await loadChannels();
+            scheduleChartsRebuild();
+            alert(`${kindLabel} eliminado.`);
+        }
+
+        document.getElementById('btnDeleteHum')?.addEventListener('click', () => deleteChannelByIndex('soil_sensor', 'sensor'));
+        document.getElementById('btnDeleteValve')?.addEventListener('click', () => deleteChannelByIndex('valve', 'válvula'));
+
+        document.getElementById('btnDeleteDevice')?.addEventListener('click', async () => {
+            if (!confirm(`¿Quitar el dispositivo ${deviceCode} de tu cuenta?`)) return;
+            const r = await fetch(`/api/devices/${encodeURIComponent(deviceCode)}`, { method: 'DELETE', credentials: 'include' });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) {
+                alert(j.error || 'No se pudo eliminar el dispositivo');
+                return;
+            }
+            location.href = '/app';
+        });
 
         document.getElementById('resetRebootsBtn')?.addEventListener('click', async () => {
             if (!confirm('¿Poner el contador de reinicios a 0 (solo en el panel web)?')) return;

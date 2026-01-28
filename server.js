@@ -1448,7 +1448,11 @@ app.get('/api/sensor/latest/:device_code', async (req, res) => {
       return res.status(404).json({ error: 'No hay datos' });
     }
 
-    res.json(result.rows[0]);
+    const out = { ...result.rows[0] };
+    const now = new Date();
+    out.server_now = now.toISOString();
+    out.server_now_madrid = fmtEsLabel.format(now);
+    res.json(out);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message });
@@ -1641,6 +1645,57 @@ app.patch('/api/channels/:device_code/:channel_id', async (req, res) => {
       [finalName.slice(0, 80), channel_id]
     );
     res.json({ status: 'OK', device_code, channel_id, name: finalName.slice(0, 80) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/channels/:device_code/:channel_id', async (req, res) => {
+  try {
+    const { device_code, channel_id } = req.params;
+
+    const dev = await requireUserDevice(req, res, device_code);
+    if (!dev) return;
+
+    const ok = await enforceDeviceTokenIfRequired(req, res, device_code);
+    if (!ok) return;
+
+    const ch = await pool.query(
+      `SELECT id, kind, channel_index
+       FROM device_channels
+       WHERE id = $1 AND device_id = $2`,
+      [channel_id, dev.id]
+    );
+    if (ch.rows.length === 0) return res.status(404).json({ error: 'Canal no encontrado' });
+
+    const { kind, channel_index } = ch.rows[0];
+    // Seguridad UX: no permitir borrar los canales base (1) para no romper el panel/ESP32.
+    if ((kind === 'soil_sensor' || kind === 'valve') && Number(channel_index) === 1) {
+      return res.status(400).json({ error: 'No se puede eliminar el canal 1 por defecto' });
+    }
+
+    await pool.query('DELETE FROM channel_samples WHERE channel_id = $1', [channel_id]);
+    await pool.query('DELETE FROM device_channels WHERE id = $1 AND device_id = $2', [channel_id, dev.id]);
+    res.json({ status: 'OK', device_code, channel_id });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/devices/:device_code', async (req, res) => {
+  try {
+    const { device_code } = req.params;
+    if (!requireUser(req, res)) return;
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+
+    await pool.query(
+      'DELETE FROM user_devices WHERE user_id = $1 AND device_id = $2',
+      [req.user.id, dev.id]
+    );
+    res.json({ status: 'OK', device_code });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
