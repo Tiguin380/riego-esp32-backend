@@ -327,6 +327,8 @@
             return m ? decodeURIComponent(m[1]) : DEFAULT_DEVICE;
         })();
 
+        let hasDevices = true;
+
         function tokenStorageKey(code) { return `deviceToken:${code}`; }
         function getSavedToken(code) {
             try { return localStorage.getItem(tokenStorageKey(code)) || ''; } catch { return ''; }
@@ -356,9 +358,22 @@
             const select = document.getElementById('deviceSelect');
             const meta = document.getElementById('deviceMeta');
             try {
-                const r = await fetch('/api/devices');
+                const r = await fetch('/api/devices', { credentials: 'include' });
+                if (r.status === 401) {
+                    const next = encodeURIComponent(location.pathname + location.search + location.hash);
+                    window.location.href = `/login?next=${next}`;
+                    return false;
+                }
                 const list = await r.json();
-                if (!Array.isArray(list) || list.length === 0) throw new Error('Sin lista');
+
+                if (!Array.isArray(list)) throw new Error('Sin lista');
+                if (list.length === 0) {
+                    hasDevices = false;
+                    select.innerHTML = '';
+                    meta.textContent = 'No hay dispositivos asignados a tu cuenta. Pulsa “+ Añadir dispositivo”.';
+                    return true;
+                }
+                hasDevices = true;
 
                 select.innerHTML = '';
                 for (const d of list) {
@@ -386,7 +401,10 @@
 
             } catch {
                 if (section) section.style.display = 'none';
+                return false;
             }
+
+            return true;
         }
 
         async function loadChannels() {
@@ -1284,34 +1302,62 @@
             }
         }
 
-        loadDevices();
-        cargarConfig();
-        updateThresholdCard();
-        loadChannels().then(() => scheduleChartsRebuild());
-        rebuildCharts();
-        cargarAlertas();
-        actualizarSensores();
-        startSSE();
-        setInterval(actualizarSensores, 15000);
-        setInterval(scheduleChartsRebuild, 60000);
-        setInterval(cargarAlertas, 60000);
+        async function boot() {
+            const ok = await loadDevices();
+            if (!ok) return;
+            if (!hasDevices) return;
+
+            await cargarConfig();
+            updateThresholdCard();
+            await loadChannels();
+            scheduleChartsRebuild();
+            rebuildCharts();
+            cargarAlertas();
+            actualizarSensores();
+            startSSE();
+            setInterval(actualizarSensores, 15000);
+            setInterval(scheduleChartsRebuild, 60000);
+            setInterval(cargarAlertas, 60000);
+        }
+
+        boot();
 
         // --- UI acciones rápidas ---
         document.getElementById('btnAddDevice')?.addEventListener('click', async () => {
             const device_code = (prompt('Código del dispositivo (ej: RIEGO_002):') || '').trim();
             if (!device_code) return;
-            const name = (prompt('Nombre (opcional):') || 'ESP32 Riego').trim();
-            const location = (prompt('Ubicación (opcional):') || '').trim();
+            const claim_token = (prompt('claim_token (código de emparejamiento):') || '').trim();
             try {
-                const r = await fetch('/api/device/register', {
+                // Preferido (multi-tenant): claim
+                let r = await fetch('/api/device/claim', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ device_code, name, location: location || null })
+                    body: JSON.stringify({ device_code, claim_token })
                 });
-                if (!r.ok) throw new Error('register failed');
+
+                if (r.status === 401) {
+                    const next = encodeURIComponent(location.pathname + location.search + location.hash);
+                    window.location.href = `/login?next=${next}`;
+                    return;
+                }
+
+                // Fallback legacy: register (sin cuentas)
+                if (r.status === 404 || r.status === 405) {
+                    const name = (prompt('Nombre (opcional):') || 'ESP32 Riego').trim();
+                    const locationTxt = (prompt('Ubicación (opcional):') || '').trim();
+                    r = await fetch('/api/device/register', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ device_code, name, location: locationTxt || null })
+                    });
+                }
+
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(j.error || 'No se pudo añadir');
+
                 window.location.href = `/panel/${encodeURIComponent(device_code)}`;
             } catch {
-                alert('No se pudo añadir el dispositivo');
+                alert('No se pudo añadir el dispositivo (verifica el claim_token)');
             }
         });
 

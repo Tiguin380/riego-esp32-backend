@@ -1,5 +1,10 @@
+substitutions:
+  device_name: riegoesp32001
+  device_code: RIEGO_001
+  device_token: "CAMBIA_ESTE_TOKEN"  # pega aquí el api_token del dispositivo
+
 esphome:
-  name: riegoesp32001
+  name: ${device_name}
   comment: "Riego automático prueba ESP32"
   on_boot:
     priority: 600
@@ -78,6 +83,7 @@ script:
           url: "https://riego-esp32-backend-production.up.railway.app/api/sensor/data"
           request_headers:
             Content-Type: application/json
+            X-Device-Token: ${device_token}
           body: !lambda |-
             char json[1400];
 
@@ -110,7 +116,7 @@ script:
             channels += "]";
 
             snprintf(json, sizeof(json),
-              "{\"device_code\":\"RIEGO_001\",\"temperature\":%.2f,\"humidity\":%.2f,\"voltage\":%.3f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"valve_state\":\"%s\",\"humidity_low_color\":\"%s\",\"humidity_good_color\":\"%s\",\"wifi_rssi\":%d,\"uptime_s\":%u,\"reboot_count\":%d,\"heap_free\":%u,\"ip\":\"%s\",\"channels\":%s}",
+              "{\"device_code\":\"${device_code}\",\"temperature\":%.2f,\"humidity\":%.2f,\"voltage\":%.3f,\"rain_level\":%.2f,\"humidity_low_threshold\":%.2f,\"valve_state\":\"%s\",\"humidity_low_color\":\"%s\",\"humidity_good_color\":\"%s\",\"wifi_rssi\":%d,\"uptime_s\":%u,\"reboot_count\":%d,\"heap_free\":%u,\"ip\":\"%s\",\"channels\":%s}",
               0.0,
               id(soil_hum).state,
               id(soil_raw).state,
@@ -131,7 +137,9 @@ script:
   - id: fetch_config_from_server
     then:
       - http_request.get:
-          url: "https://riego-esp32-backend-production.up.railway.app/api/config/RIEGO_001"
+          url: "https://riego-esp32-backend-production.up.railway.app/api/config/${device_code}"
+          request_headers:
+            X-Device-Token: ${device_token}
           capture_response: true
           max_response_buffer_size: 1024
           on_response:

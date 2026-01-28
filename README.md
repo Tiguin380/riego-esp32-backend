@@ -17,6 +17,28 @@ Sistema de control de riego automático con ESP32 y dashboard web en la nube.
 ### Autoinicialización de la base de datos ✅
 El servidor ejecuta automáticamente la creación de tablas al arrancar si existe `DATABASE_URL` o si `AUTO_DB_INIT=true`. Esto evita tener que llamar manualmente a `/api/init` después del despliegue.
 
+### Cuentas de usuario (multi-tenant) 🔐
+
+El backend soporta registro/login y separación de dispositivos por usuario.
+
+- `REQUIRE_USER_LOGIN`:
+  - Por defecto es `true` cuando existe `DATABASE_URL` (producción).
+  - Si lo pones a `false`, el panel vuelve a modo "abierto" como antes.
+- `JWT_SECRET` (recomendado): secreto para firmar la cookie de sesión.
+- `ADMIN_KEY` (recomendado): habilita endpoints admin (rotar tokens, obtener claim_token, etc.).
+
+**Flujo recomendado para comercializar**
+
+1. El usuario entra en `/login` y crea cuenta.
+2. Para añadir un ESP32 a su cuenta, usa “+ Añadir dispositivo” y pega el `claim_token`.
+3. A partir de ahí, `/api/devices` y el panel sólo muestran los dispositivos del usuario.
+
+**Provisioning (admin)**
+
+- Obtener/rotar `claim_token`:
+  - `GET /api/admin/device-claim/:device_code` (header `x-admin-key: <ADMIN_KEY>`)
+  - `GET /api/admin/device-claim/:device_code?rotate=true` (rota el token)
+
 ### Scripts útiles
 - `scripts/railway-deploy-and-init.sh`: despliega usando Railway CLI (usa `RAILWAY_API_KEY` y opcionalmente `RAILWAY_PROJECT_ID`).
 
@@ -43,7 +65,10 @@ script:
 
 ## Uso del Dashboard
 
-Una vez desplegado el backend y configurado el ESP32, accede al dashboard en: `https://<tu-app>.railway.app/panel/RIEGO_001`
+Una vez desplegado el backend y configurado el ESP32:
+
+- En modo multi-usuario: entra en `https://<tu-app>.railway.app/` (redirige a `/login` si no hay sesión).
+- En modo abierto (si `REQUIRE_USER_LOGIN=false`): `https://<tu-app>.railway.app/panel/RIEGO_001`
 
 ### Sensores en Tiempo Real
 - **Gráfica en tiempo real**: Muestra Temperatura, Humedad y Lluvia en una gráfica que se actualiza cada 5 segundos con las últimas 20 lecturas.

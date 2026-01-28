@@ -5,12 +5,35 @@ require('dotenv').config();
 const { v4: uuidv4 } = require('uuid');
 const rateLimit = require('express-rate-limit');
 const { z } = require('zod');
+const cookieParser = require('cookie-parser');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 // Railway/Proxies: necesario para que rate-limit y req.ip funcionen bien
 app.set('trust proxy', 1);
-app.use(cors());
+
+function envBool(name, defaultValue) {
+  const raw = process.env[name];
+  if (raw == null || raw === '') return defaultValue;
+  return String(raw).toLowerCase() === 'true';
+}
+
+const REQUIRE_USER_LOGIN = envBool('REQUIRE_USER_LOGIN', Boolean(process.env.DATABASE_URL));
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || 'dev-insecure-jwt-secret';
+const JWT_COOKIE_NAME = process.env.JWT_COOKIE_NAME || 'sid';
+const COOKIE_SECURE = envBool('COOKIE_SECURE', process.env.NODE_ENV === 'production');
+const COOKIE_MAX_AGE_MS = Math.max(1, Number(process.env.COOKIE_MAX_AGE_MS || 1000 * 60 * 60 * 24 * 14));
+
+// CORS: mismo origen normalmente. Si lo sirves desde otro dominio, activa credenciales.
+app.use(
+  cors({
+    origin: true,
+    credentials: true
+  })
+);
 app.use(express.json());
+app.use(cookieParser());
 
 // Rate limit básico para endurecer API
 app.use(
@@ -96,6 +119,147 @@ function getDeviceTokenFromReq(req) {
 
 const REQUIRE_DEVICE_TOKEN = String(process.env.REQUIRE_DEVICE_TOKEN || 'false').toLowerCase() === 'true';
 
+function setAuthCookie(res, token) {
+  res.cookie(JWT_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: COOKIE_SECURE,
+    sameSite: 'lax',
+    maxAge: COOKIE_MAX_AGE_MS,
+    path: '/'
+  });
+}
+
+function clearAuthCookie(res) {
+  res.clearCookie(JWT_COOKIE_NAME, {
+    httpOnly: true,
+    secure: COOKIE_SECURE,
+    sameSite: 'lax',
+    path: '/'
+  });
+}
+
+function getJwtFromReq(req) {
+  const c = req.cookies?.[JWT_COOKIE_NAME];
+  return typeof c === 'string' && c.trim() ? c.trim() : null;
+}
+
+function signUserJwt(user) {
+  return jwt.sign(
+    { sub: user.id, email: user.email },
+    JWT_SECRET,
+    { expiresIn: Math.floor(COOKIE_MAX_AGE_MS / 1000) }
+  );
+}
+
+function authMiddleware(req, _res, next) {
+  const token = getJwtFromReq(req);
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = {
+      id: decoded.sub,
+      email: decoded.email || null
+    };
+  } catch {
+    req.user = null;
+  }
+  return next();
+}
+
+app.use(authMiddleware);
+
+function requireUser(req, res) {
+  if (hasValidAdminKey(req)) return true;
+  if (!REQUIRE_USER_LOGIN) return true;
+  if (req.user && req.user.id) return true;
+  res.status(401).json({ error: 'No autenticado' });
+  return false;
+}
+
+async function requireUserDevice(req, res, device_code) {
+  if (hasValidAdminKey(req)) {
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) {
+      res.status(404).json({ error: 'Dispositivo no encontrado' });
+      return null;
+    }
+    return dev;
+  }
+
+  if (!REQUIRE_USER_LOGIN) {
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) {
+      res.status(404).json({ error: 'Dispositivo no encontrado' });
+      return null;
+    }
+    return dev;
+  }
+
+  if (!req.user?.id) {
+    res.status(401).json({ error: 'No autenticado' });
+    return null;
+  }
+
+  const dev = await getDeviceByCode(device_code);
+  if (!dev) {
+    res.status(404).json({ error: 'Dispositivo no encontrado' });
+    return null;
+  }
+
+  const owned = await pool.query(
+    `SELECT 1 FROM user_devices WHERE user_id = $1 AND device_id = $2 LIMIT 1`,
+    [req.user.id, dev.id]
+  );
+  if (owned.rows.length === 0) {
+    res.status(403).json({ error: 'No tienes acceso a este dispositivo' });
+    return null;
+  }
+  return dev;
+}
+
+async function requireDeviceForConfig(req, res, device_code) {
+  if (hasValidAdminKey(req)) {
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) {
+      res.status(404).json({ error: 'Dispositivo no encontrado' });
+      return null;
+    }
+    return dev;
+  }
+
+  const dev = await getDeviceByCode(device_code);
+  if (!dev) {
+    res.status(404).json({ error: 'Dispositivo no encontrado' });
+    return null;
+  }
+
+  // Si el panel está en modo abierto, no exigimos nada
+  if (!REQUIRE_USER_LOGIN) return dev;
+
+  // Si hay usuario logueado, exige ownership
+  if (req.user?.id) {
+    const owned = await pool.query(
+      `SELECT 1 FROM user_devices WHERE user_id = $1 AND device_id = $2 LIMIT 1`,
+      [req.user.id, dev.id]
+    );
+    if (owned.rows.length === 0) {
+      res.status(403).json({ error: 'No tienes acceso a este dispositivo' });
+      return null;
+    }
+    return dev;
+  }
+
+  // Si NO hay usuario, permitimos al ESP32 leer config con X-Device-Token (aunque REQUIRE_DEVICE_TOKEN sea false)
+  const token = getDeviceTokenFromReq(req);
+  if (dev.api_token && token && token === dev.api_token) return dev;
+
+  res.status(401).json({ error: 'No autenticado' });
+  return null;
+}
+
 function hasValidAdminKey(req) {
   const adminKey = process.env.ADMIN_KEY;
   if (!adminKey) return false;
@@ -127,10 +291,16 @@ async function getDeviceByCode(device_code) {
 }
 
 async function ensureDeviceTokenForExistingRows() {
-  if (!REQUIRE_DEVICE_TOKEN) return;
   const missing = await pool.query(`SELECT id FROM devices WHERE api_token IS NULL OR api_token = ''`);
   for (const row of missing.rows) {
     await pool.query('UPDATE devices SET api_token = $1 WHERE id = $2', [uuidv4(), row.id]);
+  }
+}
+
+async function ensureClaimTokenForExistingRows() {
+  const missing = await pool.query(`SELECT id FROM devices WHERE claim_token IS NULL OR claim_token = ''`);
+  for (const row of missing.rows) {
+    await pool.query('UPDATE devices SET claim_token = $1 WHERE id = $2', [uuidv4(), row.id]);
   }
 }
 
@@ -310,10 +480,32 @@ async function initDB() {
         name VARCHAR(100) NOT NULL,
         location VARCHAR(120),
         api_token VARCHAR(80),
+        claim_token VARCHAR(80),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_devices (
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
+        role VARCHAR(20) DEFAULT 'owner',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, device_id)
+      )
+    `);
+
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS ux_user_devices_device ON user_devices(device_id)`);
 
     // Crear tabla de sensores
     await pool.query(`
@@ -413,6 +605,7 @@ async function initDB() {
 
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS location VARCHAR(120)`);
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS api_token VARCHAR(80)`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS claim_token VARCHAR(80)`);
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
 
     await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS voltage DECIMAL(6,3)`);
@@ -437,6 +630,7 @@ async function initDB() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_alert_events_device_time ON alert_events(device_id, created_at DESC)`);
 
     await ensureDeviceTokenForExistingRows();
+    await ensureClaimTokenForExistingRows();
 
     // Canales por defecto para dispositivos existentes
     try {
@@ -453,6 +647,120 @@ async function initDB() {
     console.error('Error initializing DB on startup:', error.message);
   }
 }
+
+// --- Auth (registro/login) ---
+const RegisterSchema = z.object({
+  email: z.string().email().max(255),
+  password: z.string().min(8).max(200)
+});
+
+const LoginSchema = z.object({
+  email: z.string().email().max(255),
+  password: z.string().min(1).max(200)
+});
+
+app.get('/api/auth/me', async (req, res) => {
+  if (!req.user?.id) return res.status(401).json({ error: 'No autenticado' });
+  res.json({ id: req.user.id, email: req.user.email });
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const parsed = RegisterSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Payload inválido', details: parsed.error.issues });
+    }
+    const email = String(parsed.data.email).trim().toLowerCase();
+    const password_hash = await bcrypt.hash(parsed.data.password, 10);
+    const id = uuidv4();
+
+    await pool.query(
+      `INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3)`
+      ,
+      [id, email, password_hash]
+    );
+
+    const token = signUserJwt({ id, email });
+    setAuthCookie(res, token);
+    res.json({ status: 'OK', user: { id, email } });
+  } catch (e) {
+    if (/duplicate key value|unique constraint/i.test(String(e.message))) {
+      return res.status(409).json({ error: 'Email ya registrado' });
+    }
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const parsed = LoginSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Payload inválido', details: parsed.error.issues });
+    }
+    const email = String(parsed.data.email).trim().toLowerCase();
+    const r = await pool.query('SELECT id, email, password_hash FROM users WHERE email = $1', [email]);
+    const user = r.rows[0];
+    if (!user) return res.status(401).json({ error: 'Credenciales inválidas' });
+    const ok = await bcrypt.compare(parsed.data.password, user.password_hash);
+    if (!ok) return res.status(401).json({ error: 'Credenciales inválidas' });
+
+    const token = signUserJwt({ id: user.id, email: user.email });
+    setAuthCookie(res, token);
+    res.json({ status: 'OK', user: { id: user.id, email: user.email } });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/auth/logout', async (_req, res) => {
+  clearAuthCookie(res);
+  res.json({ status: 'OK' });
+});
+
+// Claim de dispositivo (asignar un ESP32 a un usuario)
+const ClaimSchema = z.object({
+  device_code: z.string().min(1).max(50),
+  claim_token: z.string().min(1).max(120)
+});
+
+app.post('/api/device/claim', async (req, res) => {
+  try {
+    if (!requireUser(req, res)) return;
+
+    const parsed = ClaimSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Payload inválido', details: parsed.error.issues });
+    }
+
+    const device_code = parsed.data.device_code;
+    const claim_token = parsed.data.claim_token;
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    if (!dev.claim_token || dev.claim_token !== claim_token) {
+      return res.status(401).json({ error: 'claim_token inválido' });
+    }
+
+    await pool.query(
+      `INSERT INTO user_devices (user_id, device_id, role)
+       VALUES ($1, $2, 'owner')
+       ON CONFLICT (user_id, device_id) DO NOTHING`,
+      [req.user.id, dev.id]
+    );
+
+    // Rotar claim_token para que no se pueda reutilizar
+    await pool.query('UPDATE devices SET claim_token = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [uuidv4(), dev.id]);
+
+    res.json({ status: 'OK', device_code });
+  } catch (e) {
+    if (/ux_user_devices_device/i.test(String(e.message))) {
+      return res.status(409).json({ error: 'Este dispositivo ya está asignado a otro usuario' });
+    }
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // Llamar a initDB si hay DATABASE_URL (deployment) o si la variable AUTO_DB_INIT está activa
 if (process.env.DATABASE_URL || process.env.AUTO_DB_INIT === 'true') {
@@ -494,16 +802,28 @@ app.post('/api/device/register', async (req, res) => {
 
     if (device.rows.length === 0) {
       const id = uuidv4();
-      const api_token = REQUIRE_DEVICE_TOKEN ? uuidv4() : null;
+      const api_token = uuidv4();
+      const claim_token = uuidv4();
       await pool.query(
-        'INSERT INTO devices (id, device_code, name, location, api_token) VALUES ($1, $2, $3, $4, $5)',
-        [id, device_code, name || 'ESP32 Riego', location || null, api_token]
+        'INSERT INTO devices (id, device_code, name, location, api_token, claim_token) VALUES ($1, $2, $3, $4, $5, $6)',
+        [id, device_code, name || 'ESP32 Riego', location || null, api_token, claim_token]
       );
       await ensureDefaultChannels(id);
       device = await pool.query('SELECT * FROM devices WHERE id = $1', [id]);
+    } else {
+      // Asegurar claim_token en instalaciones antiguas
+      const existing = device.rows[0];
+      if (!existing.claim_token) {
+        await pool.query('UPDATE devices SET claim_token = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [uuidv4(), existing.id]);
+        device = await pool.query('SELECT * FROM devices WHERE id = $1', [existing.id]);
+      }
     }
 
-    res.json(device.rows[0]);
+    // Nunca exponer claim_token públicamente
+    const out = { ...device.rows[0] };
+    delete out.claim_token;
+    delete out.api_token;
+    res.json(out);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message });
@@ -673,6 +993,9 @@ app.get('/api/sensor/latest/:device_code', async (req, res) => {
   try {
     const { device_code } = req.params;
 
+    const dev = await requireUserDevice(req, res, device_code);
+    if (!dev) return;
+
     const result = await pool.query(
       `SELECT
          sd.*,
@@ -702,8 +1025,8 @@ app.get('/api/sensor/latest/:device_code', async (req, res) => {
 app.post('/api/device/reboots/reset/:device_code', async (req, res) => {
   try {
     const { device_code } = req.params;
-    const dev = await getDeviceByCode(device_code);
-    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    const dev = await requireUserDevice(req, res, device_code);
+    if (!dev) return;
 
     const ok = await enforceDeviceTokenIfRequired(req, res, device_code);
     if (!ok) return;
@@ -738,6 +1061,37 @@ app.post('/api/device/reboots/reset/:device_code', async (req, res) => {
 // --- Dispositivos (multi-dispositivo) ---
 app.get('/api/devices', async (req, res) => {
   try {
+    if (REQUIRE_USER_LOGIN && !hasValidAdminKey(req)) {
+      if (!req.user?.id) return res.status(401).json({ error: 'No autenticado' });
+      const result = await pool.query(
+        `SELECT
+           d.device_code,
+           d.name,
+           d.location,
+           d.created_at,
+           MAX(sd.created_at) AS last_seen
+         FROM user_devices ud
+         JOIN devices d ON d.id = ud.device_id
+         LEFT JOIN sensor_data sd ON sd.device_id = d.id
+         WHERE ud.user_id = $1
+         GROUP BY d.id
+         ORDER BY d.created_at ASC`,
+        [req.user.id]
+      );
+      return res.json(
+        result.rows.map((r) => {
+          const out = { ...r };
+          if (r.last_seen) {
+            const d = new Date(r.last_seen);
+            out.last_seen_madrid = fmtEsLabel.format(d);
+          } else {
+            out.last_seen_madrid = null;
+          }
+          return out;
+        })
+      );
+    }
+
     const result = await pool.query(
       `SELECT
          d.device_code,
@@ -772,8 +1126,8 @@ app.get('/api/devices', async (req, res) => {
 app.get('/api/channels/:device_code', async (req, res) => {
   try {
     const { device_code } = req.params;
-    const dev = await getDeviceByCode(device_code);
-    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    const dev = await requireUserDevice(req, res, device_code);
+    if (!dev) return;
     await ensureDefaultChannels(dev.id);
 
     const r = await pool.query(
@@ -795,8 +1149,8 @@ app.post('/api/channels/:device_code', async (req, res) => {
     const { device_code } = req.params;
     const { kind, name } = req.body || {};
 
-    const dev = await getDeviceByCode(device_code);
-    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    const dev = await requireUserDevice(req, res, device_code);
+    if (!dev) return;
 
     const ok = await enforceDeviceTokenIfRequired(req, res, device_code);
     if (!ok) return;
@@ -833,8 +1187,8 @@ app.patch('/api/channels/:device_code/:channel_id', async (req, res) => {
     const { device_code, channel_id } = req.params;
     const { name } = req.body || {};
 
-    const dev = await getDeviceByCode(device_code);
-    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    const dev = await requireUserDevice(req, res, device_code);
+    if (!dev) return;
 
     const ok = await enforceDeviceTokenIfRequired(req, res, device_code);
     if (!ok) return;
@@ -868,8 +1222,8 @@ app.get('/api/channel/history/:device_code/:channel_id', async (req, res) => {
     const to = parseDateParam(req.query.to) || new Date();
     const limit = Math.min(Number(req.query.limit || 5000), 20000);
 
-    const dev = await getDeviceByCode(device_code);
-    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    const dev = await requireUserDevice(req, res, device_code);
+    if (!dev) return;
 
     const ch = await pool.query(
       `SELECT id, kind, channel_index, name FROM device_channels WHERE id = $1 AND device_id = $2`,
@@ -934,8 +1288,8 @@ app.post('/api/devices/:device_code', async (req, res) => {
     const { device_code } = req.params;
     const { name, location } = req.body || {};
 
-    const dev = await getDeviceByCode(device_code);
-    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    const dev = await requireUserDevice(req, res, device_code);
+    if (!dev) return;
 
     const ok = await enforceDeviceTokenIfRequired(req, res, device_code);
     if (!ok) return;
@@ -982,6 +1336,8 @@ app.get('/api/admin/device-token/:device_code', async (req, res) => {
 // --- SSE: tiempo real (sin polling) ---
 app.get('/api/sse/:device_code', async (req, res) => {
   const { device_code } = req.params;
+  const dev = await requireUserDevice(req, res, device_code);
+  if (!dev) return;
   res.status(200);
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -1056,9 +1412,9 @@ app.get('/api/stats/:device_code', async (req, res) => {
     const { device_code } = req.params;
     const period = String(req.query.period || 'day');
 
-    const device = await pool.query('SELECT id FROM devices WHERE device_code = $1', [device_code]);
-    if (device.rows.length === 0) return res.status(404).json({ error: 'Dispositivo no encontrado' });
-    const device_id = device.rows[0].id;
+    const dev = await requireUserDevice(req, res, device_code);
+    if (!dev) return;
+    const device_id = dev.id;
 
     let bucket;
     let fromExpr;
@@ -1133,6 +1489,9 @@ app.get('/api/stats/:device_code', async (req, res) => {
 app.get('/api/sensor/stats/:device_code', async (req, res) => {
   try {
     const { device_code } = req.params;
+
+    const dev = await requireUserDevice(req, res, device_code);
+    if (!dev) return;
     const result = await pool.query(
       `SELECT 
         COUNT(*) as total_readings,
@@ -1174,9 +1533,9 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
     const to = parseDateParam(req.query.to) || new Date();
     const limit = Math.min(Number(req.query.limit || 5000), 20000);
 
-    const device = await pool.query('SELECT id FROM devices WHERE device_code = $1', [device_code]);
-    if (device.rows.length === 0) return res.status(404).json({ error: 'Dispositivo no encontrado' });
-    const device_id = device.rows[0].id;
+    const dev = await requireUserDevice(req, res, device_code);
+    if (!dev) return;
+    const device_id = dev.id;
 
     if (step === 'raw') {
       const result = await pool.query(
@@ -1246,9 +1605,9 @@ app.get('/api/sensor/export/:device_code', async (req, res) => {
     const to = parseDateParam(req.query.to) || new Date();
     const limit = Math.min(Number(req.query.limit || 20000), 50000);
 
-    const device = await pool.query('SELECT id FROM devices WHERE device_code = $1', [device_code]);
-    if (device.rows.length === 0) return res.status(404).json({ error: 'Dispositivo no encontrado' });
-    const device_id = device.rows[0].id;
+    const dev = await requireUserDevice(req, res, device_code);
+    if (!dev) return;
+    const device_id = dev.id;
 
     const q = await pool.query(
       `SELECT created_at AS ts, temperature, humidity, valve_state, voltage, wifi_rssi, uptime_s, reboot_count
@@ -1444,6 +1803,11 @@ app.get('/api/config/:device_code', async (req, res) => {
     });
   }
 
+  if (REQUIRE_USER_LOGIN && !hasValidAdminKey(req)) {
+    const dev = await requireDeviceForConfig(req, res, device_code);
+    if (!dev) return;
+  }
+
   try {
     const result = await pool.query(
       `SELECT dc.* FROM device_config dc
@@ -1525,6 +1889,9 @@ app.get('/api/alerts/:device_code', async (req, res) => {
     const { device_code } = req.params;
     const limit = Math.min(Number(req.query.limit || 20), 200);
 
+    const dev = await requireUserDevice(req, res, device_code);
+    if (!dev) return;
+
     const r = await pool.query(
       `SELECT ae.kind, ae.message, ae.created_at
        FROM alert_events ae
@@ -1546,6 +1913,9 @@ app.get('/api/alerts/:device_code', async (req, res) => {
 app.post('/api/config/:device_code', async (req, res) => {
   try {
     const { device_code } = req.params;
+
+    const devOwned = await requireUserDevice(req, res, device_code);
+    if (!devOwned) return;
 
     const parsed = DeviceConfigSchema.safeParse(req.body || {});
     if (!parsed.success) {
@@ -1657,16 +2027,98 @@ app.post('/api/config/:device_code', async (req, res) => {
 
 // Redirigir raíz al panel del dispositivo
 app.get('/', (req, res) => {
+  if (REQUIRE_USER_LOGIN && !hasValidAdminKey(req)) {
+    if (!req.user?.id) return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl || '/')}`);
+    return res.redirect('/app');
+  }
   res.redirect('/panel/RIEGO_001');
+});
+
+app.get('/app', async (req, res) => {
+  if (REQUIRE_USER_LOGIN && !hasValidAdminKey(req)) {
+    if (!req.user?.id) return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl || '/app')}`);
+    try {
+      const r = await pool.query(
+        `SELECT d.device_code
+         FROM user_devices ud
+         JOIN devices d ON d.id = ud.device_id
+         WHERE ud.user_id = $1
+         ORDER BY d.created_at ASC
+         LIMIT 1`,
+        [req.user.id]
+      );
+      const first = r.rows[0]?.device_code;
+      if (first) return res.redirect(`/panel/${encodeURIComponent(first)}`);
+      return res.sendFile(__dirname + '/public/no-devices.html');
+    } catch {
+      return res.sendFile(__dirname + '/public/no-devices.html');
+    }
+  }
+  res.redirect('/panel/RIEGO_001');
+});
+
+app.get('/login', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.sendFile(__dirname + '/public/login.html');
 });
 
 // Servir dashboard
 app.get('/panel/:device_code', (req, res) => {
+  const { device_code } = req.params;
+  if (REQUIRE_USER_LOGIN && !hasValidAdminKey(req)) {
+    if (!req.user?.id) return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl || `/panel/${device_code}`)}`);
+    // validar ownership antes de servir el panel
+    pool
+      .query(
+        `SELECT 1
+         FROM user_devices ud
+         JOIN devices d ON d.id = ud.device_id
+         WHERE ud.user_id = $1 AND d.device_code = $2
+         LIMIT 1`,
+        [req.user.id, device_code]
+      )
+      .then((r) => {
+        if (!r.rows.length) return res.status(403).send('No tienes acceso a este dispositivo');
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
+        res.sendFile(__dirname + '/public/index.html');
+      })
+      .catch(() => res.status(500).send('Error de autenticación'));
+    return;
+  }
+
   // Evitar caché agresiva (especialmente en despliegues/CDN)
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
   res.sendFile(__dirname + '/public/index.html');
+});
+
+// Admin: obtener/rotar claim_token (para provisioning)
+app.get('/api/admin/device-claim/:device_code', async (req, res) => {
+  try {
+    const adminKey = process.env.ADMIN_KEY;
+    if (!adminKey) return res.status(403).json({ error: 'ADMIN_KEY no configurada' });
+    if (req.get('x-admin-key') !== adminKey) return res.status(401).json({ error: 'x-admin-key inválida' });
+
+    const { device_code } = req.params;
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+
+    const rotate = String(req.query.rotate || 'false').toLowerCase() === 'true';
+    if (rotate || !dev.claim_token) {
+      const newToken = uuidv4();
+      await pool.query('UPDATE devices SET claim_token = $1, updated_at = CURRENT_TIMESTAMP WHERE device_code = $2', [newToken, device_code]);
+      return res.json({ device_code, claim_token: newToken, rotated: true });
+    }
+    res.json({ device_code, claim_token: dev.claim_token, rotated: false });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.use(express.static('public'));
