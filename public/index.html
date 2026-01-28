@@ -427,7 +427,11 @@
                 const j = await r.json();
                 channels = Array.isArray(j.channels) ? j.channels : [];
 
-                const hums = channels.filter(c => c.kind === 'soil_sensor');
+                const allHums = channels.filter(c => c.kind === 'soil_sensor');
+                // Por defecto mostramos solo el sensor 1 (instalación típica con un sensor).
+                // Si no existe canal 1, mostramos todos para no dejar la UI vacía.
+                let hums = allHums.filter(c => Number(c.channel_index) === 1);
+                if (hums.length === 0) hums = allHums;
                 const valves = channels.filter(c => c.kind === 'valve');
 
                 const humSel = document.getElementById('humChannelSelect');
