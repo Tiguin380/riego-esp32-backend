@@ -3,10 +3,25 @@ const cors = require('cors');
 const { Pool } = require('pg');
 require('dotenv').config();
 const { v4: uuidv4 } = require('uuid');
+const rateLimit = require('express-rate-limit');
+const { z } = require('zod');
 
 const app = express();
+// Railway/Proxies: necesario para que rate-limit y req.ip funcionen bien
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
+
+// Rate limit básico para endurecer API
+app.use(
+  '/api/',
+  rateLimit({
+    windowMs: 60 * 1000,
+    limit: 240,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false
+  })
+);
 
 // Log all incoming requests
 app.use((req, res, next) => {
@@ -19,6 +34,135 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL
 });
 
+function getDeviceTokenFromReq(req) {
+  return (
+    req.get('x-device-token') ||
+    req.get('x-device-token'.toUpperCase()) ||
+    (typeof req.query.token === 'string' ? req.query.token : null) ||
+    null
+  );
+}
+
+async function getDeviceByCode(device_code) {
+  const r = await pool.query('SELECT * FROM devices WHERE device_code = $1', [device_code]);
+  return r.rows[0] || null;
+}
+
+async function ensureDeviceTokenForExistingRows() {
+  const missing = await pool.query(`SELECT id FROM devices WHERE api_token IS NULL OR api_token = ''`);
+  for (const row of missing.rows) {
+    await pool.query('UPDATE devices SET api_token = $1 WHERE id = $2', [uuidv4(), row.id]);
+  }
+}
+
+async function markAlertState(device_id, kind) {
+  await pool.query(
+    `INSERT INTO alert_state (device_id, kind, last_sent_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (device_id, kind)
+     DO UPDATE SET last_sent_at = EXCLUDED.last_sent_at`,
+    [device_id, kind]
+  );
+}
+
+async function wasAlertRecentlySent(device_id, kind, cooldownMinutes) {
+  const r = await pool.query(
+    `SELECT last_sent_at FROM alert_state WHERE device_id = $1 AND kind = $2`,
+    [device_id, kind]
+  );
+  if (r.rows.length === 0 || !r.rows[0].last_sent_at) return false;
+  const last = new Date(r.rows[0].last_sent_at).getTime();
+  return Date.now() - last < cooldownMinutes * 60 * 1000;
+}
+
+async function logAlertEvent(device_id, kind, message) {
+  await pool.query(
+    `INSERT INTO alert_events (device_id, kind, message) VALUES ($1, $2, $3)`,
+    [device_id, kind, message]
+  );
+}
+
+async function sendWebhook(webhookUrl, payload) {
+  if (!webhookUrl) return;
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {
+    console.warn('Webhook notify failed:', e.message);
+  }
+}
+
+async function sendTelegram(chatId, text) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token || !chatId) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text })
+    });
+  } catch (e) {
+    console.warn('Telegram notify failed:', e.message);
+  }
+}
+
+// SSE en memoria (simple). En multi-instancia no garantiza 100%.
+const sseClientsByDevice = new Map();
+function sseBroadcast(device_code, event, data) {
+  const set = sseClientsByDevice.get(device_code);
+  if (!set || set.size === 0) return;
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const res of set) {
+    try {
+      res.write(payload);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+const SensorDataSchema = z
+  .object({
+    device_code: z.string().min(1).max(50),
+    temperature: z.coerce.number().optional().nullable(),
+    humidity: z.coerce.number().optional().nullable(),
+    rain_level: z.coerce.number().optional().nullable(),
+    led_status: z.string().optional().nullable(),
+    valve_state: z.string().optional().nullable(),
+    humidity_low_threshold: z.coerce.number().optional().nullable(),
+    humidity_low_color: z.string().optional().nullable(),
+    humidity_good_color: z.string().optional().nullable(),
+    voltage: z.coerce.number().optional().nullable(),
+    wifi_rssi: z.coerce.number().int().optional().nullable(),
+    uptime_s: z.coerce.number().int().optional().nullable(),
+    reboot_count: z.coerce.number().int().optional().nullable(),
+    heap_free: z.coerce.number().int().optional().nullable(),
+    ip: z.string().optional().nullable()
+  })
+  .passthrough();
+
+const DeviceConfigSchema = z
+  .object({
+    humidity_low_threshold: z.coerce.number().min(0).max(100).optional(),
+    humidity_low_color: z.string().min(1).max(30).optional(),
+    humidity_good_color: z.string().min(1).max(30).optional(),
+    led_mode: z.string().min(1).max(10).optional(),
+    led_manual_color: z.string().min(1).max(30).optional(),
+    wet_v: z.coerce.number().optional(),
+    dry_v: z.coerce.number().optional(),
+    alert_humidity_low_minutes: z.coerce.number().int().min(0).max(1440).optional(),
+    alert_valve_on_max_minutes: z.coerce.number().int().min(0).max(1440).optional(),
+    alert_sensor_dead_minutes: z.coerce.number().int().min(0).max(10080).optional(),
+    alert_voltage_min: z.coerce.number().optional().nullable(),
+    alert_voltage_max: z.coerce.number().optional().nullable(),
+    notify_webhook_url: z.string().url().optional().nullable(),
+    notify_telegram_chat_id: z.string().optional().nullable()
+  })
+  .passthrough();
+
 // Inicialización automática de tablas en arranque (útil en despliegues en Railway u otros hosts)
 async function initDB() {
   try {
@@ -28,7 +172,10 @@ async function initDB() {
         id UUID PRIMARY KEY,
         device_code VARCHAR(20) UNIQUE NOT NULL,
         name VARCHAR(100) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        location VARCHAR(120),
+        api_token VARCHAR(80),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -42,6 +189,12 @@ async function initDB() {
         rain_level DECIMAL(5,2),
         led_status VARCHAR(20),
         valve_state VARCHAR(10),
+        voltage DECIMAL(6,3),
+        wifi_rssi INTEGER,
+        uptime_s INTEGER,
+        reboot_count INTEGER,
+        heap_free INTEGER,
+        ip VARCHAR(45),
         humidity_low_threshold DECIMAL(5,2),
         humidity_low_color VARCHAR(20),
         humidity_good_color VARCHAR(20),
@@ -59,7 +212,35 @@ async function initDB() {
         humidity_good_color VARCHAR(20) DEFAULT 'Verde',
         led_mode VARCHAR(10) DEFAULT 'auto',
         led_manual_color VARCHAR(20) DEFAULT 'Off',
+        wet_v DECIMAL(6,3),
+        dry_v DECIMAL(6,3),
+        alert_humidity_low_minutes INTEGER DEFAULT 0,
+        alert_valve_on_max_minutes INTEGER DEFAULT 0,
+        alert_sensor_dead_minutes INTEGER DEFAULT 0,
+        alert_voltage_min DECIMAL(6,3),
+        alert_voltage_max DECIMAL(6,3),
+        notify_webhook_url TEXT,
+        notify_telegram_chat_id TEXT,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS alert_state (
+        device_id UUID REFERENCES devices(id),
+        kind VARCHAR(40) NOT NULL,
+        last_sent_at TIMESTAMP,
+        PRIMARY KEY (device_id, kind)
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS alert_events (
+        id SERIAL PRIMARY KEY,
+        device_id UUID REFERENCES devices(id),
+        kind VARCHAR(40) NOT NULL,
+        message TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -67,6 +248,32 @@ async function initDB() {
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS led_mode VARCHAR(10) DEFAULT 'auto'`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS led_manual_color VARCHAR(20) DEFAULT 'Off'`);
     await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS valve_state VARCHAR(10)`);
+
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS location VARCHAR(120)`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS api_token VARCHAR(80)`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+
+    await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS voltage DECIMAL(6,3)`);
+    await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS wifi_rssi INTEGER`);
+    await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS uptime_s INTEGER`);
+    await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS reboot_count INTEGER`);
+    await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS heap_free INTEGER`);
+    await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS ip VARCHAR(45)`);
+
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS wet_v DECIMAL(6,3)`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS dry_v DECIMAL(6,3)`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_humidity_low_minutes INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_valve_on_max_minutes INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_sensor_dead_minutes INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_voltage_min DECIMAL(6,3)`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_voltage_max DECIMAL(6,3)`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS notify_webhook_url TEXT`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS notify_telegram_chat_id TEXT`);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sensor_device_time ON sensor_data(device_id, created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_alert_events_device_time ON alert_events(device_id, created_at DESC)`);
+
+    await ensureDeviceTokenForExistingRows();
 
     console.log('Database initialized (auto)');
   } catch (error) {
@@ -84,58 +291,28 @@ if (process.env.DATABASE_URL || process.env.AUTO_DB_INIT === 'true') {
 // Tabla de dispositivos
 app.get('/api/init', async (req, res) => {
   try {
-    // Crear tabla de dispositivos
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS devices (
-        id UUID PRIMARY KEY,
-        device_code VARCHAR(20) UNIQUE NOT NULL,
-        name VARCHAR(100) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Crear tabla de sensores
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS sensor_data (
-        id SERIAL PRIMARY KEY,
-        device_id UUID REFERENCES devices(id),
-        temperature DECIMAL(5,2),
-        humidity DECIMAL(5,2),
-        rain_level DECIMAL(5,2),
-        led_status VARCHAR(20),
-        valve_state VARCHAR(10),
-        humidity_low_threshold DECIMAL(5,2),
-        humidity_low_color VARCHAR(20),
-        humidity_good_color VARCHAR(20),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Crear tabla de configuración
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS device_config (
-        id UUID PRIMARY KEY,
-        device_id UUID UNIQUE REFERENCES devices(id),
-        humidity_low_threshold DECIMAL(5,2) DEFAULT 50,
-        humidity_low_color VARCHAR(20) DEFAULT 'Rojo',
-        humidity_good_color VARCHAR(20) DEFAULT 'Verde',
-        led_mode VARCHAR(10) DEFAULT 'auto',
-        led_manual_color VARCHAR(20) DEFAULT 'Off',
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    res.json({ status: 'Base de datos inicializada' });
+    await initDB();
+    res.json({ status: 'Base de datos inicializada (initDB)' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message });
   }
 });
 
+// Healthcheck simple (Railway)
+app.get('/api/health', async (req, res) => {
+  try {
+    const db = await pool.query('SELECT 1 AS ok');
+    res.json({ ok: true, db: db.rows[0]?.ok === 1, ts: new Date().toISOString() });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message, ts: new Date().toISOString() });
+  }
+});
+
 // Registrar/obtener dispositivo
 app.post('/api/device/register', async (req, res) => {
   try {
-    const { device_code, name } = req.body;
+    const { device_code, name, location } = req.body;
 
     let device = await pool.query(
       'SELECT * FROM devices WHERE device_code = $1',
@@ -144,9 +321,10 @@ app.post('/api/device/register', async (req, res) => {
 
     if (device.rows.length === 0) {
       const id = uuidv4();
+      const api_token = uuidv4();
       await pool.query(
-        'INSERT INTO devices (id, device_code, name) VALUES ($1, $2, $3)',
-        [id, device_code, name || 'ESP32 Riego']
+        'INSERT INTO devices (id, device_code, name, location, api_token) VALUES ($1, $2, $3, $4, $5)',
+        [id, device_code, name || 'ESP32 Riego', location || null, api_token]
       );
       device = await pool.query('SELECT * FROM devices WHERE id = $1', [id]);
     }
@@ -161,6 +339,11 @@ app.post('/api/device/register', async (req, res) => {
 // Enviar datos del sensor (desde ESP32)
 app.post('/api/sensor/data', async (req, res) => {
   try {
+    const parsed = SensorDataSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Payload inválido', details: parsed.error.issues });
+    }
+
     const {
       device_code,
       temperature,
@@ -170,8 +353,14 @@ app.post('/api/sensor/data', async (req, res) => {
       valve_state,
       humidity_low_threshold,
       humidity_low_color,
-      humidity_good_color
-    } = req.body;
+      humidity_good_color,
+      voltage,
+      wifi_rssi,
+      uptime_s,
+      reboot_count,
+      heap_free,
+      ip
+    } = parsed.data;
     const device = await pool.query(
       'SELECT id FROM devices WHERE device_code = $1',
       [device_code]
@@ -186,8 +375,12 @@ app.post('/api/sensor/data', async (req, res) => {
     const resolved_valve_state = valve_state || led_status || null;
 
     await pool.query(
-      `INSERT INTO sensor_data (device_id, temperature, humidity, rain_level, led_status, valve_state, humidity_low_threshold, humidity_low_color, humidity_good_color)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      `INSERT INTO sensor_data (
+          device_id, temperature, humidity, rain_level, led_status, valve_state,
+          voltage, wifi_rssi, uptime_s, reboot_count, heap_free, ip,
+          humidity_low_threshold, humidity_low_color, humidity_good_color
+        )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
       [
         device_id,
         temperature,
@@ -195,11 +388,41 @@ app.post('/api/sensor/data', async (req, res) => {
         rain_level,
         led_status || null,
         resolved_valve_state,
+        voltage,
+        wifi_rssi,
+        uptime_s,
+        reboot_count,
+        heap_free,
+        ip,
         humidity_low_threshold,
         humidity_low_color,
         humidity_good_color
       ]
     );
+
+    // Emitir update por SSE (si hay clientes conectados)
+    sseBroadcast(device_code, 'sensor', {
+      device_code,
+      temperature,
+      humidity,
+      valve_state: resolved_valve_state,
+      voltage,
+      wifi_rssi,
+      uptime_s,
+      reboot_count,
+      heap_free,
+      ip,
+      ts: new Date().toISOString()
+    });
+
+    // Evaluar alertas (si están configuradas)
+    await evaluateAlertsOnIngest({
+      device_code,
+      device_id,
+      humidity: typeof humidity === 'number' ? humidity : null,
+      valve_state: resolved_valve_state,
+      voltage: typeof voltage === 'number' ? voltage : null
+    });
 
     res.json({ status: 'Datos guardados' });
   } catch (error) {
@@ -233,11 +456,231 @@ app.get('/api/sensor/latest/:device_code', async (req, res) => {
   }
 });
 
-// Obtener estadísticas de las últimas 24 horas
+// --- Dispositivos (multi-dispositivo) ---
+app.get('/api/devices', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+         d.device_code,
+         d.name,
+         d.location,
+         d.created_at,
+         MAX(sd.created_at) AS last_seen
+       FROM devices d
+       LEFT JOIN sensor_data sd ON sd.device_id = d.id
+       GROUP BY d.id
+       ORDER BY d.created_at ASC`
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/devices/:device_code', async (req, res) => {
+  try {
+    const { device_code } = req.params;
+    const token = getDeviceTokenFromReq(req);
+    const { name, location } = req.body || {};
+
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    if (dev.api_token && token !== dev.api_token) return res.status(401).json({ error: 'Token inválido (X-Device-Token)' });
+
+    await pool.query(
+      `UPDATE devices
+       SET name = COALESCE($1, name), location = COALESCE($2, location), updated_at = CURRENT_TIMESTAMP
+       WHERE device_code = $3`,
+      [name || null, location || null, device_code]
+    );
+    const updated = await getDeviceByCode(device_code);
+    res.json({ status: 'OK', device: { device_code: updated.device_code, name: updated.name, location: updated.location } });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Recuperar/rotar token SOLO con ADMIN_KEY (seguridad)
+app.get('/api/admin/device-token/:device_code', async (req, res) => {
+  try {
+    const adminKey = process.env.ADMIN_KEY;
+    if (!adminKey) return res.status(403).json({ error: 'ADMIN_KEY no configurada' });
+    if (req.get('x-admin-key') !== adminKey) return res.status(401).json({ error: 'x-admin-key inválida' });
+
+    const { device_code } = req.params;
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+
+    const rotate = String(req.query.rotate || 'false').toLowerCase() === 'true';
+    if (rotate) {
+      const newToken = uuidv4();
+      await pool.query('UPDATE devices SET api_token = $1, updated_at = CURRENT_TIMESTAMP WHERE device_code = $2', [newToken, device_code]);
+      return res.json({ device_code, api_token: newToken, rotated: true });
+    }
+
+    res.json({ device_code, api_token: dev.api_token, rotated: false });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- SSE: tiempo real (sin polling) ---
+app.get('/api/sse/:device_code', async (req, res) => {
+  const { device_code } = req.params;
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  const set = sseClientsByDevice.get(device_code) || new Set();
+  set.add(res);
+  sseClientsByDevice.set(device_code, set);
+
+  res.write(`event: hello\ndata: ${JSON.stringify({ device_code, ts: new Date().toISOString() })}\n\n`);
+  const keepAlive = setInterval(() => {
+    try {
+      res.write(`event: ping\ndata: {}\n\n`);
+    } catch {
+      // ignore
+    }
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    const s = sseClientsByDevice.get(device_code);
+    if (s) {
+      s.delete(res);
+      if (s.size === 0) sseClientsByDevice.delete(device_code);
+    }
+  });
+});
+
+async function computeValveOnSeconds(device_id, fromTs, toTs) {
+  const r = await pool.query(
+    `WITH ordered AS (
+       SELECT created_at,
+              valve_state,
+              LEAD(created_at) OVER (ORDER BY created_at) AS next_at
+       FROM sensor_data
+       WHERE device_id = $1
+         AND created_at >= $2
+         AND created_at <= $3
+     )
+     SELECT COALESCE(SUM(
+       EXTRACT(EPOCH FROM (COALESCE(next_at, created_at) - created_at))
+       * (CASE WHEN valve_state = 'ON' THEN 1 ELSE 0 END)
+     ), 0) AS on_seconds
+     FROM ordered`,
+    [device_id, fromTs, toTs]
+  );
+  return Number(r.rows[0]?.on_seconds || 0);
+}
+
+async function computeIrrigationCount(device_id, fromTs, toTs) {
+  const r = await pool.query(
+    `WITH ordered AS (
+       SELECT created_at,
+              valve_state,
+              LAG(valve_state) OVER (ORDER BY created_at) AS prev_state
+       FROM sensor_data
+       WHERE device_id = $1
+         AND created_at >= $2
+         AND created_at <= $3
+     )
+     SELECT COALESCE(SUM(CASE WHEN valve_state = 'ON' AND (prev_state IS DISTINCT FROM 'ON') THEN 1 ELSE 0 END), 0) AS starts
+     FROM ordered`,
+    [device_id, fromTs, toTs]
+  );
+  return Number(r.rows[0]?.starts || 0);
+}
+
+// Nuevo: estadísticas día/mes/año (serie + overall)
+app.get('/api/stats/:device_code', async (req, res) => {
+  try {
+    const { device_code } = req.params;
+    const period = String(req.query.period || 'day');
+
+    const device = await pool.query('SELECT id FROM devices WHERE device_code = $1', [device_code]);
+    if (device.rows.length === 0) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    const device_id = device.rows[0].id;
+
+    let bucket;
+    let fromExpr;
+    let toExpr = 'NOW()';
+    if (period === 'day') {
+      bucket = "date_trunc('hour', sd.created_at)";
+      fromExpr = "NOW() - INTERVAL '24 hours'";
+    } else if (period === 'month') {
+      bucket = "date_trunc('day', sd.created_at)";
+      fromExpr = "date_trunc('month', NOW())";
+    } else if (period === 'year') {
+      bucket = "date_trunc('month', sd.created_at)";
+      fromExpr = "date_trunc('year', NOW())";
+    } else {
+      return res.status(400).json({ error: 'period inválido (day|month|year)' });
+    }
+
+    const overall = await pool.query(
+      `SELECT
+         COUNT(*)::int AS total_readings,
+         AVG(temperature) AS temp_avg,
+         MAX(temperature) AS temp_max,
+         MIN(temperature) AS temp_min,
+         AVG(humidity) AS hum_avg,
+         MAX(humidity) AS hum_max,
+         MIN(humidity) AS hum_min
+       FROM sensor_data
+       WHERE device_id = $1
+         AND created_at >= ${fromExpr}
+         AND created_at <= ${toExpr}`,
+      [device_id]
+    );
+
+    const series = await pool.query(
+      `SELECT
+         ${bucket} AS ts,
+         AVG(sd.temperature) AS temperature,
+         AVG(sd.humidity) AS humidity,
+         AVG(sd.voltage) AS voltage,
+         MAX(CASE WHEN sd.valve_state = 'ON' THEN 1 ELSE 0 END)::int AS valve_on
+       FROM sensor_data sd
+       WHERE sd.device_id = $1
+         AND sd.created_at >= ${fromExpr}
+         AND sd.created_at <= ${toExpr}
+       GROUP BY ts
+       ORDER BY ts ASC`,
+      [device_id]
+    );
+
+    const fromTs = await pool.query(`SELECT ${fromExpr} AS t`);
+    const toTsQ = await pool.query(`SELECT ${toExpr} AS t`);
+    const fromTsVal = fromTs.rows[0].t;
+    const toTsVal = toTsQ.rows[0].t;
+
+    const valve_on_seconds = await computeValveOnSeconds(device_id, fromTsVal, toTsVal);
+    const irrigations = await computeIrrigationCount(device_id, fromTsVal, toTsVal);
+
+    res.json({
+      device_code,
+      period,
+      range: { from: new Date(fromTsVal).toISOString(), to: new Date(toTsVal).toISOString() },
+      overall: { ...overall.rows[0], valve_on_seconds, irrigations },
+      series: series.rows
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Compatibilidad: stats antiguas 24h
 app.get('/api/sensor/stats/:device_code', async (req, res) => {
   try {
     const { device_code } = req.params;
-
     const result = await pool.query(
       `SELECT 
         COUNT(*) as total_readings,
@@ -263,27 +706,246 @@ app.get('/api/sensor/stats/:device_code', async (req, res) => {
   }
 });
 
-// Obtener historial de datos
+function parseDateParam(v) {
+  if (!v) return null;
+  const d = new Date(String(v));
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
+}
+
+// Nuevo histórico real (from/to/step)
 app.get('/api/sensor/history/:device_code', async (req, res) => {
   try {
     const { device_code } = req.params;
-    const limit = req.query.limit || 100;
+    const step = String(req.query.step || 'raw'); // raw | 1m | 1h | 1d
+    const from = parseDateParam(req.query.from) || new Date(Date.now() - 24 * 3600 * 1000);
+    const to = parseDateParam(req.query.to) || new Date();
+    const limit = Math.min(Number(req.query.limit || 5000), 20000);
+
+    const device = await pool.query('SELECT id FROM devices WHERE device_code = $1', [device_code]);
+    if (device.rows.length === 0) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    const device_id = device.rows[0].id;
+
+    if (step === 'raw') {
+      const result = await pool.query(
+        `SELECT created_at AS ts, temperature, humidity, valve_state, voltage, wifi_rssi, uptime_s, reboot_count
+         FROM sensor_data
+         WHERE device_id = $1 AND created_at >= $2 AND created_at <= $3
+         ORDER BY created_at ASC
+         LIMIT $4`,
+        [device_id, from, to, limit]
+      );
+      return res.json({ device_code, step, range: { from: from.toISOString(), to: to.toISOString() }, rows: result.rows });
+    }
+
+    let trunc;
+    if (step === '1m') trunc = "date_trunc('minute', created_at)";
+    else if (step === '1h') trunc = "date_trunc('hour', created_at)";
+    else if (step === '1d') trunc = "date_trunc('day', created_at)";
+    else return res.status(400).json({ error: 'step inválido (raw|1m|1h|1d)' });
 
     const result = await pool.query(
-      `SELECT sd.* FROM sensor_data sd
-       JOIN devices d ON sd.device_id = d.id
-       WHERE d.device_code = $1
-       ORDER BY sd.created_at DESC
-       LIMIT $2`,
-      [device_code, limit]
+      `SELECT
+         ${trunc} AS ts,
+         AVG(temperature) AS temperature,
+         AVG(humidity) AS humidity,
+         AVG(voltage) AS voltage,
+         AVG(wifi_rssi) AS wifi_rssi,
+         MAX(CASE WHEN valve_state = 'ON' THEN 1 ELSE 0 END)::int AS valve_on
+       FROM sensor_data
+       WHERE device_id = $1 AND created_at >= $2 AND created_at <= $3
+       GROUP BY ts
+       ORDER BY ts ASC
+       LIMIT $4`,
+      [device_id, from, to, limit]
     );
 
-    res.json(result.rows);
+    res.json({ device_code, step, range: { from: from.toISOString(), to: to.toISOString() }, rows: result.rows });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message });
   }
 });
+
+// Export CSV/JSON
+app.get('/api/sensor/export/:device_code', async (req, res) => {
+  try {
+    const { device_code } = req.params;
+    const format = String(req.query.format || 'csv');
+    const from = parseDateParam(req.query.from) || new Date(Date.now() - 24 * 3600 * 1000);
+    const to = parseDateParam(req.query.to) || new Date();
+    const limit = Math.min(Number(req.query.limit || 20000), 50000);
+
+    const device = await pool.query('SELECT id FROM devices WHERE device_code = $1', [device_code]);
+    if (device.rows.length === 0) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    const device_id = device.rows[0].id;
+
+    const q = await pool.query(
+      `SELECT created_at AS ts, temperature, humidity, valve_state, voltage, wifi_rssi, uptime_s, reboot_count
+       FROM sensor_data
+       WHERE device_id = $1 AND created_at >= $2 AND created_at <= $3
+       ORDER BY created_at ASC
+       LIMIT $4`,
+      [device_id, from, to, limit]
+    );
+
+    if (format === 'json') {
+      return res.json({ device_code, range: { from: from.toISOString(), to: to.toISOString() }, rows: q.rows });
+    }
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${device_code}_${from.toISOString()}_${to.toISOString()}.csv"`);
+    res.write('ts,temperature,humidity,valve_state,voltage,wifi_rssi,uptime_s,reboot_count\n');
+    for (const r of q.rows) {
+      const line = [
+        new Date(r.ts).toISOString(),
+        r.temperature ?? '',
+        r.humidity ?? '',
+        r.valve_state ?? '',
+        r.voltage ?? '',
+        r.wifi_rssi ?? '',
+        r.uptime_s ?? '',
+        r.reboot_count ?? ''
+      ].join(',');
+      res.write(line + '\n');
+    }
+    res.end();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Alertas (en ingest + job) ---
+async function getDeviceConfig(device_id) {
+  const r = await pool.query('SELECT * FROM device_config WHERE device_id = $1', [device_id]);
+  return r.rows[0] || null;
+}
+
+async function triggerAlert({ device_code, device_id, kind, message, cfg }) {
+  const cooldown = 30; // min, para evitar spam
+  if (await wasAlertRecentlySent(device_id, kind, cooldown)) return;
+
+  await logAlertEvent(device_id, kind, message);
+  await markAlertState(device_id, kind);
+
+  const payload = { device_code, kind, message, ts: new Date().toISOString() };
+  await sendWebhook(cfg?.notify_webhook_url, payload);
+  await sendTelegram(cfg?.notify_telegram_chat_id, `[${device_code}] ${kind}: ${message}`);
+
+  sseBroadcast(device_code, 'alert', payload);
+}
+
+async function evaluateAlertsOnIngest({ device_code, device_id, humidity, valve_state, voltage }) {
+  const cfg = await getDeviceConfig(device_id);
+  if (!cfg) return;
+
+  const threshold = Number(cfg.humidity_low_threshold ?? 50);
+
+  // Humedad baja X minutos (sostenida)
+  const lowMin = Number(cfg.alert_humidity_low_minutes || 0);
+  if (lowMin > 0 && typeof humidity === 'number') {
+    const intervalStr = `${lowMin} minutes`;
+    const r = await pool.query(
+      `SELECT MIN(humidity) AS min_h, MAX(humidity) AS max_h
+       FROM sensor_data
+       WHERE device_id = $1 AND created_at >= NOW() - ($2::interval)`,
+      [device_id, intervalStr]
+    );
+    const maxH = r.rows[0]?.max_h == null ? null : Number(r.rows[0].max_h);
+    if (maxH != null && maxH < threshold) {
+      await triggerAlert({
+        device_code,
+        device_id,
+        kind: 'HUMIDITY_LOW',
+        message: `Humedad < ${threshold}% durante ~${lowMin} min`,
+        cfg
+      });
+    }
+  }
+
+  // Válvula ON demasiado tiempo
+  const valveMax = Number(cfg.alert_valve_on_max_minutes || 0);
+  if (valveMax > 0 && String(valve_state || '').toUpperCase() === 'ON') {
+    const recent = await pool.query(
+      `SELECT created_at, valve_state FROM sensor_data WHERE device_id = $1 ORDER BY created_at DESC LIMIT 5000`,
+      [device_id]
+    );
+    const rows = recent.rows;
+    if (rows.length > 0 && String(rows[0].valve_state || '').toUpperCase() === 'ON') {
+      let onSince = rows[rows.length - 1].created_at;
+      for (const row of rows) {
+        if (String(row.valve_state || '').toUpperCase() !== 'ON') {
+          onSince = row.created_at;
+          break;
+        }
+      }
+      const minutesOn = (Date.now() - new Date(onSince).getTime()) / 60000;
+      if (minutesOn >= valveMax) {
+        await triggerAlert({
+          device_code,
+          device_id,
+          kind: 'VALVE_ON_TOO_LONG',
+          message: `Válvula ON ~${Math.round(minutesOn)} min (límite ${valveMax} min)`,
+          cfg
+        });
+      }
+    }
+  }
+
+  // Voltaje fuera de rango
+  const vmin = cfg.alert_voltage_min == null ? null : Number(cfg.alert_voltage_min);
+  const vmax = cfg.alert_voltage_max == null ? null : Number(cfg.alert_voltage_max);
+  if (typeof voltage === 'number' && (vmin != null || vmax != null)) {
+    if (vmin != null && voltage < vmin) {
+      await triggerAlert({ device_code, device_id, kind: 'VOLTAGE_LOW', message: `Voltaje ${voltage}V < ${vmin}V`, cfg });
+    }
+    if (vmax != null && voltage > vmax) {
+      await triggerAlert({ device_code, device_id, kind: 'VOLTAGE_HIGH', message: `Voltaje ${voltage}V > ${vmax}V`, cfg });
+    }
+  }
+}
+
+// Job: sensor muerto (sin datos > N min)
+async function checkDeadSensors() {
+  try {
+    const r = await pool.query(
+      `SELECT
+         d.id AS device_id,
+         d.device_code,
+         COALESCE(dc.alert_sensor_dead_minutes, 0) AS dead_min,
+         dc.notify_webhook_url,
+         dc.notify_telegram_chat_id,
+         MAX(sd.created_at) AS last_seen
+       FROM devices d
+       LEFT JOIN device_config dc ON dc.device_id = d.id
+       LEFT JOIN sensor_data sd ON sd.device_id = d.id
+       GROUP BY d.id, dc.alert_sensor_dead_minutes, dc.notify_webhook_url, dc.notify_telegram_chat_id`
+    );
+
+    for (const row of r.rows) {
+      const deadMin = Number(row.dead_min || 0);
+      if (deadMin <= 0) continue;
+      const last = row.last_seen ? new Date(row.last_seen).getTime() : 0;
+      const ageMin = last ? (Date.now() - last) / 60000 : Infinity;
+      if (ageMin >= deadMin) {
+        await triggerAlert({
+          device_code: row.device_code,
+          device_id: row.device_id,
+          kind: 'SENSOR_DEAD',
+          message: `Sin datos desde hace ~${Math.round(ageMin)} min`,
+          cfg: row
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('checkDeadSensors error:', e.message);
+  }
+}
+
+if (process.env.DATABASE_URL || process.env.AUTO_DB_INIT === 'true') {
+  setInterval(checkDeadSensors, 60 * 1000);
+}
 
 // Obtener configuración del dispositivo
 app.get('/api/config/:device_code', async (req, res) => {
@@ -299,6 +961,15 @@ app.get('/api/config/:device_code', async (req, res) => {
       humidity_good_color: 'Verde',
       led_mode: 'auto',
       led_manual_color: 'Off',
+      wet_v: null,
+      dry_v: null,
+      alert_humidity_low_minutes: 0,
+      alert_valve_on_max_minutes: 0,
+      alert_sensor_dead_minutes: 0,
+      alert_voltage_min: null,
+      alert_voltage_max: null,
+      notify_webhook_url: null,
+      notify_telegram_chat_id: null,
       updated_at: new Date().toISOString()
     });
   }
@@ -323,6 +994,15 @@ app.get('/api/config/:device_code', async (req, res) => {
         humidity_good_color: 'Verde',
         led_mode: 'auto',
         led_manual_color: 'Off',
+        wet_v: null,
+        dry_v: null,
+        alert_humidity_low_minutes: 0,
+        alert_valve_on_max_minutes: 0,
+        alert_sensor_dead_minutes: 0,
+        alert_voltage_min: null,
+        alert_voltage_max: null,
+        notify_webhook_url: null,
+        notify_telegram_chat_id: null,
         updated_at: new Date().toISOString()
       });
     }
@@ -355,8 +1035,40 @@ app.get('/api/config/:device_code', async (req, res) => {
       humidity_good_color: 'Verde',
       led_mode: 'auto',
       led_manual_color: 'Off',
+      wet_v: null,
+      dry_v: null,
+      alert_humidity_low_minutes: 0,
+      alert_valve_on_max_minutes: 0,
+      alert_sensor_dead_minutes: 0,
+      alert_voltage_min: null,
+      alert_voltage_max: null,
+      notify_webhook_url: null,
+      notify_telegram_chat_id: null,
       updated_at: new Date().toISOString()
     });
+  }
+});
+
+// Últimas alertas
+app.get('/api/alerts/:device_code', async (req, res) => {
+  try {
+    const { device_code } = req.params;
+    const limit = Math.min(Number(req.query.limit || 20), 200);
+
+    const r = await pool.query(
+      `SELECT ae.kind, ae.message, ae.created_at
+       FROM alert_events ae
+       JOIN devices d ON ae.device_id = d.id
+       WHERE d.device_code = $1
+       ORDER BY ae.created_at DESC
+       LIMIT $2`,
+      [device_code, limit]
+    );
+
+    res.json({ device_code, rows: r.rows });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -364,7 +1076,12 @@ app.get('/api/config/:device_code', async (req, res) => {
 app.post('/api/config/:device_code', async (req, res) => {
   try {
     const { device_code } = req.params;
-    const { humidity_low_threshold, humidity_low_color, humidity_good_color, led_mode, led_manual_color } = req.body;
+    const token = getDeviceTokenFromReq(req);
+
+    const parsed = DeviceConfigSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Payload inválido', details: parsed.error.issues });
+    }
 
     // Obtener device_id
     const device = await pool.query(
@@ -378,6 +1095,13 @@ app.post('/api/config/:device_code', async (req, res) => {
 
     const device_id = device.rows[0].id;
 
+    // Auth simple: para cambiar config hace falta token del dispositivo
+    const devRow = await pool.query('SELECT api_token FROM devices WHERE id = $1', [device_id]);
+    const api_token = devRow.rows[0]?.api_token;
+    if (api_token && token !== api_token) {
+      return res.status(401).json({ error: 'Token inválido (X-Device-Token)' });
+    }
+
     // Verificar si existe configuración
     const existing = await pool.query(
       'SELECT id FROM device_config WHERE device_id = $1',
@@ -388,17 +1112,73 @@ app.post('/api/config/:device_code', async (req, res) => {
       // Crear nueva configuración
       const config_id = uuidv4();
       await pool.query(
-        `INSERT INTO device_config (id, device_id, humidity_low_threshold, humidity_low_color, humidity_good_color, led_mode, led_manual_color)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [config_id, device_id, humidity_low_threshold, humidity_low_color, humidity_good_color, led_mode, led_manual_color]
+        `INSERT INTO device_config (
+           id, device_id,
+           humidity_low_threshold, humidity_low_color, humidity_good_color,
+           led_mode, led_manual_color,
+           wet_v, dry_v,
+           alert_humidity_low_minutes, alert_valve_on_max_minutes, alert_sensor_dead_minutes,
+           alert_voltage_min, alert_voltage_max,
+           notify_webhook_url, notify_telegram_chat_id
+         )
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        [
+          config_id,
+          device_id,
+          parsed.data.humidity_low_threshold,
+          parsed.data.humidity_low_color,
+          parsed.data.humidity_good_color,
+          parsed.data.led_mode,
+          parsed.data.led_manual_color,
+          parsed.data.wet_v,
+          parsed.data.dry_v,
+          parsed.data.alert_humidity_low_minutes,
+          parsed.data.alert_valve_on_max_minutes,
+          parsed.data.alert_sensor_dead_minutes,
+          parsed.data.alert_voltage_min ?? null,
+          parsed.data.alert_voltage_max ?? null,
+          parsed.data.notify_webhook_url ?? null,
+          parsed.data.notify_telegram_chat_id ?? null
+        ]
       );
     } else {
       // Actualizar configuración existente
       await pool.query(
         `UPDATE device_config 
-         SET humidity_low_threshold = $1, humidity_low_color = $2, humidity_good_color = $3, led_mode = $4, led_manual_color = $5, updated_at = CURRENT_TIMESTAMP
-         WHERE device_id = $6`,
-        [humidity_low_threshold, humidity_low_color, humidity_good_color, led_mode, led_manual_color, device_id]
+         SET
+           humidity_low_threshold = COALESCE($1, humidity_low_threshold),
+           humidity_low_color = COALESCE($2, humidity_low_color),
+           humidity_good_color = COALESCE($3, humidity_good_color),
+           led_mode = COALESCE($4, led_mode),
+           led_manual_color = COALESCE($5, led_manual_color),
+           wet_v = COALESCE($6, wet_v),
+           dry_v = COALESCE($7, dry_v),
+           alert_humidity_low_minutes = COALESCE($8, alert_humidity_low_minutes),
+           alert_valve_on_max_minutes = COALESCE($9, alert_valve_on_max_minutes),
+           alert_sensor_dead_minutes = COALESCE($10, alert_sensor_dead_minutes),
+           alert_voltage_min = COALESCE($11, alert_voltage_min),
+           alert_voltage_max = COALESCE($12, alert_voltage_max),
+           notify_webhook_url = COALESCE($13, notify_webhook_url),
+           notify_telegram_chat_id = COALESCE($14, notify_telegram_chat_id),
+           updated_at = CURRENT_TIMESTAMP
+         WHERE device_id = $15`,
+        [
+          parsed.data.humidity_low_threshold,
+          parsed.data.humidity_low_color,
+          parsed.data.humidity_good_color,
+          parsed.data.led_mode,
+          parsed.data.led_manual_color,
+          parsed.data.wet_v,
+          parsed.data.dry_v,
+          parsed.data.alert_humidity_low_minutes,
+          parsed.data.alert_valve_on_max_minutes,
+          parsed.data.alert_sensor_dead_minutes,
+          parsed.data.alert_voltage_min ?? null,
+          parsed.data.alert_voltage_max ?? null,
+          parsed.data.notify_webhook_url ?? null,
+          parsed.data.notify_telegram_chat_id ?? null,
+          device_id
+        ]
       );
     }
 
