@@ -8,6 +8,7 @@ const { z } = require('zod');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const nodemailer = require('nodemailer');
 
 const app = express();
 // Railway/Proxies: necesario para que rate-limit y req.ip funcionen bien
@@ -56,6 +57,44 @@ app.use((req, res, next) => {
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL
 });
+
+// --- Email (SMTP) ---
+function hasSmtpConfigured() {
+  return Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_FROM);
+}
+
+function createMailer() {
+  if (!hasSmtpConfigured()) return null;
+  const port = Number(process.env.SMTP_PORT);
+  const secure = envBool('SMTP_SECURE', port === 465);
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port,
+    secure,
+    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS || '' } : undefined
+  });
+}
+
+async function sendEmail({ to, subject, text, html }) {
+  const transporter = createMailer();
+  if (!transporter) return { sent: false, error: 'SMTP no configurado' };
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM,
+    to,
+    subject,
+    text,
+    html
+  });
+  return { sent: true };
+}
+
+function publicBaseUrl(req) {
+  const envBase = (process.env.PUBLIC_BASE_URL || '').trim();
+  if (envBase) return envBase.replace(/\/$/, '');
+  const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
+  const host = req.get('x-forwarded-host') || req.get('host');
+  return `${proto}://${host}`;
+}
 
 // --- Zona horaria España (Europe/Madrid) en backend ---
 // Devolvemos etiquetas ya formateadas para evitar dependencias del navegador.
@@ -629,6 +668,22 @@ async function initDB() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sensor_device_time ON sensor_data(device_id, created_at DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_alert_events_device_time ON alert_events(device_id, created_at DESC)`);
 
+    // Auth extra: verificación email + reset password
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verify_token TEXT`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verify_token_created_at TIMESTAMP`);
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS password_resets (
+      id UUID PRIMARY KEY,
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      token TEXT UNIQUE NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      used_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id, created_at DESC)`);
+
     await ensureDeviceTokenForExistingRows();
     await ensureClaimTokenForExistingRows();
 
@@ -652,6 +707,20 @@ async function initDB() {
 const RegisterSchema = z.object({
   email: z.string().email().max(255),
   password: z.string().min(8).max(200)
+});
+
+const ChangePasswordSchema = z.object({
+  current_password: z.string().min(1).max(200),
+  new_password: z.string().min(8).max(200)
+});
+
+const ForgotPasswordSchema = z.object({
+  email: z.string().email().max(255)
+});
+
+const ResetPasswordSchema = z.object({
+  token: z.string().min(10).max(2000),
+  new_password: z.string().min(8).max(200)
 });
 
 const LoginSchema = z.object({
@@ -687,19 +756,90 @@ app.post('/api/auth/register', async (req, res) => {
     const password_hash = await bcrypt.hash(parsed.data.password, 10);
     const id = uuidv4();
 
+    const verify_token = uuidv4();
+
     await pool.query(
-      `INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3)`
+      `INSERT INTO users (id, email, password_hash, email_verified, verify_token, verify_token_created_at)
+       VALUES ($1, $2, $3, FALSE, $4, CURRENT_TIMESTAMP)`
       ,
-      [id, email, password_hash]
+      [id, email, password_hash, verify_token]
     );
+
+    // Email de bienvenida/confirmación (no bloqueante)
+    let email_sent = false;
+    try {
+      const base = publicBaseUrl(req);
+      const verifyUrl = `${base}/verify-email?token=${encodeURIComponent(verify_token)}`;
+      const out = await sendEmail({
+        to: email,
+        subject: 'Bienvenido a AgroSense · Confirma tu cuenta',
+        text: `Tu cuenta se ha creado correctamente.\n\nEmail: ${email}\n\nConfirma tu email aquí: ${verifyUrl}\n`,
+        html: `<p>Tu cuenta se ha creado correctamente.</p><p><b>Email:</b> ${email}</p><p>Confirma tu email aquí: <a href="${verifyUrl}">${verifyUrl}</a></p>`
+      });
+      email_sent = Boolean(out.sent);
+    } catch (e) {
+      console.warn('sendEmail(register) failed:', e.message);
+    }
 
     const token = signUserJwt({ id, email });
     setAuthCookie(res, token);
-    res.json({ status: 'OK', user: { id, email } });
+    res.json({ status: 'OK', user: { id, email }, email_sent });
   } catch (e) {
     if (/duplicate key value|unique constraint/i.test(String(e.message))) {
       return res.status(409).json({ error: 'Email ya registrado' });
     }
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/auth/resend-verification', async (req, res) => {
+  try {
+    // No revelar existencia de cuentas: siempre OK.
+    const emailFromBody = typeof req.body?.email === 'string' ? req.body.email : '';
+    let email = String(emailFromBody || '').trim().toLowerCase();
+
+    if (req.user?.id) {
+      const r = await pool.query('SELECT id, email, email_verified, verify_token FROM users WHERE id = $1', [req.user.id]);
+      const u = r.rows[0];
+      if (!u) return res.json({ status: 'OK' });
+      if (u.email_verified) return res.json({ status: 'OK', already_verified: true });
+      email = u.email;
+    }
+
+    if (!email || !email.includes('@') || email.length > 255) {
+      return res.json({ status: 'OK' });
+    }
+
+    const r2 = await pool.query('SELECT id, email, email_verified, verify_token FROM users WHERE email = $1', [email]);
+    const user = r2.rows[0];
+    if (!user) return res.json({ status: 'OK' });
+    if (user.email_verified) return res.json({ status: 'OK', already_verified: true });
+
+    let token = user.verify_token;
+    if (!token) {
+      token = uuidv4();
+      await pool.query(
+        'UPDATE users SET verify_token = $1, verify_token_created_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [token, user.id]
+      );
+    }
+
+    try {
+      const base = publicBaseUrl(req);
+      const verifyUrl = `${base}/verify-email?token=${encodeURIComponent(token)}`;
+      const out = await sendEmail({
+        to: email,
+        subject: 'AgroSense · Confirma tu email',
+        text: `Confirma tu email aquí: ${verifyUrl}\n`,
+        html: `<p>Confirma tu email aquí:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p>`
+      });
+      return res.json({ status: 'OK', email_sent: Boolean(out.sent) });
+    } catch (e) {
+      console.warn('sendEmail(resend-verification) failed:', e.message);
+      return res.json({ status: 'OK', email_sent: false });
+    }
+  } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
   }
@@ -724,6 +864,118 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/auth/change-password', async (req, res) => {
+  try {
+    if (!req.user?.id) return res.status(401).json({ error: 'No autenticado' });
+    const parsed = ChangePasswordSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: friendlyZodAuthError(parsed.error.issues), details: parsed.error.issues });
+    }
+    const r = await pool.query('SELECT id, password_hash, email FROM users WHERE id = $1', [req.user.id]);
+    const user = r.rows[0];
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const ok = await bcrypt.compare(parsed.data.current_password, user.password_hash);
+    if (!ok) return res.status(401).json({ error: 'Contraseña actual incorrecta' });
+    const password_hash = await bcrypt.hash(parsed.data.new_password, 10);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [password_hash, user.id]);
+    res.json({ status: 'OK' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/auth/request-password-reset', async (req, res) => {
+  try {
+    const parsed = ForgotPasswordSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      // No revelar demasiado
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+    const email = String(parsed.data.email).trim().toLowerCase();
+    const r = await pool.query('SELECT id, email FROM users WHERE email = $1', [email]);
+    const user = r.rows[0];
+    if (user) {
+      const token = uuidv4() + uuidv4();
+      const id = uuidv4();
+      const expiresMinutes = Math.max(5, Number(process.env.PASSWORD_RESET_MINUTES || 60));
+      await pool.query(
+        `INSERT INTO password_resets (id, user_id, token, expires_at)
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP + ($4 || ' minutes')::interval)`,
+        [id, user.id, token, String(expiresMinutes)]
+      );
+
+      try {
+        const base = publicBaseUrl(req);
+        const url = `${base}/reset-password?token=${encodeURIComponent(token)}`;
+        await sendEmail({
+          to: email,
+          subject: 'AgroSense · Recuperar contraseña',
+          text: `Para cambiar tu contraseña, abre este enlace (caduca en ${expiresMinutes} minutos):\n${url}\n`,
+          html: `<p>Para cambiar tu contraseña, abre este enlace (caduca en ${expiresMinutes} minutos):</p><p><a href="${url}">${url}</a></p>`
+        });
+      } catch (e) {
+        console.warn('sendEmail(reset) failed:', e.message);
+      }
+    }
+    res.json({ status: 'OK' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const parsed = ResetPasswordSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: friendlyZodAuthError(parsed.error.issues), details: parsed.error.issues });
+    }
+    const token = String(parsed.data.token);
+    const rr = await pool.query(
+      `SELECT pr.id, pr.user_id, pr.expires_at, pr.used_at
+       FROM password_resets pr
+       WHERE pr.token = $1
+       LIMIT 1`,
+      [token]
+    );
+    const row = rr.rows[0];
+    if (!row) return res.status(400).json({ error: 'Token inválido' });
+    if (row.used_at) return res.status(400).json({ error: 'Token ya usado' });
+    const exp = new Date(row.expires_at);
+    if (Number.isNaN(exp.getTime()) || exp.getTime() < Date.now()) return res.status(400).json({ error: 'Token caducado' });
+
+    const password_hash = await bcrypt.hash(parsed.data.new_password, 10);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [password_hash, row.user_id]);
+    await pool.query('UPDATE password_resets SET used_at = CURRENT_TIMESTAMP WHERE id = $1', [row.id]);
+    res.json({ status: 'OK' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/verify-email', async (req, res) => {
+  try {
+    const token = String(req.query.token || '').trim();
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    if (!token) return res.status(400).send('Token inválido');
+
+    const r = await pool.query('SELECT id, email_verified FROM users WHERE verify_token = $1 LIMIT 1', [token]);
+    const u = r.rows[0];
+    if (!u) return res.status(400).send('Token inválido o ya usado');
+    if (!u.email_verified) {
+      await pool.query('UPDATE users SET email_verified = TRUE, verify_token = NULL WHERE id = $1', [u.id]);
+    }
+    res.send('<html><body style="font-family:Arial,sans-serif;background:#0b1220;color:#e9eef7;padding:24px;"><h2>Email verificado</h2><p>Tu cuenta ya está verificada. Puedes volver a <a style="color:#b8f5c1" href="/login">iniciar sesión</a>.</p></body></html>');
+  } catch (e) {
+    console.error(e);
+    res.status(500).send('Error verificando email');
   }
 });
 
@@ -2077,6 +2329,20 @@ app.get('/login', (req, res) => {
   res.sendFile(__dirname + '/public/login.html');
 });
 
+app.get('/email-sent', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.sendFile(__dirname + '/public/email-sent.html');
+});
+
+app.get('/reset-password', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.sendFile(__dirname + '/public/reset-password.html');
+});
+
 // Servir dashboard
 app.get('/panel/:device_code', (req, res) => {
   const { device_code } = req.params;
@@ -2093,7 +2359,7 @@ app.get('/panel/:device_code', (req, res) => {
         [req.user.id, device_code]
       )
       .then((r) => {
-        if (!r.rows.length) return res.status(403).send('No tienes acceso a este dispositivo');
+        if (!r.rows.length) return res.redirect(`/app?no_access=1&device=${encodeURIComponent(device_code)}`);
         res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.set('Pragma', 'no-cache');
         res.set('Expires', '0');

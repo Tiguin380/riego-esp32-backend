@@ -27,6 +27,21 @@ El backend soporta registro/login y separación de dispositivos por usuario.
 - `JWT_SECRET` (recomendado): secreto para firmar la cookie de sesión.
 - `ADMIN_KEY` (recomendado): habilita endpoints admin (rotar tokens, obtener claim_token, etc.).
 
+### Emails (confirmación y reset) ✉️
+
+El backend puede enviar:
+- Email de confirmación al registrarse (`/verify-email?token=...`).
+- Email de recuperación de contraseña (`/reset-password?token=...`).
+
+Variables necesarias (Railway → Variables):
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_FROM` (ej: `AgroSense <no-reply@tudominio.com>`)
+- (Opcional) `SMTP_USER`, `SMTP_PASS`
+- (Opcional) `SMTP_SECURE` (`true` para 465)
+- (Opcional) `PUBLIC_BASE_URL` (ej: `https://<tu-app>.railway.app`) para construir enlaces correctos detrás de proxy
+- (Opcional) `PASSWORD_RESET_MINUTES` (por defecto 60)
+
 **Flujo recomendado para comercializar**
 
 1. El usuario entra en `/login` y crea cuenta.

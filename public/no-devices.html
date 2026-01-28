@@ -18,6 +18,12 @@
     p { margin: 8px 0; color:#ccc; line-height:1.35; }
     a, button { color:#b8f5c1; }
     button { background: linear-gradient(135deg, #4CAF50, #22c55e); color:#06210f; border:none; border-radius:12px; padding: 12px 14px; font-weight:bold; cursor:pointer; margin-top: 10px; }
+    input { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); background:#0b2a55; color:#fff; font-size: 14px; outline: none; margin-top: 8px; }
+    input:focus { border-color: rgba(76,175,80,0.55); box-shadow: 0 0 0 4px rgba(76,175,80,0.12); }
+    .row { display:flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+    .btn-secondary { background: rgba(255,255,255,0.08); color:#dbe7ff; border:1px solid rgba(255,255,255,0.14); }
+    .msg { margin-top: 10px; min-height: 18px; font-size: 12px; color:#bbb; }
+    .msg.err { color:#ff9a9a; }
     .muted { color:#b8c4d6; font-size: 12px; }
   </style>
 </head>
@@ -32,15 +38,58 @@
       />
     </div>
     <h1>No tienes dispositivos aún</h1>
+    <p id="noAccess" style="display:none;">No tienes acceso a ese dispositivo. Puedes <b>asignar (claim)</b> uno a tu cuenta.</p>
     <p>Para ver tu panel, primero tienes que <b>asignar (claim)</b> un ESP32 a tu cuenta.</p>
     <p class="muted">Necesitas el <b>device_code</b> y el <b>claim_token</b> (código de emparejamiento).</p>
-    <button id="go">Ir al panel</button>
-    <p class="muted">Si no tienes el claim_token, pídeselo al administrador o usa el endpoint admin para obtenerlo.</p>
+
+    <input id="deviceCode" placeholder="device_code (ej: RIEGO_001)" autocomplete="off" />
+    <input id="claimToken" placeholder="claim_token" autocomplete="off" />
+
+    <div class="row">
+      <button id="claim">Asignar dispositivo</button>
+      <button id="logout" class="btn-secondary">Cerrar sesión</button>
+    </div>
+    <div class="msg" id="msg"></div>
+
+    <p class="muted">Si no tienes el claim_token, pídeselo al administrador (endpoint admin) para obtenerlo.</p>
   </div>
 
   <script>
-    document.getElementById('go').addEventListener('click', () => {
-      location.href = '/panel/RIEGO_001';
+    const msg = document.getElementById('msg');
+    function setMsg(t, err=false) {
+      msg.textContent = t || '';
+      msg.className = 'msg' + (err ? ' err' : '');
+    }
+
+    try {
+      const p = new URLSearchParams(location.search);
+      if (p.get('no_access') === '1') document.getElementById('noAccess').style.display = 'block';
+      const dc = (p.get('device') || '').trim();
+      if (dc) document.getElementById('deviceCode').value = dc;
+    } catch {}
+
+    document.getElementById('claim').addEventListener('click', async () => {
+      setMsg('Asignando...');
+      const device_code = (document.getElementById('deviceCode').value || '').trim();
+      const claim_token = (document.getElementById('claimToken').value || '').trim();
+      if (!device_code) return setMsg('Falta device_code', true);
+      if (!claim_token) return setMsg('Falta claim_token', true);
+
+      const r = await fetch('/api/device/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ device_code, claim_token })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 401) return location.href = `/login?next=${encodeURIComponent('/app')}`;
+      if (!r.ok) return setMsg(j.error || 'No se pudo asignar el dispositivo', true);
+      location.href = '/app';
+    });
+
+    document.getElementById('logout').addEventListener('click', async () => {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+      location.href = '/login';
     });
   </script>
 </body>

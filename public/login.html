@@ -19,6 +19,10 @@
     input { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); background:#0b2a55; color:#fff; font-size: 14px; outline: none; }
     input:focus { border-color: rgba(76,175,80,0.55); box-shadow: 0 0 0 4px rgba(76,175,80,0.12); }
     .row { display:flex; gap: 10px; margin-top: 12px; }
+    .hidden { display:none; }
+    .section { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.10); }
+    .section-title { font-weight: 700; margin: 0 0 6px; }
+    .section-sub { font-size: 12px; opacity: 0.9; margin-bottom: 10px; }
     button { flex:1; padding: 12px; border-radius: 10px; border: none; cursor: pointer; font-weight: bold; }
     .btn-primary { background: linear-gradient(135deg, #4CAF50, #22c55e); color:#06210f; }
     .btn-secondary { background: rgba(255,255,255,0.08); color:#dbe7ff; border:1px solid rgba(255,255,255,0.14); }
@@ -50,8 +54,43 @@
       <button class="btn-primary" id="btnLogin" type="button">Entrar</button>
       <button class="btn-secondary" id="btnRegister" type="button">Crear cuenta</button>
     </div>
+    <div style="margin-top:10px; display:flex; gap:10px; justify-content:space-between; flex-wrap:wrap; font-size:12px;">
+      <a href="#" id="link-forgot" style="color:rgba(255,255,255,0.82); text-decoration:underline;">¿Olvidaste tu contraseña?</a>
+      <a href="#" id="link-change" style="color:rgba(255,255,255,0.82); text-decoration:underline;">Cambiar contraseña</a>
+    </div>
 
     <div class="msg" id="msg"></div>
+
+    <div id="forgotSection" class="section hidden">
+      <div class="section-title">Recuperar contraseña</div>
+      <div class="section-sub">Te enviaremos un enlace por email.</div>
+
+      <label for="forgotEmail">Email</label>
+      <input id="forgotEmail" type="email" autocomplete="email" placeholder="tu@email.com" />
+
+      <div class="row">
+        <button class="btn-primary" id="btnSendReset" type="button">Enviar enlace</button>
+        <button class="btn-secondary" id="btnForgotBack" type="button">Volver</button>
+      </div>
+      <div class="msg" id="msgForgot"></div>
+    </div>
+
+    <div id="changeSection" class="section hidden">
+      <div class="section-title">Cambiar contraseña</div>
+      <div class="section-sub">Necesitas estar logueado.</div>
+
+      <label for="currentPassword">Contraseña actual</label>
+      <input id="currentPassword" type="password" autocomplete="current-password" placeholder="Contraseña actual" />
+
+      <label for="newPassword">Nueva contraseña</label>
+      <input id="newPassword" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres" />
+
+      <div class="row">
+        <button class="btn-primary" id="btnDoChange" type="button">Actualizar</button>
+        <button class="btn-secondary" id="btnChangeBack" type="button">Volver</button>
+      </div>
+      <div class="msg" id="msgChange"></div>
+    </div>
 
     <div class="hint">
       Si acabas de crear tu cuenta y no ves dispositivos, usa “Añadir dispositivo” en el panel y pega el <b>claim_token</b>.
@@ -60,9 +99,15 @@
 
   <script>
     const msg = document.getElementById('msg');
-    function setMsg(text, isErr=false) {
-      msg.textContent = text || '';
-      msg.className = 'msg' + (isErr ? ' err' : '');
+    const msgForgot = document.getElementById('msgForgot');
+    const msgChange = document.getElementById('msgChange');
+
+    const forgotSection = document.getElementById('forgotSection');
+    const changeSection = document.getElementById('changeSection');
+
+    function setMsg(el, text, isErr=false) {
+      el.textContent = text || '';
+      el.className = 'msg' + (isErr ? ' err' : '');
     }
 
     async function postJson(url, body) {
@@ -80,7 +125,10 @@
       try {
         const p = new URLSearchParams(location.search);
         const n = (p.get('next') || '').trim();
-        return n && n.startsWith('/') ? n : '/app';
+        if (!n || !n.startsWith('/')) return '/app';
+        // Evita redirigir a /panel/: el usuario recién registrado no tendrá ownership todavía.
+        if (n.startsWith('/panel/')) return '/app';
+        return n;
       } catch { return '/app'; }
     }
 
@@ -88,31 +136,91 @@
       return typeof email === 'string' && email.includes('@') && email.includes('.') && email.length <= 255;
     }
 
+    function hideSections() {
+      forgotSection.classList.add('hidden');
+      changeSection.classList.add('hidden');
+      setMsg(msgForgot, '');
+      setMsg(msgChange, '');
+    }
+
     document.getElementById('btnLogin').addEventListener('click', async () => {
-      setMsg('Entrando...');
+      hideSections();
+      setMsg(msg, 'Entrando...');
       const email = (document.getElementById('email').value || '').trim();
       const password = (document.getElementById('password').value || '').trim();
       const { r, j } = await postJson('/api/auth/login', { email, password });
-      if (!r.ok) return setMsg(j.error || 'No se pudo iniciar sesión', true);
+      if (!r.ok) return setMsg(msg, j.error || 'No se pudo iniciar sesión', true);
       location.href = nextUrl();
     });
 
     document.getElementById('btnRegister').addEventListener('click', async () => {
+      hideSections();
       const email = (document.getElementById('email').value || '').trim();
       const password = (document.getElementById('password').value || '').trim();
-
-      if (!isValidEmail(email)) return setMsg('Email inválido.', true);
-      if (password.length < 8) return setMsg('La contraseña debe tener al menos 8 caracteres.', true);
-
-      setMsg('Creando cuenta...');
+      if (!isValidEmail(email)) return setMsg(msg, 'Email inválido.', true);
+      if (password.length < 8) return setMsg(msg, 'La contraseña debe tener al menos 8 caracteres.', true);
+      setMsg(msg, 'Creando cuenta...');
       const { r, j } = await postJson('/api/auth/register', { email, password });
-      if (!r.ok) return setMsg(j.error || 'No se pudo crear la cuenta', true);
-      location.href = nextUrl();
+      if (!r.ok) return setMsg(msg, j.error || 'No se pudo crear la cuenta', true);
+      setMsg(msg, 'Cuenta creada.');
+      const sent = j && typeof j.email_sent === 'boolean' ? j.email_sent : false;
+      setTimeout(() => (location.href = `/email-sent?email=${encodeURIComponent(email)}&sent=${sent ? '1' : '0'}`), 350);
     });
 
-    // Enter = login
+    document.getElementById('link-forgot').addEventListener('click', (e) => {
+      e.preventDefault();
+      changeSection.classList.add('hidden');
+      forgotSection.classList.remove('hidden');
+      setMsg(msgForgot, '');
+      document.getElementById('forgotEmail').value = document.getElementById('email').value || '';
+      document.getElementById('forgotEmail').focus();
+    });
+
+    document.getElementById('link-change').addEventListener('click', (e) => {
+      e.preventDefault();
+      forgotSection.classList.add('hidden');
+      changeSection.classList.remove('hidden');
+      setMsg(msgChange, '');
+      document.getElementById('currentPassword').focus();
+    });
+
+    document.getElementById('btnForgotBack').addEventListener('click', () => {
+      hideSections();
+      document.getElementById('email').focus();
+    });
+
+    document.getElementById('btnChangeBack').addEventListener('click', () => {
+      hideSections();
+      document.getElementById('email').focus();
+    });
+
+    document.getElementById('btnSendReset').addEventListener('click', async () => {
+      setMsg(msgForgot, 'Enviando...');
+      const email = (document.getElementById('forgotEmail').value || '').trim();
+      if (!isValidEmail(email)) return setMsg(msgForgot, 'Email inválido.', true);
+      const { r, j } = await postJson('/api/auth/request-password-reset', { email });
+      if (!r.ok) return setMsg(msgForgot, j.error || 'No se pudo enviar el email.', true);
+      setMsg(msgForgot, 'Si existe la cuenta, te llegará un email con el enlace.');
+    });
+
+    document.getElementById('btnDoChange').addEventListener('click', async () => {
+      setMsg(msgChange, 'Actualizando...');
+      const current_password = (document.getElementById('currentPassword').value || '').trim();
+      const new_password = (document.getElementById('newPassword').value || '').trim();
+      if (!current_password) return setMsg(msgChange, 'Introduce tu contraseña actual.', true);
+      if (new_password.length < 8) return setMsg(msgChange, 'La nueva contraseña debe tener al menos 8 caracteres.', true);
+      const { r, j } = await postJson('/api/auth/change-password', { current_password, new_password });
+      if (!r.ok) return setMsg(msgChange, j.error || 'No se pudo cambiar la contraseña.', true);
+      setMsg(msgChange, 'Contraseña actualizada.');
+      document.getElementById('currentPassword').value = '';
+      document.getElementById('newPassword').value = '';
+    });
+
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') document.getElementById('btnLogin').click();
+      if (e.key !== 'Enter') return;
+      if (!forgotSection.classList.contains('hidden')) return document.getElementById('btnSendReset').click();
+      if (!changeSection.classList.contains('hidden')) return document.getElementById('btnDoChange').click();
+      return document.getElementById('btnLogin').click();
     });
   </script>
 </body>
