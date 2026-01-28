@@ -354,6 +354,30 @@
             const m = Object.fromEntries(parts.map(p => [p.type, p.value]));
             return { y: m.year, mo: m.month, d: m.day, h: m.hour, mi: m.minute };
         }
+
+        function getMadridPartsFull(date) {
+            const parts = new Intl.DateTimeFormat('sv-SE', {
+                timeZone: TZ,
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hourCycle: 'h23'
+            }).formatToParts(date);
+            const m = Object.fromEntries(parts.map(p => [p.type, p.value]));
+            return { y: m.year, mo: m.month, d: m.day, h: m.hour, mi: m.minute, s: m.second };
+        }
+
+        function parseTsToDate(ts) {
+            if (ts == null) return null;
+            if (ts instanceof Date) return ts;
+            if (typeof ts === 'number') {
+                // Heurística: si viene en segundos (muy pequeño), convertir a ms
+                const ms = ts < 1e12 ? ts * 1000 : ts;
+                const d = new Date(ms);
+                return Number.isNaN(d.getTime()) ? null : d;
+            }
+            const d = new Date(String(ts));
+            return Number.isNaN(d.getTime()) ? null : d;
+        }
         function pad2(n) { return String(n).padStart(2, '0'); }
         function formatUptimeSeconds(sec) {
             const n = Number(sec);
@@ -650,7 +674,8 @@
 
         function rangeForMode(mode) {
             const now = new Date();
-            if (mode === 'day') return { from: new Date(Date.now() - 24 * 3600 * 1000), to: now, step: '1m', bucketMs: 60000 };
+            // DÍA: usar RAW para que se vea en tiempo real (segundos) y no “a saltos” por minuto.
+            if (mode === 'day') return { from: new Date(Date.now() - 24 * 3600 * 1000), to: now, step: 'raw', bucketMs: null };
             if (mode === 'month') return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now, step: '1h', bucketMs: 3600000 };
             return { from: new Date(now.getFullYear(), 0, 1), to: now, step: '1h', bucketMs: 3600000 }; // year
         }
@@ -681,21 +706,34 @@
 
             if (viewMode === 'day') {
                 document.getElementById('periodLabel').textContent = 'Día';
-                document.getElementById('periodValue').textContent = `${fmtDateEs.format(new Date())} (últimas 24h)`;
+                document.getElementById('periodValue').textContent = `${fmtDateEs.format(new Date())} (últimas 24h, tiempo real)`;
+
+                // step=raw: rows = { ts, humidity, valve_state, ... }
+                let prevT = null;
+                let prevOn = false;
 
                 for (const r of rows) {
-                    const ts = r.ts;
-                    if (!ts) continue;
-                    const p = getMadridParts(new Date(ts));
-                    labels.push(`${p.d} ${p.h}:${p.mi}`);
+                    const d = parseTsToDate(r.ts);
+                    if (!d) continue;
+
+                    const p = getMadridPartsFull(d);
+                    labels.push(`${p.d} ${p.h}:${p.mi}:${p.s}`);
 
                     const h = r.humidity == null ? null : Number(r.humidity);
                     hum.push(h == null || Number.isNaN(h) ? null : Number(h.toFixed(2)));
                     if (h != null && !Number.isNaN(h)) { totalHumSum += h; totalHumCount += 1; }
 
-                    const on = Number(r.valve_on || 0) >= 1 ? 1 : 0;
-                    valve.push(on);
-                    totalValveOnMs += on * bucketMs;
+                    const vs = (r.valve_state || '').toString().toUpperCase();
+                    const onNow = vs === 'ON' || vs === '1' || vs === 'TRUE';
+                    valve.push(onNow ? 1 : 0);
+
+                    const t = d.getTime();
+                    if (prevT != null) {
+                        const dt = Math.max(0, t - prevT);
+                        if (prevOn) totalValveOnMs += dt;
+                    }
+                    prevT = t;
+                    prevOn = onNow;
                 }
 
                 valveChart.options.scales.y.min = -0.1;
