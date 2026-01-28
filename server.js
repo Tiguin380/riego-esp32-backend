@@ -18,7 +18,7 @@ app.set('trust proxy', 1);
 // el navegador rechazará la cookie y parecerá que “no inicia sesión”.
 // Forzamos HTTPS para evitar ese bucle.
 app.use((req, res, next) => {
-  const cookieSecure = envBool('COOKIE_SECURE', process.env.NODE_ENV === 'production');
+  const cookieSecure = envBool('COOKIE_SECURE', process.env.NODE_ENV === 'production') || COOKIE_SAMESITE === 'none';
   if (!cookieSecure) return next();
 
   const xfProto = String(req.get('x-forwarded-proto') || '')
@@ -43,6 +43,10 @@ const REQUIRE_USER_LOGIN = envBool('REQUIRE_USER_LOGIN', Boolean(process.env.DAT
 const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || 'dev-insecure-jwt-secret';
 const JWT_COOKIE_NAME = process.env.JWT_COOKIE_NAME || 'sid';
 const COOKIE_SECURE = envBool('COOKIE_SECURE', process.env.NODE_ENV === 'production');
+const COOKIE_SAMESITE_RAW = String(process.env.COOKIE_SAMESITE || 'lax').trim().toLowerCase();
+const COOKIE_SAMESITE = (COOKIE_SAMESITE_RAW === 'none' || COOKIE_SAMESITE_RAW === 'strict' || COOKIE_SAMESITE_RAW === 'lax')
+  ? COOKIE_SAMESITE_RAW
+  : 'lax';
 const COOKIE_MAX_AGE_MS = Math.max(1, Number(process.env.COOKIE_MAX_AGE_MS || 1000 * 60 * 60 * 24 * 14));
 
 // CORS: mismo origen normalmente. Si lo sirves desde otro dominio, activa credenciales.
@@ -178,20 +182,22 @@ function getDeviceTokenFromReq(req) {
 const REQUIRE_DEVICE_TOKEN = String(process.env.REQUIRE_DEVICE_TOKEN || 'false').toLowerCase() === 'true';
 
 function setAuthCookie(res, token) {
+  const secure = COOKIE_SECURE || COOKIE_SAMESITE === 'none';
   res.cookie(JWT_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: COOKIE_SECURE,
-    sameSite: 'lax',
+    secure,
+    sameSite: COOKIE_SAMESITE,
     maxAge: COOKIE_MAX_AGE_MS,
     path: '/'
   });
 }
 
 function clearAuthCookie(res) {
+  const secure = COOKIE_SECURE || COOKIE_SAMESITE === 'none';
   res.clearCookie(JWT_COOKIE_NAME, {
     httpOnly: true,
-    secure: COOKIE_SECURE,
-    sameSite: 'lax',
+    secure,
+    sameSite: COOKIE_SAMESITE,
     path: '/'
   });
 }
@@ -200,6 +206,31 @@ function getJwtFromReq(req) {
   const c = req.cookies?.[JWT_COOKIE_NAME];
   return typeof c === 'string' && c.trim() ? c.trim() : null;
 }
+
+app.get('/api/debug/session', (req, res) => {
+  const xfProto = String(req.get('x-forwarded-proto') || '').split(',')[0].trim().toLowerCase();
+  const xfHost = String(req.get('x-forwarded-host') || '').split(',')[0].trim();
+  const host = String(req.get('host') || '').trim();
+  const token = getJwtFromReq(req);
+
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    now: new Date().toISOString(),
+    host,
+    x_forwarded_host: xfHost || null,
+    protocol: req.protocol,
+    secure_req: Boolean(req.secure),
+    x_forwarded_proto: xfProto || null,
+    cookie: {
+      name: JWT_COOKIE_NAME,
+      received: Boolean(token),
+      cookie_secure: Boolean(COOKIE_SECURE),
+      cookie_samesite: COOKIE_SAMESITE,
+      cookie_max_age_ms: COOKIE_MAX_AGE_MS
+    },
+    user: req.user ? { id: req.user.id || null, email: req.user.email || null } : null
+  });
+});
 
 function signUserJwt(user) {
   return jwt.sign(
