@@ -13,10 +13,9 @@
       --product-size: clamp(28px, 5.8vw, 44px);
       --tagline-size: clamp(13px, 2.6vw, 18px);
     }
-    .brand { display:flex; align-items:center; gap: clamp(10px, 2.4vw, 16px); justify-content:flex-start; margin-bottom: 12px; flex-wrap: wrap; }
+    .brand { display:flex; align-items:center; justify-content:flex-start; margin-bottom: 12px; }
     .brand img { width: var(--logo-size); height: var(--logo-size); object-fit: contain; display:block; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55)); }
-    .brand .product { font-weight: 950; color:#4CAF50; font-size: var(--product-size); line-height: 1.02; letter-spacing: 0.3px; }
-    .brand .tagline { color:#b8c4d6; font-size: var(--tagline-size); }
+    .brand .product, .brand .tagline { display:none; }
     h1 { margin:0 0 10px; color:#dff7e3; font-size:20px; }
     p { margin: 8px 0; color:#ccc; line-height:1.35; }
     a, button { color:#b8f5c1; }
@@ -27,11 +26,12 @@
 <body>
   <div class="card">
     <div class="brand">
-      <img src="/logo.png?v=20260128" alt="AgroSense" onerror="this.style.display='none'" />
-      <div>
-        <div class="product">AgroSense</div>
-        <div class="tagline">Control Inteligente de Riego y Suelo</div>
-      </div>
+      <img
+        src="/logo.png?v=20260128"
+        srcset="/logo.png?v=20260128 1x, /logo@2x.png?v=20260128 2x"
+        alt="AgroSense"
+        onerror="this.style.display='none'"
+      />
     </div>
     <h1>No tienes dispositivos aún</h1>
     <p>Para ver tu panel, primero tienes que <b>asignar (claim)</b> un ESP32 a tu cuenta.</p>

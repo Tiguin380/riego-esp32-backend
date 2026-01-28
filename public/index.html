@@ -14,11 +14,9 @@
             --product-size: clamp(28px, 5.8vw, 46px);
             --tagline-size: clamp(13px, 2.6vw, 18px);
         }
-        .brand-header { display:flex; align-items:center; justify-content:center; gap: clamp(10px, 2.4vw, 16px); margin: 6px 0 10px; flex-wrap: wrap; }
+        .brand-header { display:flex; align-items:center; justify-content:center; margin: 6px 0 10px; }
         .brand-header img { width: var(--logo-size); height: var(--logo-size); object-fit: contain; display:block; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55)); }
-        .brand-title { text-align:center; }
-        .brand-title .product { font-weight: 950; color:#4CAF50; font-size: var(--product-size); line-height: 1.02; letter-spacing: 0.3px; }
-        .brand-title .tagline { color:#b8c4d6; font-size: var(--tagline-size); margin-top: 3px; max-width: 620px; }
+        .brand-title { display:none; }
         .section { background: #16213e; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
         .section h2 { color: #4CAF50; font-size: 16px; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
         /* Rejilla responsive: evita que en móvil se “salgan” las tarjetas */
@@ -91,11 +89,12 @@
 <body>
     <div class="container">
         <div class="brand-header">
-                <img src="/logo.png?v=20260128" alt="AgroSense" onerror="this.style.display='none'" />
-            <div class="brand-title">
-                <div class="product">AgroSense</div>
-                <div class="tagline">Control Inteligente de Riego y Suelo</div>
-            </div>
+            <img
+              src="/logo.png?v=20260128"
+              srcset="/logo.png?v=20260128 1x, /logo@2x.png?v=20260128 2x"
+              alt="AgroSense"
+              onerror="this.style.display='none'"
+            />
         </div>
         <div class="status" style="margin-bottom: 12px;">UI v2026-01-28</div>
 
