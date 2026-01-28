@@ -94,16 +94,68 @@ function getDeviceTokenFromReq(req) {
   );
 }
 
+const REQUIRE_DEVICE_TOKEN = String(process.env.REQUIRE_DEVICE_TOKEN || 'false').toLowerCase() === 'true';
+
+function hasValidAdminKey(req) {
+  const adminKey = process.env.ADMIN_KEY;
+  if (!adminKey) return false;
+  return req.get('x-admin-key') === adminKey;
+}
+
+async function enforceDeviceTokenIfRequired(req, res, device_code) {
+  if (!REQUIRE_DEVICE_TOKEN) return true;
+  if (hasValidAdminKey(req)) return true;
+
+  const dev = await getDeviceByCode(device_code);
+  if (!dev) {
+    res.status(404).json({ error: 'Dispositivo no encontrado' });
+    return false;
+  }
+
+  const token = getDeviceTokenFromReq(req);
+  if (dev.api_token && token !== dev.api_token) {
+    res.status(401).json({ error: 'Token inválido (X-Device-Token)' });
+    return false;
+  }
+
+  return true;
+}
+
 async function getDeviceByCode(device_code) {
   const r = await pool.query('SELECT * FROM devices WHERE device_code = $1', [device_code]);
   return r.rows[0] || null;
 }
 
 async function ensureDeviceTokenForExistingRows() {
+  if (!REQUIRE_DEVICE_TOKEN) return;
   const missing = await pool.query(`SELECT id FROM devices WHERE api_token IS NULL OR api_token = ''`);
   for (const row of missing.rows) {
     await pool.query('UPDATE devices SET api_token = $1 WHERE id = $2', [uuidv4(), row.id]);
   }
+}
+
+async function ensureDefaultChannels(device_id) {
+  // Crea canal por defecto para compatibilidad: Sensor 1 (humedad) y Válvula 1
+  await pool.query(
+    `INSERT INTO device_channels (id, device_id, kind, channel_index, name)
+     VALUES ($1, $2, 'soil_sensor', 1, 'Sensor 1')
+     ON CONFLICT (device_id, kind, channel_index) DO NOTHING`,
+    [uuidv4(), device_id]
+  );
+  await pool.query(
+    `INSERT INTO device_channels (id, device_id, kind, channel_index, name)
+     VALUES ($1, $2, 'valve', 1, 'Válvula 1')
+     ON CONFLICT (device_id, kind, channel_index) DO NOTHING`,
+    [uuidv4(), device_id]
+  );
+}
+
+async function getChannelId(device_id, kind, channel_index) {
+  const r = await pool.query(
+    `SELECT id FROM device_channels WHERE device_id = $1 AND kind = $2 AND channel_index = $3`,
+    [device_id, kind, channel_index]
+  );
+  return r.rows[0]?.id || null;
 }
 
 async function markAlertState(device_id, kind) {
@@ -277,6 +329,31 @@ async function initDB() {
       )
     `);
 
+    // Canales: válvulas y sensores múltiples
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS device_channels (
+        id UUID PRIMARY KEY,
+        device_id UUID REFERENCES devices(id),
+        kind VARCHAR(20) NOT NULL, -- 'soil_sensor' | 'valve'
+        channel_index INTEGER NOT NULL,
+        name VARCHAR(80) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (device_id, kind, channel_index)
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS channel_samples (
+        id SERIAL PRIMARY KEY,
+        channel_id UUID REFERENCES device_channels(id),
+        ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        value DECIMAL(10,3),
+        state INTEGER
+      )
+    `);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_channel_samples_channel_time ON channel_samples(channel_id, ts DESC)`);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS alert_state (
         device_id UUID REFERENCES devices(id),
@@ -328,6 +405,16 @@ async function initDB() {
 
     await ensureDeviceTokenForExistingRows();
 
+    // Canales por defecto para dispositivos existentes
+    try {
+      const devs = await pool.query('SELECT id FROM devices');
+      for (const d of devs.rows) {
+        await ensureDefaultChannels(d.id);
+      }
+    } catch (e) {
+      console.warn('ensureDefaultChannels failed:', e.message);
+    }
+
     console.log('Database initialized (auto)');
   } catch (error) {
     console.error('Error initializing DB on startup:', error.message);
@@ -374,11 +461,12 @@ app.post('/api/device/register', async (req, res) => {
 
     if (device.rows.length === 0) {
       const id = uuidv4();
-      const api_token = uuidv4();
+      const api_token = REQUIRE_DEVICE_TOKEN ? uuidv4() : null;
       await pool.query(
         'INSERT INTO devices (id, device_code, name, location, api_token) VALUES ($1, $2, $3, $4, $5)',
         [id, device_code, name || 'ESP32 Riego', location || null, api_token]
       );
+      await ensureDefaultChannels(id);
       device = await pool.query('SELECT * FROM devices WHERE id = $1', [id]);
     }
 
@@ -425,6 +513,9 @@ app.post('/api/sensor/data', async (req, res) => {
 
     const device_id = device.rows[0].id;
 
+    // Asegurar canales base
+    await ensureDefaultChannels(device_id);
+
     const resolved_valve_state = valve_state || led_status || null;
 
     await pool.query(
@@ -452,6 +543,37 @@ app.post('/api/sensor/data', async (req, res) => {
         humidity_good_color
       ]
     );
+
+    // Guardar muestras por canal (compatibilidad con canal 1)
+    try {
+      const now = new Date();
+
+      // Sensor humedad 1
+      if (typeof humidity === 'number' && Number.isFinite(humidity)) {
+        const ch = await getChannelId(device_id, 'soil_sensor', 1);
+        if (ch) {
+          await pool.query(
+            `INSERT INTO channel_samples (channel_id, ts, value) VALUES ($1, $2, $3)`,
+            [ch, now, humidity]
+          );
+        }
+      }
+
+      // Válvula 1
+      if (resolved_valve_state) {
+        const ch = await getChannelId(device_id, 'valve', 1);
+        if (ch) {
+          const vs = String(resolved_valve_state).toUpperCase();
+          const state = vs === 'ON' || vs === '1' || vs === 'TRUE' ? 1 : 0;
+          await pool.query(
+            `INSERT INTO channel_samples (channel_id, ts, state) VALUES ($1, $2, $3)`,
+            [ch, now, state]
+          );
+        }
+      }
+    } catch (e) {
+      console.warn('channel_samples insert failed:', e.message);
+    }
 
     // Emitir update por SSE (si hay clientes conectados)
     sseBroadcast(device_code, 'sensor', {
@@ -518,11 +640,11 @@ app.get('/api/sensor/latest/:device_code', async (req, res) => {
 app.post('/api/device/reboots/reset/:device_code', async (req, res) => {
   try {
     const { device_code } = req.params;
-    const token = getDeviceTokenFromReq(req);
-
     const dev = await getDeviceByCode(device_code);
     if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
-    if (dev.api_token && token !== dev.api_token) return res.status(401).json({ error: 'Token inválido (X-Device-Token)' });
+
+    const ok = await enforceDeviceTokenIfRequired(req, res, device_code);
+    if (!ok) return;
 
     const last = await pool.query(
       `SELECT reboot_count FROM sensor_data WHERE device_id = $1 ORDER BY created_at DESC LIMIT 1`,
@@ -566,22 +688,195 @@ app.get('/api/devices', async (req, res) => {
        GROUP BY d.id
        ORDER BY d.created_at ASC`
     );
-    res.json(result.rows);
+    res.json(
+      result.rows.map((r) => {
+        const out = { ...r };
+        if (r.last_seen) {
+          const d = new Date(r.last_seen);
+          out.last_seen_madrid = fmtEsLabel.format(d);
+        } else {
+          out.last_seen_madrid = null;
+        }
+        return out;
+      })
+    );
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message });
   }
 });
 
+// --- Canales (sensores/válvulas múltiples) ---
+app.get('/api/channels/:device_code', async (req, res) => {
+  try {
+    const { device_code } = req.params;
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    await ensureDefaultChannels(dev.id);
+
+    const r = await pool.query(
+      `SELECT id, kind, channel_index, name, created_at
+       FROM device_channels
+       WHERE device_id = $1
+       ORDER BY kind ASC, channel_index ASC`,
+      [dev.id]
+    );
+    res.json({ device_code, channels: r.rows });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/channels/:device_code', async (req, res) => {
+  try {
+    const { device_code } = req.params;
+    const { kind, name } = req.body || {};
+
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+
+    const ok = await enforceDeviceTokenIfRequired(req, res, device_code);
+    if (!ok) return;
+
+    if (kind !== 'soil_sensor' && kind !== 'valve') {
+      return res.status(400).json({ error: 'kind inválido (soil_sensor|valve)' });
+    }
+
+    await ensureDefaultChannels(dev.id);
+    const nextIdxR = await pool.query(
+      `SELECT COALESCE(MAX(channel_index), 0) + 1 AS next
+       FROM device_channels
+       WHERE device_id = $1 AND kind = $2`,
+      [dev.id, kind]
+    );
+    const channel_index = Number(nextIdxR.rows[0]?.next || 1);
+    const finalName = String(name || (kind === 'valve' ? `Válvula ${channel_index}` : `Sensor ${channel_index}`)).slice(0, 80);
+
+    const id = uuidv4();
+    await pool.query(
+      `INSERT INTO device_channels (id, device_id, kind, channel_index, name)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [id, dev.id, kind, channel_index, finalName]
+    );
+    res.json({ status: 'OK', device_code, channel: { id, kind, channel_index, name: finalName } });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/channels/:device_code/:channel_id', async (req, res) => {
+  try {
+    const { device_code, channel_id } = req.params;
+    const { name } = req.body || {};
+
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+
+    const ok = await enforceDeviceTokenIfRequired(req, res, device_code);
+    if (!ok) return;
+
+    const finalName = String(name || '').trim();
+    if (!finalName) return res.status(400).json({ error: 'name requerido' });
+
+    const owned = await pool.query(
+      `SELECT id FROM device_channels WHERE id = $1 AND device_id = $2`,
+      [channel_id, dev.id]
+    );
+    if (owned.rows.length === 0) return res.status(404).json({ error: 'Canal no encontrado' });
+
+    await pool.query(
+      `UPDATE device_channels SET name = $1 WHERE id = $2`,
+      [finalName.slice(0, 80), channel_id]
+    );
+    res.json({ status: 'OK', device_code, channel_id, name: finalName.slice(0, 80) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Histórico por canal
+app.get('/api/channel/history/:device_code/:channel_id', async (req, res) => {
+  try {
+    const { device_code, channel_id } = req.params;
+    const step = String(req.query.step || 'raw'); // raw | 1m | 1h | 1d
+    const from = parseDateParam(req.query.from) || new Date(Date.now() - 24 * 3600 * 1000);
+    const to = parseDateParam(req.query.to) || new Date();
+    const limit = Math.min(Number(req.query.limit || 5000), 20000);
+
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+
+    const ch = await pool.query(
+      `SELECT id, kind, channel_index, name FROM device_channels WHERE id = $1 AND device_id = $2`,
+      [channel_id, dev.id]
+    );
+    if (ch.rows.length === 0) return res.status(404).json({ error: 'Canal no encontrado' });
+
+    if (step === 'raw') {
+      const r = await pool.query(
+        `SELECT ts, value, state
+         FROM channel_samples
+         WHERE channel_id = $1 AND ts >= $2 AND ts <= $3
+         ORDER BY ts ASC
+         LIMIT $4`,
+        [channel_id, from, to, limit]
+      );
+      return res.json({
+        device_code,
+        channel: ch.rows[0],
+        step,
+        range: { from: from.toISOString(), to: to.toISOString() },
+        server_now: new Date().toISOString(),
+        rows: r.rows.map(enrichRowWithMadridTs)
+      });
+    }
+
+    let trunc;
+    if (step === '1m') trunc = "date_trunc('minute', ts)";
+    else if (step === '1h') trunc = "date_trunc('hour', ts)";
+    else if (step === '1d') trunc = "date_trunc('day', ts)";
+    else return res.status(400).json({ error: 'step inválido (raw|1m|1h|1d)' });
+
+    const r = await pool.query(
+      `SELECT
+         ${trunc} AS ts,
+         AVG(value) AS value,
+         MAX(COALESCE(state, 0))::int AS state
+       FROM channel_samples
+       WHERE channel_id = $1 AND ts >= $2 AND ts <= $3
+       GROUP BY ts
+       ORDER BY ts ASC
+       LIMIT $4`,
+      [channel_id, from, to, limit]
+    );
+
+    res.json({
+      device_code,
+      channel: ch.rows[0],
+      step,
+      range: { from: from.toISOString(), to: to.toISOString() },
+      server_now: new Date().toISOString(),
+      rows: r.rows.map(enrichRowWithMadridTs)
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/devices/:device_code', async (req, res) => {
   try {
     const { device_code } = req.params;
-    const token = getDeviceTokenFromReq(req);
     const { name, location } = req.body || {};
 
     const dev = await getDeviceByCode(device_code);
     if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
-    if (dev.api_token && token !== dev.api_token) return res.status(401).json({ error: 'Token inválido (X-Device-Token)' });
+
+    const ok = await enforceDeviceTokenIfRequired(req, res, device_code);
+    if (!ok) return;
 
     await pool.query(
       `UPDATE devices
@@ -1189,7 +1484,6 @@ app.get('/api/alerts/:device_code', async (req, res) => {
 app.post('/api/config/:device_code', async (req, res) => {
   try {
     const { device_code } = req.params;
-    const token = getDeviceTokenFromReq(req);
 
     const parsed = DeviceConfigSchema.safeParse(req.body || {});
     if (!parsed.success) {
@@ -1208,12 +1502,9 @@ app.post('/api/config/:device_code', async (req, res) => {
 
     const device_id = device.rows[0].id;
 
-    // Auth simple: para cambiar config hace falta token del dispositivo
-    const devRow = await pool.query('SELECT api_token FROM devices WHERE id = $1', [device_id]);
-    const api_token = devRow.rows[0]?.api_token;
-    if (api_token && token !== api_token) {
-      return res.status(401).json({ error: 'Token inválido (X-Device-Token)' });
-    }
+    // Auth (opcional): por defecto NO exige token; activar con REQUIRE_DEVICE_TOKEN=true
+    const ok = await enforceDeviceTokenIfRequired(req, res, device_code);
+    if (!ok) return;
 
     // Verificar si existe configuración
     const existing = await pool.query(

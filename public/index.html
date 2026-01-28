@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -39,7 +39,7 @@
         .control-row { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
         .control-row label { flex: 1; color: #aaa; }
         .control-row input, .control-row select { flex: 2; padding: 10px; border: none; border-radius: 6px; background: #0f3460; color: #fff; font-size: 14px; }
-        .control-row input[type="range"] { -webkit-appearance: none; height: 8px; }
+        .control-row input[type="range"] { -webkit-appearance: none; appearance: none; height: 8px; }
         .control-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: #4CAF50; border-radius: 50%; cursor: pointer; }
         .btn-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 15px 0; }
         .btn { padding: 12px 8px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 12px; transition: transform 0.1s, opacity 0.2s; }
@@ -87,7 +87,7 @@
             <h2> DISPOSITIVO</h2>
             <div class="control-row" style="margin-bottom: 0;">
                 <label>Seleccionar:</label>
-                <select id="deviceSelect"></select>
+                <select id="deviceSelect" title="Seleccionar dispositivo"></select>
             </div>
             <div style="display:flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
                 <button class="mini-btn primary" id="btnAddDevice" type="button">+ Añadir dispositivo</button>
@@ -156,6 +156,23 @@
                     <button class="btn btn-azul" id="btnAno" type="button">AÑO</button>
                 </div>
             </div>
+
+            <div style="display:flex; gap: 12px; align-items:flex-end; flex-wrap: wrap; margin: 10px 0 6px;">
+                <div style="min-width: 220px; flex: 1;">
+                    <div class="sensor-label">Sensor de humedad (gráfica)</div>
+                    <select id="humChannelSelect" title="Seleccionar sensor de humedad"></select>
+                    <div style="margin-top: 8px; display:flex; gap: 8px;">
+                        <button class="mini-btn" id="btnRenameHum" type="button">Renombrar</button>
+                    </div>
+                </div>
+                <div style="min-width: 220px; flex: 1;">
+                    <div class="sensor-label">Válvula (gráfica)</div>
+                    <select id="valveChannelSelect" title="Seleccionar válvula"></select>
+                    <div style="margin-top: 8px; display:flex; gap: 8px;">
+                        <button class="mini-btn" id="btnRenameValve" type="button">Renombrar</button>
+                    </div>
+                </div>
+            </div>
             <div class="summary">
                 <div>
                     <div class="k" id="periodLabel">Periodo</div>
@@ -197,12 +214,12 @@
             <h2> CONFIGURACIÓN AUTOMÁTICA</h2>
             <div class="control-row">
                 <label>Umbral Humedad Baja:</label>
-                <input type="range" id="threshold" min="1" max="100" value="25">
+                <input type="range" id="threshold" min="1" max="100" value="25" title="Umbral de humedad baja">
                 <span id="thresholdValue" style="width:50px;text-align:right">25%</span>
             </div>
             <div class="control-row">
                 <label>Color si Humedad BAJA:</label>
-                <select id="colorBuena">
+                <select id="colorBuena" title="Color si humedad baja">
                     <option value="Rojo">Rojo</option>
                     <option value="Verde">Verde</option>
                     <option value="Azul">Azul</option>
@@ -214,7 +231,7 @@
             </div>
             <div class="control-row">
                 <label>Color si Humedad BUENA:</label>
-                <select id="colorBaja">
+                <select id="colorBaja" title="Color si humedad buena">
                     <option value="Rojo">Rojo</option>
                     <option value="Verde" selected>Verde</option>
                     <option value="Azul">Azul</option>
@@ -276,6 +293,19 @@
     <script>
         let config = { threshold: 25, colorB: 'Rojo', colorG: 'Verde' };
 
+        let channels = [];
+        let humChannelId = null;
+        let valveChannelId = null;
+
+        let chartsRebuildTimer = null;
+        function scheduleChartsRebuild() {
+            if (chartsRebuildTimer) return;
+            chartsRebuildTimer = setTimeout(() => {
+                chartsRebuildTimer = null;
+                rebuildCharts();
+            }, 1200);
+        }
+
         const DEFAULT_DEVICE = 'RIEGO_001';
         let deviceCode = (() => {
             const m = location.pathname.match(/\/panel\/([^\/?#]+)/);
@@ -331,7 +361,7 @@
                 select.value = deviceCode;
 
                 const current = list.find(d => d.device_code === deviceCode);
-                const lastSeen = current?.last_seen ? new Date(current.last_seen).toLocaleString('es-ES', { timeZone: TZ, hour12: false }) : '--';
+                const lastSeen = current?.last_seen_madrid || (current?.last_seen ? new Date(current.last_seen).toLocaleString('es-ES', { timeZone: TZ, hour12: false }) : '--');
                 meta.textContent = `${current?.name || deviceCode}${current?.location ? ' · ' + current.location : ''} · Último dato: ${lastSeen}`;
 
                 select.addEventListener('change', () => {
@@ -341,6 +371,57 @@
 
             } catch {
                 if (section) section.style.display = 'none';
+            }
+        }
+
+        async function loadChannels() {
+            try {
+                const r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}`);
+                if (!r.ok) throw new Error('channels failed');
+                const j = await r.json();
+                channels = Array.isArray(j.channels) ? j.channels : [];
+
+                const hums = channels.filter(c => c.kind === 'soil_sensor');
+                const valves = channels.filter(c => c.kind === 'valve');
+
+                const humSel = document.getElementById('humChannelSelect');
+                const valveSel = document.getElementById('valveChannelSelect');
+                humSel.innerHTML = '';
+                valveSel.innerHTML = '';
+
+                for (const c of hums) {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = `${c.name} (${c.channel_index})`;
+                    humSel.appendChild(opt);
+                }
+                for (const c of valves) {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = `${c.name} (${c.channel_index})`;
+                    valveSel.appendChild(opt);
+                }
+
+                if (!humChannelId || !hums.some(c => c.id === humChannelId)) humChannelId = hums[0]?.id || null;
+                if (!valveChannelId || !valves.some(c => c.id === valveChannelId)) valveChannelId = valves[0]?.id || null;
+
+                humSel.value = humChannelId || '';
+                valveSel.value = valveChannelId || '';
+
+                humSel.onchange = () => { humChannelId = humSel.value || null; scheduleChartsRebuild(); };
+                valveSel.onchange = () => { valveChannelId = valveSel.value || null; scheduleChartsRebuild(); };
+
+                const renameHumBtn = document.getElementById('btnRenameHum');
+                const renameValveBtn = document.getElementById('btnRenameValve');
+                if (renameHumBtn) renameHumBtn.disabled = hums.length === 0;
+                if (renameValveBtn) renameValveBtn.disabled = valves.length === 0;
+
+                // Si no hay canales, ocultar gráficas (pero normalmente habrá canal 1 por defecto)
+                document.getElementById('humChannelSelect').disabled = hums.length === 0;
+                document.getElementById('valveChannelSelect').disabled = valves.length === 0;
+
+            } catch (e) {
+                // Si falla, no rompemos
             }
         }
 
@@ -721,15 +802,32 @@
         }
 
         async function rebuildChartsFromServer() {
-            const { from, to, step, bucketMs } = rangeForMode(viewMode);
-            let url = `/api/sensor/history/${encodeURIComponent(deviceCode)}?step=${encodeURIComponent(step)}&limit=20000`;
-            if (from && to) {
-                url = `/api/sensor/history/${encodeURIComponent(deviceCode)}?step=${encodeURIComponent(step)}&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&limit=20000`;
-            }
-            const res = await fetch(url);
-            if (!res.ok) throw new Error('history failed');
-            const payload = await res.json();
-            const rows = Array.isArray(payload.rows) ? payload.rows : [];
+            // Para rendimiento: limitar puntos en DÍA (raw) y usar canales
+            if (!humChannelId && !valveChannelId) throw new Error('no channels');
+
+            const now = new Date();
+            let step;
+            let limit;
+            if (viewMode === 'day') { step = 'raw'; limit = 1500; }
+            else if (viewMode === 'month') { step = '1h'; limit = 2000; }
+            else { step = '1h'; limit = 4000; }
+
+            const baseHum = humChannelId ? `/api/channel/history/${encodeURIComponent(deviceCode)}/${encodeURIComponent(humChannelId)}?step=${encodeURIComponent(step)}&limit=${limit}` : null;
+            const baseValve = valveChannelId ? `/api/channel/history/${encodeURIComponent(deviceCode)}/${encodeURIComponent(valveChannelId)}?step=${encodeURIComponent(step)}&limit=${limit}` : null;
+
+            const [humRes, valveRes] = await Promise.all([
+                baseHum ? fetch(baseHum) : Promise.resolve(null),
+                baseValve ? fetch(baseValve) : Promise.resolve(null)
+            ]);
+
+            if (baseHum && (!humRes || !humRes.ok)) throw new Error('hum history failed');
+            if (baseValve && (!valveRes || !valveRes.ok)) throw new Error('valve history failed');
+
+            const humPayload = humRes ? await humRes.json() : { rows: [] };
+            const valvePayload = valveRes ? await valveRes.json() : { rows: [] };
+
+            const humRows = Array.isArray(humPayload.rows) ? humPayload.rows : [];
+            const valveRows = Array.isArray(valvePayload.rows) ? valvePayload.rows : [];
 
             let labels = [];
             let hum = [];
@@ -740,38 +838,55 @@
 
             if (viewMode === 'day') {
                 document.getElementById('periodLabel').textContent = 'Día';
-                const rangeTo = parseTsToDate(payload?.range?.to) || new Date();
+                const rangeTo = parseTsToDate(humPayload?.range?.to || valvePayload?.range?.to) || now;
                 document.getElementById('periodValue').textContent = `${fmtDateEs.format(rangeTo)} (últimas 24h, tiempo real)`;
 
-                // step=raw: rows = { ts, humidity, valve_state, ... }
+                // Unificar labels por timestamp: usamos los del sensor si existen, si no los de válvula.
+                const labelSource = humRows.length ? humRows : valveRows;
+                for (const r of labelSource) {
+                    labels.push(r.ts_madrid_label || (r.ts_madrid || String(r.ts || '')));
+                }
+
+                // Serie humedad
+                for (const r of humRows) {
+                    const v = r.value == null ? null : Number(r.value);
+                    hum.push(v == null || Number.isNaN(v) ? null : Number(v.toFixed(2)));
+                    if (v != null && !Number.isNaN(v)) { totalHumSum += v; totalHumCount += 1; }
+                }
+
+                // Serie válvula + tiempo ON
                 let prevT = null;
                 let prevOn = false;
-
-                for (const r of rows) {
+                for (const r of valveRows) {
                     const d = parseTsToDate(r.ts);
-                    if (!d) continue;
-
-                    // Preferir etiqueta calculada por el backend (evita fallos de TZ en el navegador)
-                    labels.push(r.ts_madrid_label || (() => {
-                        const p = getMadridPartsFull(d);
-                        return `${p.d} ${p.h}:${p.mi}:${p.s}`;
-                    })());
-
-                    const h = r.humidity == null ? null : Number(r.humidity);
-                    hum.push(h == null || Number.isNaN(h) ? null : Number(h.toFixed(2)));
-                    if (h != null && !Number.isNaN(h)) { totalHumSum += h; totalHumCount += 1; }
-
-                    const vs = (r.valve_state || '').toString().toUpperCase();
-                    const onNow = vs === 'ON' || vs === '1' || vs === 'TRUE';
+                    const onNow = Number(r.state || 0) >= 1;
                     valve.push(onNow ? 1 : 0);
-
-                    const t = d.getTime();
-                    if (prevT != null) {
+                    const t = d ? d.getTime() : null;
+                    if (t != null && prevT != null) {
                         const dt = Math.max(0, t - prevT);
                         if (prevOn) totalValveOnMs += dt;
                     }
                     prevT = t;
                     prevOn = onNow;
+                }
+
+                // Alinear longitudes (Chart.js agradece arrays consistentes)
+                while (hum.length < labels.length) hum.push(null);
+                while (valve.length < labels.length) valve.push(null);
+
+                // Estado actual en tarjeta de la gráfica según el último valor del canal
+                const valveDotChart = document.getElementById('valveDotChart');
+                const valveTextChart = document.getElementById('valveTextChart');
+                const lastV = valveRows.length ? valveRows[valveRows.length - 1] : null;
+                if (lastV && Number(lastV.state || 0) >= 1) {
+                    valveDotChart.className = 'valve-dot on';
+                    valveTextChart.textContent = 'ENCENDIDA';
+                } else if (lastV) {
+                    valveDotChart.className = 'valve-dot off';
+                    valveTextChart.textContent = 'APAGADA';
+                } else {
+                    valveDotChart.className = 'valve-dot';
+                    valveTextChart.textContent = 'SIN DATOS';
                 }
 
                 valveChart.options.scales.y.min = -0.1;
@@ -784,25 +899,34 @@
                 document.getElementById('periodLabel').textContent = 'Mes';
                 document.getElementById('periodValue').textContent = `${pNow.mo}/${pNow.y}`;
 
-                const byDay = {};
-                for (const r of rows) {
-                    const ts = r.ts;
-                    if (!ts) continue;
-                    const k = dayKeyForTs(ts);
-                    const b = byDay[k] || (byDay[k] = { humSum: 0, humCount: 0, onMs: 0 });
-                    const h = r.humidity == null ? null : Number(r.humidity);
-                    if (h != null && !Number.isNaN(h)) { b.humSum += h; b.humCount += 1; }
-                    const on = Number(r.valve_on || 0) >= 1 ? 1 : 0;
-                    b.onMs += on * bucketMs;
+                // En month/year, backend ya devuelve buckets por hora; agrupamos a días aquí (usando claves Madrid del backend)
+                const byDayHum = {};
+                for (const r of humRows) {
+                    const k = r.ts_madrid_day_key || dayKeyForTs(r.ts);
+                    const b = byDayHum[k] || (byDayHum[k] = { sum: 0, cnt: 0 });
+                    const v = r.value == null ? null : Number(r.value);
+                    if (v != null && !Number.isNaN(v)) { b.sum += v; b.cnt += 1; }
                 }
-                const keys = Object.keys(byDay).sort();
+                const byDayValve = {};
+                for (const r of valveRows) {
+                    const k = r.ts_madrid_day_key || dayKeyForTs(r.ts);
+                    const b = byDayValve[k] || (byDayValve[k] = { on: 0, cnt: 0 });
+                    const s = Number(r.state || 0) >= 1 ? 1 : 0;
+                    b.on += s;
+                    b.cnt += 1;
+                }
+                const keys = Array.from(new Set([...Object.keys(byDayHum), ...Object.keys(byDayValve)])).sort();
                 for (const k of keys) {
                     labels.push(k.slice(8, 10));
-                    const b = byDay[k];
-                    const avg = b.humCount ? b.humSum / b.humCount : null;
+                    const hB = byDayHum[k];
+                    const vB = byDayValve[k];
+                    const avg = hB && hB.cnt ? (hB.sum / hB.cnt) : null;
                     hum.push(avg == null ? null : Number(avg.toFixed(2)));
-                    valve.push(Number((b.onMs / 3600000).toFixed(2)));
-                    totalHumSum += b.humSum; totalHumCount += b.humCount; totalValveOnMs += b.onMs;
+                    // Horas ON estimadas: (porcentaje de horas con state=1) * 24
+                    const onHours = vB && vB.cnt ? (vB.on / vB.cnt) * 24 : 0;
+                    valve.push(Number(onHours.toFixed(2)));
+                    if (hB) { totalHumSum += hB.sum; totalHumCount += hB.cnt; }
+                    if (vB) { totalValveOnMs += (vB.cnt ? (vB.on / vB.cnt) * 24 * 3600000 : 0); }
                 }
 
                 valveChart.options.scales.y.min = 0;
@@ -815,25 +939,32 @@
                 document.getElementById('periodLabel').textContent = 'Año';
                 document.getElementById('periodValue').textContent = `${pNow.y}`;
 
-                const byMonth = {};
-                for (const r of rows) {
-                    const ts = r.ts;
-                    if (!ts) continue;
-                    const k = monthKeyForTs(ts);
-                    const b = byMonth[k] || (byMonth[k] = { humSum: 0, humCount: 0, onMs: 0 });
-                    const h = r.humidity == null ? null : Number(r.humidity);
-                    if (h != null && !Number.isNaN(h)) { b.humSum += h; b.humCount += 1; }
-                    const on = Number(r.valve_on || 0) >= 1 ? 1 : 0;
-                    b.onMs += on * bucketMs;
+                const byMonthHum = {};
+                for (const r of humRows) {
+                    const k = r.ts_madrid_month_key || monthKeyForTs(r.ts);
+                    const b = byMonthHum[k] || (byMonthHum[k] = { sum: 0, cnt: 0 });
+                    const v = r.value == null ? null : Number(r.value);
+                    if (v != null && !Number.isNaN(v)) { b.sum += v; b.cnt += 1; }
                 }
-                const keys = Object.keys(byMonth).sort();
+                const byMonthValve = {};
+                for (const r of valveRows) {
+                    const k = r.ts_madrid_month_key || monthKeyForTs(r.ts);
+                    const b = byMonthValve[k] || (byMonthValve[k] = { on: 0, cnt: 0 });
+                    const s = Number(r.state || 0) >= 1 ? 1 : 0;
+                    b.on += s;
+                    b.cnt += 1;
+                }
+                const keys = Array.from(new Set([...Object.keys(byMonthHum), ...Object.keys(byMonthValve)])).sort();
                 for (const k of keys) {
                     labels.push(k.slice(5, 7));
-                    const b = byMonth[k];
-                    const avg = b.humCount ? b.humSum / b.humCount : null;
+                    const hB = byMonthHum[k];
+                    const vB = byMonthValve[k];
+                    const avg = hB && hB.cnt ? (hB.sum / hB.cnt) : null;
                     hum.push(avg == null ? null : Number(avg.toFixed(2)));
-                    valve.push(Number((b.onMs / 3600000).toFixed(1)));
-                    totalHumSum += b.humSum; totalHumCount += b.humCount; totalValveOnMs += b.onMs;
+                    const onHours = vB && vB.cnt ? (vB.on / vB.cnt) * (30 * 24) : 0; // aprox
+                    valve.push(Number(onHours.toFixed(1)));
+                    if (hB) { totalHumSum += hB.sum; totalHumCount += hB.cnt; }
+                    if (vB) { totalValveOnMs += (vB.cnt ? (vB.on / vB.cnt) * (30 * 24) * 3600000 : 0); }
                 }
 
                 valveChart.options.scales.y.min = 0;
@@ -1082,7 +1213,8 @@
                     ingestSample(store, nowMs, hum, valveVal === 1);
                 } catch {}
 
-                rebuildCharts();
+                // Rendimiento: no forzar rebuild de gráficas en cada tick
+                // (se reconstruyen con throttle por SSE/intervalos)
                 
                 document.getElementById('status').textContent = ' Online - ' + fmtNowEs.format(new Date());
                 document.getElementById('status').className = 'status online';
@@ -1121,6 +1253,7 @@
                 const es = new EventSource(`/api/sse/${encodeURIComponent(deviceCode)}`);
                 es.addEventListener('sensor', () => {
                     actualizarSensores();
+                    scheduleChartsRebuild();
                 });
                 es.addEventListener('alert', () => {
                     cargarAlertas();
@@ -1136,12 +1269,13 @@
         loadDevices();
         cargarConfig();
         updateThresholdCard();
+        loadChannels().then(() => scheduleChartsRebuild());
         rebuildCharts();
         cargarAlertas();
         actualizarSensores();
         startSSE();
         setInterval(actualizarSensores, 15000);
-        setInterval(rebuildCharts, 60000);
+        setInterval(scheduleChartsRebuild, 60000);
         setInterval(cargarAlertas, 60000);
 
         // --- UI acciones rápidas ---
@@ -1164,11 +1298,88 @@
         });
 
         document.getElementById('btnAddValve')?.addEventListener('click', () => {
-            alert('Añadir válvulas múltiples requiere actualizar firmware + backend (lo hago en el siguiente paso).');
+            (async () => {
+                const name = (prompt('Nombre de la nueva válvula (ej: Válvula 2):') || '').trim();
+                const headers = { 'Content-Type': 'application/json' };
+                const saved = (getSavedToken(deviceCode) || '').trim();
+                if (saved) headers['X-Device-Token'] = saved;
+                let r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ kind: 'valve', name: name || undefined })
+                });
+                if ((r.status === 401 || r.status === 403) && !saved) {
+                    const t = (prompt('Este dispositivo requiere token para añadir válvulas. Pégalo aquí:') || '').trim();
+                    if (t) {
+                        saveToken(deviceCode, t);
+                        r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-Device-Token': t },
+                            body: JSON.stringify({ kind: 'valve', name: name || undefined })
+                        });
+                    }
+                }
+                if (!r.ok) return alert('No se pudo añadir la válvula');
+                await loadChannels();
+                scheduleChartsRebuild();
+                alert('Válvula añadida. La gráfica aparecerá cuando el ESP32 envíe datos de esa válvula.');
+            })();
         });
         document.getElementById('btnAddSensor')?.addEventListener('click', () => {
-            alert('Añadir sensores múltiples requiere actualizar firmware + backend (lo hago en el siguiente paso).');
+            (async () => {
+                const name = (prompt('Nombre del nuevo sensor (ej: Sensor 2):') || '').trim();
+                const headers = { 'Content-Type': 'application/json' };
+                const saved = (getSavedToken(deviceCode) || '').trim();
+                if (saved) headers['X-Device-Token'] = saved;
+                let r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ kind: 'soil_sensor', name: name || undefined })
+                });
+                if ((r.status === 401 || r.status === 403) && !saved) {
+                    const t = (prompt('Este dispositivo requiere token para añadir sensores. Pégalo aquí:') || '').trim();
+                    if (t) {
+                        saveToken(deviceCode, t);
+                        r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-Device-Token': t },
+                            body: JSON.stringify({ kind: 'soil_sensor', name: name || undefined })
+                        });
+                    }
+                }
+                if (!r.ok) return alert('No se pudo añadir el sensor');
+                await loadChannels();
+                scheduleChartsRebuild();
+                alert('Sensor añadido. La gráfica aparecerá cuando el ESP32 envíe datos de ese sensor.');
+            })();
         });
+
+        async function renameChannel(channelId, kindLabel) {
+            if (!channelId) return;
+            const newName = (prompt(`Nuevo nombre para ${kindLabel}:`) || '').trim();
+            if (!newName) return;
+            const headers = { 'Content-Type': 'application/json' };
+            const saved = (getSavedToken(deviceCode) || '').trim();
+            if (saved) headers['X-Device-Token'] = saved;
+
+            let r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}/${encodeURIComponent(channelId)}`,
+                { method: 'PATCH', headers, body: JSON.stringify({ name: newName }) });
+
+            if ((r.status === 401 || r.status === 403) && !saved) {
+                const t = (prompt('Este dispositivo requiere token para renombrar. Pégalo aquí:') || '').trim();
+                if (t) {
+                    saveToken(deviceCode, t);
+                    r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}/${encodeURIComponent(channelId)}`,
+                        { method: 'PATCH', headers: { ...headers, 'X-Device-Token': t }, body: JSON.stringify({ name: newName }) });
+                }
+            }
+            if (!r.ok) return alert('No se pudo renombrar');
+            await loadChannels();
+            scheduleChartsRebuild();
+        }
+
+        document.getElementById('btnRenameHum')?.addEventListener('click', () => renameChannel(humChannelId, 'el sensor'));
+        document.getElementById('btnRenameValve')?.addEventListener('click', () => renameChannel(valveChannelId, 'la válvula'));
 
         document.getElementById('resetRebootsBtn')?.addEventListener('click', async () => {
             if (!confirm('¿Poner el contador de reinicios a 0 (solo en el panel)?')) return;
