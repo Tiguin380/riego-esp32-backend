@@ -1040,13 +1040,175 @@
             const baseHum = humChannelId ? `/api/channel/history/${encodeURIComponent(deviceCode)}/${encodeURIComponent(humChannelId)}?step=${encodeURIComponent(step)}&limit=${limit}${rangeQs}` : null;
             const baseValve = valveChannelId ? `/api/channel/history/${encodeURIComponent(deviceCode)}/${encodeURIComponent(valveChannelId)}?step=${encodeURIComponent(step)}&limit=${limit}${rangeQs}` : null;
 
+            async function rebuildChartsFromSensorHistoryFallback() {
+                // Fallback robusto: usar sensor_data (siempre existe aunque el dispositivo esté offline)
+                const url = `/api/sensor/history/${encodeURIComponent(deviceCode)}?step=${encodeURIComponent(step)}&limit=${limit}${rangeQs}`;
+                const r = await fetch(url);
+                if (!r.ok) throw new Error('sensor history failed');
+                const payload = await r.json();
+                const rows = Array.isArray(payload.rows) ? payload.rows : [];
+
+                // Convertir a “shape” parecido a channel history
+                const humRows = rows
+                    .filter(x => x && x.humidity != null)
+                    .map(x => ({ ts: x.ts, ts_madrid: x.ts_madrid, ts_madrid_label: x.ts_madrid_label, ts_madrid_day_key: x.ts_madrid_day_key, ts_madrid_month_key: x.ts_madrid_month_key, value: x.humidity }));
+
+                const valveRows = rows
+                    .map(x => {
+                        // raw: valve_state (string), bucket: valve_on (0/1)
+                        const s = (x && x.valve_on != null) ? Number(x.valve_on) : null;
+                        if (Number.isFinite(s)) return { ts: x.ts, ts_madrid: x.ts_madrid, ts_madrid_label: x.ts_madrid_label, ts_madrid_day_key: x.ts_madrid_day_key, ts_madrid_month_key: x.ts_madrid_month_key, state: s >= 1 ? 1 : 0 };
+                        const vs = String(x?.valve_state || '').toUpperCase();
+                        if (!vs) return { ts: x.ts, ts_madrid: x.ts_madrid, ts_madrid_label: x.ts_madrid_label, ts_madrid_day_key: x.ts_madrid_day_key, ts_madrid_month_key: x.ts_madrid_month_key, state: null };
+                        const on = (vs === 'ON' || vs === '1' || vs === 'TRUE');
+                        return { ts: x.ts, ts_madrid: x.ts_madrid, ts_madrid_label: x.ts_madrid_label, ts_madrid_day_key: x.ts_madrid_day_key, ts_madrid_month_key: x.ts_madrid_month_key, state: on ? 1 : 0 };
+                    });
+
+                // Reutilizar la misma lógica de pintado (como si viniera de channels)
+                const fakeHumPayload = { rows: humRows, range: payload.range };
+                const fakeValvePayload = { rows: valveRows, range: payload.range };
+
+                // Copia mínima de las variables que usa el bloque de render
+                const humRows2 = humRows;
+                const valveRows2 = valveRows;
+
+                let labels = [];
+                let hum = [];
+                let valve = [];
+                let totalHumSum = 0;
+                let totalHumCount = 0;
+                let totalValveOnMs = 0;
+
+                if (viewMode === 'day') {
+                    document.getElementById('periodLabel').textContent = 'Día';
+                    const rangeTo = parseTsToDate(fakeHumPayload?.range?.to || fakeValvePayload?.range?.to) || now;
+                    document.getElementById('periodValue').textContent = `${fmtDateEs.format(rangeTo)} (últimas 24h, histórico)`;
+
+                    const labelSource = humRows2.length ? humRows2 : valveRows2;
+                    for (const r of labelSource) labels.push(r.ts_madrid_label || (r.ts_madrid || String(r.ts || '')));
+
+                    for (const r of humRows2) {
+                        const v = r.value == null ? null : Number(r.value);
+                        hum.push(v == null || Number.isNaN(v) ? null : Number(v.toFixed(2)));
+                        if (v != null && !Number.isNaN(v)) { totalHumSum += v; totalHumCount += 1; }
+                    }
+
+                    let prevT = null;
+                    let prevOn = false;
+                    for (const r of valveRows2) {
+                        const d = parseTsToDate(r.ts);
+                        const onNow = Number(r.state || 0) >= 1;
+                        valve.push(onNow ? 1 : 0);
+                        const t = d ? d.getTime() : null;
+                        if (t != null && prevT != null) {
+                            const dt = Math.max(0, t - prevT);
+                            if (prevOn) totalValveOnMs += dt;
+                        }
+                        prevT = t;
+                        prevOn = onNow;
+                    }
+
+                    while (hum.length < labels.length) hum.push(null);
+                    while (valve.length < labels.length) valve.push(null);
+
+                    valveChart.options.scales.y.min = -0.1;
+                    valveChart.options.scales.y.max = 1.1;
+                    valveChart.options.scales.y.ticks.callback = (v) => (v >= 0.5 ? 'ON' : 'OFF');
+                    valveChart.data.datasets[0].label = 'Válvula (0/1)';
+                } else if (viewMode === 'month') {
+                    const pNow = getMadridParts(nowAdjusted());
+                    document.getElementById('periodLabel').textContent = 'Mes';
+                    document.getElementById('periodValue').textContent = `${pNow.mo}/${pNow.y}`;
+
+                    const byDayHum = {};
+                    for (const r of humRows2) {
+                        const k = r.ts_madrid_day_key || dayKeyForTs(r.ts);
+                        const b = byDayHum[k] || (byDayHum[k] = { sum: 0, cnt: 0 });
+                        const v = r.value == null ? null : Number(r.value);
+                        if (v != null && !Number.isNaN(v)) { b.sum += v; b.cnt += 1; }
+                    }
+                    const byDayValve = {};
+                    for (const r of valveRows2) {
+                        const k = r.ts_madrid_day_key || dayKeyForTs(r.ts);
+                        const b = byDayValve[k] || (byDayValve[k] = { on: 0, cnt: 0 });
+                        const s = Number(r.state || 0) >= 1 ? 1 : 0;
+                        b.on += s;
+                        b.cnt += 1;
+                    }
+                    const keys = Array.from(new Set([...Object.keys(byDayHum), ...Object.keys(byDayValve)])).sort();
+                    for (const k of keys) {
+                        labels.push(k.slice(8, 10));
+                        const hB = byDayHum[k];
+                        const vB = byDayValve[k];
+                        const avg = hB && hB.cnt ? (hB.sum / hB.cnt) : null;
+                        hum.push(avg == null ? null : Number(avg.toFixed(2)));
+                        const onHours = vB && vB.cnt ? (vB.on / vB.cnt) * 24 : 0;
+                        valve.push(Number(onHours.toFixed(2)));
+                        if (hB) { totalHumSum += hB.sum; totalHumCount += hB.cnt; }
+                        if (vB) { totalValveOnMs += (vB.cnt ? (vB.on / vB.cnt) * 24 * 3600000 : 0); }
+                    }
+
+                    valveChart.options.scales.y.min = 0;
+                    valveChart.options.scales.y.max = undefined;
+                    valveChart.options.scales.y.ticks.callback = undefined;
+                    valveChart.data.datasets[0].label = 'Válvula (horas ON/día)';
+                } else {
+                    const pNow = getMadridParts(nowAdjusted());
+                    document.getElementById('periodLabel').textContent = 'Año';
+                    document.getElementById('periodValue').textContent = `${pNow.y}`;
+
+                    const byMonthHum = {};
+                    for (const r of humRows2) {
+                        const k = r.ts_madrid_month_key || monthKeyForTs(r.ts);
+                        const b = byMonthHum[k] || (byMonthHum[k] = { sum: 0, cnt: 0 });
+                        const v = r.value == null ? null : Number(r.value);
+                        if (v != null && !Number.isNaN(v)) { b.sum += v; b.cnt += 1; }
+                    }
+                    const byMonthValve = {};
+                    for (const r of valveRows2) {
+                        const k = r.ts_madrid_month_key || monthKeyForTs(r.ts);
+                        const b = byMonthValve[k] || (byMonthValve[k] = { on: 0, cnt: 0 });
+                        const s = Number(r.state || 0) >= 1 ? 1 : 0;
+                        b.on += s;
+                        b.cnt += 1;
+                    }
+                    const keys = Array.from(new Set([...Object.keys(byMonthHum), ...Object.keys(byMonthValve)])).sort();
+                    for (const k of keys) {
+                        labels.push(k.slice(5, 7));
+                        const hB = byMonthHum[k];
+                        const vB = byMonthValve[k];
+                        const avg = hB && hB.cnt ? (hB.sum / hB.cnt) : null;
+                        hum.push(avg == null ? null : Number(avg.toFixed(2)));
+                        const onHours = vB && vB.cnt ? (vB.on / vB.cnt) * (30 * 24) : 0;
+                        valve.push(Number(onHours.toFixed(1)));
+                        if (hB) { totalHumSum += hB.sum; totalHumCount += hB.cnt; }
+                        if (vB) { totalValveOnMs += (vB.cnt ? (vB.on / vB.cnt) * (30 * 24) * 3600000 : 0); }
+                    }
+
+                    valveChart.options.scales.y.min = 0;
+                    valveChart.options.scales.y.max = undefined;
+                    valveChart.options.scales.y.ticks.callback = undefined;
+                    valveChart.data.datasets[0].label = 'Válvula (horas ON/mes)';
+                }
+
+                const avgHum = totalHumCount ? (totalHumSum / totalHumCount) : null;
+                document.getElementById('avgHumidity').textContent = avgHum === null ? '--' : `${avgHum.toFixed(1)}%`;
+                document.getElementById('totalValveOn').textContent = totalValveOnMs ? formatDuration(totalValveOnMs) : '--';
+                document.getElementById('valveOnTime').textContent = `Tiempo ON (periodo): ${totalValveOnMs ? formatDuration(totalValveOnMs) : '--'}`;
+
+                setSeries(humLabels, humSeries, labels, hum);
+                setSeries(valveLabels, valveSeries, labels, valve);
+                humChart.update('none');
+                valveChart.update('none');
+            }
+
             const [humRes, valveRes] = await Promise.all([
                 baseHum ? fetch(baseHum) : Promise.resolve(null),
                 baseValve ? fetch(baseValve) : Promise.resolve(null)
             ]);
 
-            if (baseHum && (!humRes || !humRes.ok)) throw new Error('hum history failed');
-            if (baseValve && (!valveRes || !valveRes.ok)) throw new Error('valve history failed');
+            if (baseHum && (!humRes || !humRes.ok)) return rebuildChartsFromSensorHistoryFallback();
+            if (baseValve && (!valveRes || !valveRes.ok)) return rebuildChartsFromSensorHistoryFallback();
 
             const humPayload = humRes ? await humRes.json() : { rows: [] };
             const valvePayload = valveRes ? await valveRes.json() : { rows: [] };
@@ -1057,12 +1219,13 @@
             // Si el backend no está rellenando channel_samples (o están desfasados),
             // la gráfica puede quedarse “clavada” en un timestamp antiguo.
             // En ese caso, usamos el store local (alimentado por /api/sensor/latest).
-            if (viewMode === 'day') {
+            {
                 const lastRow = humRows.length ? humRows[humRows.length - 1] : (valveRows.length ? valveRows[valveRows.length - 1] : null);
                 const lastTs = lastRow ? parseTsToDate(lastRow.ts) : null;
                 const ageMs = lastTs ? (now.getTime() - lastTs.getTime()) : Infinity;
+                // Si el último punto es muy viejo o no existe, usar histórico de sensor_data.
                 if (!lastTs || !Number.isFinite(ageMs) || ageMs > 10 * 60000) {
-                    throw new Error('history stale/empty; fallback to store');
+                    return rebuildChartsFromSensorHistoryFallback();
                 }
             }
 
