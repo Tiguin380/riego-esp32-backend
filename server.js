@@ -737,6 +737,30 @@ const AdminCustomerCreateSchema = z
 
 const AdminCustomerUpdateSchema = AdminCustomerCreateSchema.partial();
 
+// --- Tickets (soporte) ---
+const TicketCreateSchema = z
+  .object({
+    subject: z.string().min(3).max(200),
+    device_code: z.string().min(1).max(50).optional().nullable(),
+    message: z.string().min(3).max(4000)
+  })
+  .passthrough();
+
+const TicketMessageSchema = z
+  .object({
+    body: z.string().min(1).max(4000)
+  })
+  .passthrough();
+
+const AdminTicketUpdateSchema = z
+  .object({
+    subject: z.string().min(3).max(200).optional(),
+    status: z.enum(['open', 'pending', 'closed']).optional(),
+    priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
+    assigned_to: z.string().min(1).max(80).optional().nullable()
+  })
+  .passthrough();
+
 // Inicialización automática de tablas en arranque (útil en despliegues en Railway u otros hosts)
 async function initDB() {
   try {
@@ -930,6 +954,39 @@ async function initDB() {
     // Un dispositivo sólo puede pertenecer a un cliente (CRM)
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS ux_customer_devices_device ON customer_devices(device_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_customer_devices_customer ON customer_devices(customer_id)`);
+
+    // Tickets de soporte (cliente/admin)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tickets (
+        id UUID PRIMARY KEY,
+        customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        device_id UUID REFERENCES devices(id) ON DELETE SET NULL,
+        subject VARCHAR(200) NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'open',
+        priority VARCHAR(20) NOT NULL DEFAULT 'normal',
+        assigned_to VARCHAR(80),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        closed_at TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ticket_messages (
+        id UUID PRIMARY KEY,
+        ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
+        author_type VARCHAR(10) NOT NULL,
+        author_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        body TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_customer_time ON tickets(customer_id, created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_status_time ON tickets(status, created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_user_time ON tickets(user_id, created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket_time ON ticket_messages(ticket_id, created_at ASC)`);
 
     // Auth extra: verificación email + reset password
     // Perfil/CRM: campos extendidos en users
@@ -1251,6 +1308,343 @@ app.delete('/api/me', async (req, res) => {
     }
     clearAuthCookie(res);
     res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Tickets (usuario) ---
+async function getUserRow(userId) {
+  const r = await pool.query('SELECT id, email, full_name, customer_id FROM users WHERE id = $1', [userId]);
+  return r.rows[0] || null;
+}
+
+async function ensureUserHasCustomer(userRow) {
+  if (!userRow) return null;
+  if (userRow.customer_id) return userRow.customer_id;
+  const customerId = uuidv4();
+  await pool.query(
+    `INSERT INTO customers (id, name, email, phone, address, notes)
+     VALUES ($1, $2, $3, NULL, NULL, NULL)`,
+    [customerId, userRow.full_name || userRow.email, userRow.email]
+  );
+  await pool.query('UPDATE users SET customer_id = $1 WHERE id = $2', [customerId, userRow.id]);
+  return customerId;
+}
+
+async function requireTicketAccess(req, res, ticketId) {
+  if (!req.user?.id) return null;
+
+  // Admin bypass
+  if (hasValidAdminKey(req)) {
+    const t = await pool.query(
+      `SELECT t.*, d.device_code
+       FROM tickets t
+       LEFT JOIN devices d ON d.id = t.device_id
+       WHERE t.id = $1`,
+      [ticketId]
+    );
+    return t.rows[0] || null;
+  }
+
+  const u = await getUserRow(req.user.id);
+  if (!u) return null;
+
+  const t = await pool.query(
+    `SELECT t.*, d.device_code
+     FROM tickets t
+     LEFT JOIN devices d ON d.id = t.device_id
+     WHERE t.id = $1 AND (t.user_id = $2 OR (t.customer_id IS NOT NULL AND t.customer_id = $3))`,
+    [ticketId, u.id, u.customer_id]
+  );
+  return t.rows[0] || null;
+}
+
+app.post('/api/tickets', async (req, res) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const parsed = TicketCreateSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: 'Datos inválidos', details: parsed.error.flatten() });
+
+    const userRow = await getUserRow(req.user.id);
+    if (!userRow) return res.status(401).json({ error: 'No autenticado' });
+    const customerId = await ensureUserHasCustomer(userRow);
+
+    let deviceId = null;
+    const deviceCode = parsed.data.device_code ? String(parsed.data.device_code || '').trim() : '';
+    if (deviceCode) {
+      const dev = await requireUserDevice(req, res, deviceCode);
+      if (!dev) return; // requireUserDevice ya respondió
+      deviceId = dev.id;
+    }
+
+    const ticketId = uuidv4();
+    const msgId = uuidv4();
+    const subject = String(parsed.data.subject || '').trim();
+    const body = String(parsed.data.message || '').trim();
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO tickets (id, customer_id, user_id, device_id, subject, status, priority)
+         VALUES ($1, $2, $3, $4, $5, 'open', 'normal')`,
+        [ticketId, customerId, userRow.id, deviceId, subject]
+      );
+      await client.query(
+        `INSERT INTO ticket_messages (id, ticket_id, author_type, author_user_id, body)
+         VALUES ($1, $2, 'user', $3, $4)`,
+        [msgId, ticketId, userRow.id, body]
+      );
+      await client.query('COMMIT');
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch {}
+      throw e;
+    } finally {
+      client.release();
+    }
+
+    res.status(201).json({ ok: true, ticket_id: ticketId });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/tickets', async (req, res) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const userRow = await getUserRow(req.user.id);
+    if (!userRow) return res.status(401).json({ error: 'No autenticado' });
+
+    const r = await pool.query(
+      `SELECT
+         t.id,
+         t.subject,
+         t.status,
+         t.priority,
+         t.created_at,
+         t.updated_at,
+         t.closed_at,
+         d.device_code,
+         (SELECT tm.body FROM ticket_messages tm WHERE tm.ticket_id = t.id ORDER BY tm.created_at DESC LIMIT 1) AS last_message,
+         (SELECT tm.created_at FROM ticket_messages tm WHERE tm.ticket_id = t.id ORDER BY tm.created_at DESC LIMIT 1) AS last_message_at
+       FROM tickets t
+       LEFT JOIN devices d ON d.id = t.device_id
+       WHERE (t.user_id = $1 OR (t.customer_id IS NOT NULL AND t.customer_id = $2))
+       ORDER BY COALESCE((SELECT tm.created_at FROM ticket_messages tm WHERE tm.ticket_id = t.id ORDER BY tm.created_at DESC LIMIT 1), t.updated_at) DESC`,
+      [userRow.id, userRow.customer_id]
+    );
+
+    res.json({ tickets: r.rows.map(enrichRowWithMadridTs) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/tickets/:id', async (req, res) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const ticketId = String(req.params.id || '').trim();
+    const t = await requireTicketAccess(req, res, ticketId);
+    if (!t) return res.status(404).json({ error: 'Ticket no encontrado' });
+
+    const msgs = await pool.query(
+      `SELECT id, ticket_id, author_type, author_user_id, body, created_at
+       FROM ticket_messages
+       WHERE ticket_id = $1
+       ORDER BY created_at ASC`,
+      [ticketId]
+    );
+
+    res.json({ ticket: enrichRowWithMadridTs(t), messages: msgs.rows.map(enrichRowWithMadridTs) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/tickets/:id/messages', async (req, res) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const ticketId = String(req.params.id || '').trim();
+    const parsed = TicketMessageSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: 'Datos inválidos', details: parsed.error.flatten() });
+
+    const t = await requireTicketAccess(req, res, ticketId);
+    if (!t) return res.status(404).json({ error: 'Ticket no encontrado' });
+    if (String(t.status || '') === 'closed') return res.status(400).json({ error: 'El ticket está cerrado' });
+
+    const msgId = uuidv4();
+    const body = String(parsed.data.body || '').trim();
+    await pool.query(
+      `INSERT INTO ticket_messages (id, ticket_id, author_type, author_user_id, body)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [msgId, ticketId, hasValidAdminKey(req) ? 'admin' : 'user', hasValidAdminKey(req) ? null : req.user.id, body]
+    );
+    await pool.query('UPDATE tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [ticketId]);
+
+    res.status(201).json({ ok: true, id: msgId });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/tickets/:id/close', async (req, res) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const ticketId = String(req.params.id || '').trim();
+    const t = await requireTicketAccess(req, res, ticketId);
+    if (!t) return res.status(404).json({ error: 'Ticket no encontrado' });
+
+    // Usuario sólo puede cerrar su ticket (admin también puede cerrarlo)
+    const r = await pool.query(
+      `UPDATE tickets
+       SET status = 'closed', closed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+       RETURNING id, status, closed_at`,
+      [ticketId]
+    );
+    res.json({ ok: true, ticket: enrichRowWithMadridTs(r.rows[0]) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Tickets (admin) ---
+app.get('/api/admin/tickets', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+
+    const status = String(req.query.status || '').trim();
+    const customer_id = String(req.query.customer_id || '').trim();
+    const device_code = String(req.query.device_code || '').trim();
+
+    const where = [];
+    const params = [];
+    if (status) {
+      params.push(status);
+      where.push(`t.status = $${params.length}`);
+    }
+    if (customer_id) {
+      params.push(customer_id);
+      where.push(`t.customer_id = $${params.length}`);
+    }
+    if (device_code) {
+      params.push(device_code);
+      where.push(`d.device_code = $${params.length}`);
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+    const r = await pool.query(
+      `SELECT
+         t.*,
+         c.name AS customer_name,
+         u.email AS user_email,
+         d.device_code,
+         (SELECT tm.body FROM ticket_messages tm WHERE tm.ticket_id = t.id ORDER BY tm.created_at DESC LIMIT 1) AS last_message,
+         (SELECT tm.created_at FROM ticket_messages tm WHERE tm.ticket_id = t.id ORDER BY tm.created_at DESC LIMIT 1) AS last_message_at
+       FROM tickets t
+       LEFT JOIN customers c ON c.id = t.customer_id
+       LEFT JOIN users u ON u.id = t.user_id
+       LEFT JOIN devices d ON d.id = t.device_id
+       ${whereSql}
+       ORDER BY COALESCE((SELECT tm.created_at FROM ticket_messages tm WHERE tm.ticket_id = t.id ORDER BY tm.created_at DESC LIMIT 1), t.updated_at) DESC
+       LIMIT 500`,
+      params
+    );
+
+    res.json({ tickets: r.rows.map(enrichRowWithMadridTs) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/tickets/:id', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+    const ticketId = String(req.params.id || '').trim();
+    const t = await pool.query(
+      `SELECT t.*, c.name AS customer_name, u.email AS user_email, d.device_code
+       FROM tickets t
+       LEFT JOIN customers c ON c.id = t.customer_id
+       LEFT JOIN users u ON u.id = t.user_id
+       LEFT JOIN devices d ON d.id = t.device_id
+       WHERE t.id = $1`,
+      [ticketId]
+    );
+    if (!t.rows.length) return res.status(404).json({ error: 'Ticket no encontrado' });
+
+    const msgs = await pool.query(
+      `SELECT id, ticket_id, author_type, author_user_id, body, created_at
+       FROM ticket_messages
+       WHERE ticket_id = $1
+       ORDER BY created_at ASC`,
+      [ticketId]
+    );
+
+    res.json({ ticket: enrichRowWithMadridTs(t.rows[0]), messages: msgs.rows.map(enrichRowWithMadridTs) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/admin/tickets/:id', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+    const ticketId = String(req.params.id || '').trim();
+    const parsed = AdminTicketUpdateSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: 'Datos inválidos', details: parsed.error.flatten() });
+
+    const existing = await pool.query('SELECT * FROM tickets WHERE id = $1', [ticketId]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Ticket no encontrado' });
+    const merged = { ...existing.rows[0], ...parsed.data };
+
+    const closing = parsed.data.status === 'closed' && existing.rows[0].status !== 'closed';
+    const r = await pool.query(
+      `UPDATE tickets
+       SET subject = $1,
+           status = $2,
+           priority = $3,
+           assigned_to = $4,
+           updated_at = CURRENT_TIMESTAMP,
+           closed_at = CASE WHEN $5::boolean THEN CURRENT_TIMESTAMP ELSE closed_at END
+       WHERE id = $6
+       RETURNING *`,
+      [merged.subject, merged.status, merged.priority, merged.assigned_to ?? null, closing, ticketId]
+    );
+    res.json({ ok: true, ticket: enrichRowWithMadridTs(r.rows[0]) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/tickets/:id/messages', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+    const ticketId = String(req.params.id || '').trim();
+    const parsed = TicketMessageSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: 'Datos inválidos', details: parsed.error.flatten() });
+
+    const t = await pool.query('SELECT id, status FROM tickets WHERE id = $1', [ticketId]);
+    if (!t.rows.length) return res.status(404).json({ error: 'Ticket no encontrado' });
+    if (String(t.rows[0].status || '') === 'closed') return res.status(400).json({ error: 'El ticket está cerrado' });
+
+    const msgId = uuidv4();
+    await pool.query(
+      `INSERT INTO ticket_messages (id, ticket_id, author_type, author_user_id, body)
+       VALUES ($1, $2, 'admin', NULL, $3)`,
+      [msgId, ticketId, String(parsed.data.body || '').trim()]
+    );
+    await pool.query('UPDATE tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [ticketId]);
+    res.status(201).json({ ok: true, id: msgId });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

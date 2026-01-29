@@ -101,6 +101,20 @@
         body.mode-account #accountSection { display: block; }
         body.mode-account #status { display:none; }
 
+        body.mode-support .container > .section { display: none; }
+        body.mode-support #supportSection { display: block; }
+        body.mode-support #status { display:none; }
+
+        .tickets-list { display:flex; flex-direction:column; gap: 8px; margin-top: 10px; }
+        .ticket-item { padding: 10px; border-radius: 12px; background: rgba(15,52,96,0.35); border: 1px solid rgba(255,255,255,0.08); cursor: pointer; }
+        .ticket-item:hover { background: rgba(15,52,96,0.45); }
+        .ticket-title { font-weight: 800; }
+        .ticket-meta { color: #8fa3bf; font-size: 12px; margin-top: 4px; }
+        .messages { border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; background: rgba(0,0,0,0.10); padding: 10px; max-height: 320px; overflow:auto; }
+        .msg { padding: 10px; border-radius: 12px; background: rgba(15,52,96,0.22); border: 1px solid rgba(255,255,255,0.06); margin-bottom: 8px; }
+        .msg-meta { color:#8fa3bf; font-size: 12px; margin-bottom: 6px; }
+        .msg-body { white-space: pre-wrap; }
+
         /* Selector de canales (más moderno) */
         .channel-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0 6px; }
         @media (max-width: 900px) { .channel-cards { grid-template-columns: 1fr; } }
@@ -153,6 +167,7 @@
         <div class="top-nav">
             <button class="mini-btn active" id="navDevices" type="button">Dispositivos</button>
             <button class="mini-btn" id="navAccount" type="button">Cuenta</button>
+            <button class="mini-btn" id="navSupport" type="button">Soporte</button>
             <span class="spacer"></span>
             <button class="mini-btn danger" id="navLogout" type="button">Salir</button>
         </div>
@@ -173,6 +188,37 @@
             </div>
             <div class="muted" style="margin-top:10px; font-size:12px; color:#8fa3bf; line-height:1.35;">
                 Eliminar cuenta borra tu usuario y desvincula tus dispositivos.
+            </div>
+        </div>
+
+        <div class="section hidden" id="supportSection">
+            <h2> SOPORTE (TICKETS)</h2>
+            <div class="status" id="supportStatus">—</div>
+
+            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);"></div>
+            <h2 style="margin-top: 10px;"> ABRIR TICKET</h2>
+            <div class="control-row"><label>Asunto:</label><input id="tSubject" type="text" placeholder="Ej: No riega / sensor falla" /></div>
+            <div class="control-row"><label>Dispositivo (opcional):</label>
+                <select id="tDevice" title="Dispositivo (opcional)">
+                    <option value="">(sin dispositivo)</option>
+                </select>
+            </div>
+            <div class="control-row"><label>Mensaje:</label><textarea id="tMessage" placeholder="Describe el problema..." style="min-height: 120px;"></textarea></div>
+            <button class="btn btn-save" id="btnCreateTicket" type="button">ENVIAR TICKET</button>
+
+            <div style="margin-top: 16px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);"></div>
+            <h2 style="margin-top: 10px;"> MIS TICKETS</h2>
+            <div class="tickets-list" id="ticketsList"></div>
+
+            <div style="margin-top: 16px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);"></div>
+            <h2 style="margin-top: 10px;"> DETALLE</h2>
+            <div class="control-row"><label>ID:</label><input id="tId" type="text" disabled /></div>
+            <div class="control-row"><label>Estado:</label><input id="tStatus" type="text" disabled /></div>
+            <div class="control-row"><label>Mensajes:</label><div id="tMessages" class="messages" style="flex:2;"></div></div>
+            <div class="control-row"><label>Responder:</label><textarea id="tReply" placeholder="Añade más información..." style="min-height: 110px;"></textarea></div>
+            <div style="display:flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+                <button class="mini-btn primary" id="btnReplyTicket" type="button">Enviar respuesta</button>
+                <button class="mini-btn danger" id="btnCloseTicket" type="button">Cerrar ticket</button>
             </div>
         </div>
 
@@ -423,6 +469,7 @@
         // --- Cuenta / navegación ---
         const navDevicesBtn = document.getElementById('navDevices');
         const navAccountBtn = document.getElementById('navAccount');
+        const navSupportBtn = document.getElementById('navSupport');
         const navLogoutBtn = document.getElementById('navLogout');
 
         const accountSection = document.getElementById('accountSection');
@@ -437,6 +484,22 @@
         const btnSaveProfile = document.getElementById('btnSaveProfile');
         const btnDeleteAccount = document.getElementById('btnDeleteAccount');
 
+        const supportSection = document.getElementById('supportSection');
+        const supportStatus = document.getElementById('supportStatus');
+        const tSubject = document.getElementById('tSubject');
+        const tDevice = document.getElementById('tDevice');
+        const tMessage = document.getElementById('tMessage');
+        const btnCreateTicket = document.getElementById('btnCreateTicket');
+        const ticketsList = document.getElementById('ticketsList');
+        const tId = document.getElementById('tId');
+        const tStatus = document.getElementById('tStatus');
+        const tMessages = document.getElementById('tMessages');
+        const tReply = document.getElementById('tReply');
+        const btnReplyTicket = document.getElementById('btnReplyTicket');
+        const btnCloseTicket = document.getElementById('btnCloseTicket');
+
+        let selectedTicketId = null;
+
         function setAccountStatus(text, isErr = false) {
             if (!accountStatus) return;
             accountStatus.textContent = text || '—';
@@ -445,10 +508,194 @@
 
         function setView(view) {
             const isAccount = view === 'account';
+            const isSupport = view === 'support';
             document.body.classList.toggle('mode-account', isAccount);
+            document.body.classList.toggle('mode-support', isSupport);
             accountSection?.classList.toggle('hidden', !isAccount);
-            navDevicesBtn?.classList.toggle('active', !isAccount);
+            supportSection?.classList.toggle('hidden', !isSupport);
+            navDevicesBtn?.classList.toggle('active', !isAccount && !isSupport);
             navAccountBtn?.classList.toggle('active', isAccount);
+            navSupportBtn?.classList.toggle('active', isSupport);
+        }
+
+        function setSupportStatus(text, isErr = false) {
+            if (!supportStatus) return;
+            supportStatus.textContent = text || '—';
+            supportStatus.className = 'status' + (isErr ? ' offline' : ' online');
+        }
+
+        async function supportApi(path, opts = {}) {
+            const r = await fetch(path, Object.assign({}, opts, { credentials: 'include' }));
+            if (r.status === 401) return doLogout();
+            const text = await r.text();
+            let j = null;
+            try { j = text ? JSON.parse(text) : null; } catch { j = { raw: text }; }
+            if (!r.ok) throw new Error((j && j.error) ? j.error : `HTTP ${r.status}`);
+            return j;
+        }
+
+        function safeText(el, text) {
+            if (!el) return;
+            el.textContent = text == null ? '' : String(text);
+        }
+
+        function renderTicketMessages(messages) {
+            if (!tMessages) return;
+            const rows = Array.isArray(messages) ? messages : [];
+            if (!rows.length) {
+                tMessages.innerHTML = '<div class="muted">Sin mensajes</div>';
+                return;
+            }
+            tMessages.innerHTML = '';
+            for (const m of rows) {
+                const wrap = document.createElement('div');
+                wrap.className = 'msg';
+                const meta = document.createElement('div');
+                meta.className = 'msg-meta';
+                meta.textContent = `${m.author_type === 'admin' ? 'Soporte' : 'Tú'} · ${m.created_at_madrid || m.created_at || ''}`;
+                const body = document.createElement('div');
+                body.className = 'msg-body';
+                body.textContent = String(m.body || '');
+                wrap.appendChild(meta);
+                wrap.appendChild(body);
+                tMessages.appendChild(wrap);
+            }
+            tMessages.scrollTop = tMessages.scrollHeight;
+        }
+
+        function renderTicketsList(tickets) {
+            if (!ticketsList) return;
+            const rows = Array.isArray(tickets) ? tickets : [];
+            ticketsList.innerHTML = '';
+            if (!rows.length) {
+                const empty = document.createElement('div');
+                empty.className = 'muted';
+                empty.textContent = 'No tienes tickets todavía.';
+                ticketsList.appendChild(empty);
+                return;
+            }
+            for (const t of rows) {
+                const item = document.createElement('div');
+                item.className = 'ticket-item';
+                const title = document.createElement('div');
+                title.className = 'ticket-title';
+                title.textContent = t.subject || '(sin asunto)';
+                const meta = document.createElement('div');
+                meta.className = 'ticket-meta';
+                meta.textContent = `${t.status || ''} · ${t.priority || ''}${t.device_code ? ' · ' + t.device_code : ''}`;
+                item.appendChild(title);
+                item.appendChild(meta);
+                item.addEventListener('click', async () => {
+                    await selectTicket(t.id);
+                });
+                ticketsList.appendChild(item);
+            }
+        }
+
+        async function loadTickets() {
+            try {
+                setSupportStatus('Cargando tickets...', false);
+                const j = await supportApi('/api/tickets');
+                renderTicketsList(j.tickets || []);
+                if (selectedTicketId) await selectTicket(selectedTicketId, true);
+                setSupportStatus('Listo.', false);
+            } catch (e) {
+                setSupportStatus(e.message || 'Error cargando tickets', true);
+            }
+        }
+
+        async function selectTicket(id, silent = false) {
+            const tid = String(id || '').trim();
+            if (!tid) return;
+            selectedTicketId = tid;
+            try {
+                if (!silent) setSupportStatus('Cargando ticket...', false);
+                const j = await supportApi(`/api/tickets/${encodeURIComponent(tid)}`);
+                safeText(tId, j.ticket?.id || tid);
+                safeText(tStatus, j.ticket?.status || '');
+                renderTicketMessages(j.messages || []);
+                if (!silent) setSupportStatus('Ticket cargado.', false);
+            } catch (e) {
+                if (!silent) setSupportStatus(e.message || 'Error', true);
+            }
+        }
+
+        async function populateTicketDeviceSelect() {
+            if (!tDevice) return;
+            const select = document.getElementById('deviceSelect');
+            // Mantener opción "sin dispositivo"
+            const keep = [{ value: '', text: '(sin dispositivo)' }];
+            const opts = select ? Array.from(select.options || []).map(o => ({ value: o.value, text: o.textContent })) : [];
+            const all = keep.concat(opts.filter(o => o.value));
+            tDevice.innerHTML = '';
+            for (const o of all) {
+                const opt = document.createElement('option');
+                opt.value = o.value;
+                opt.textContent = o.text;
+                tDevice.appendChild(opt);
+            }
+        }
+
+        async function createTicket() {
+            try {
+                setSupportStatus('Enviando ticket...', false);
+                const payload = {
+                    subject: String(tSubject.value || '').trim(),
+                    device_code: String(tDevice.value || '').trim() || null,
+                    message: String(tMessage.value || '').trim()
+                };
+                if (!payload.subject || payload.subject.length < 3) throw new Error('Asunto demasiado corto');
+                if (!payload.message || payload.message.length < 3) throw new Error('Mensaje demasiado corto');
+
+                const j = await supportApi('/api/tickets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                tSubject.value = '';
+                tMessage.value = '';
+                selectedTicketId = j.ticket_id || null;
+                await loadTickets();
+                if (selectedTicketId) await selectTicket(selectedTicketId, true);
+                setSupportStatus('Ticket creado.', false);
+            } catch (e) {
+                setSupportStatus(e.message || 'Error creando ticket', true);
+            }
+        }
+
+        async function replyToTicket() {
+            if (!selectedTicketId) return setSupportStatus('Selecciona un ticket.', true);
+            const body = String(tReply.value || '').trim();
+            if (!body) return setSupportStatus('Escribe un mensaje.', true);
+            try {
+                setSupportStatus('Enviando respuesta...', false);
+                await supportApi(`/api/tickets/${encodeURIComponent(selectedTicketId)}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ body })
+                });
+                tReply.value = '';
+                await selectTicket(selectedTicketId, true);
+                await loadTickets();
+                setSupportStatus('Enviado.', false);
+            } catch (e) {
+                setSupportStatus(e.message || 'Error', true);
+            }
+        }
+
+        async function closeTicket() {
+            if (!selectedTicketId) return setSupportStatus('Selecciona un ticket.', true);
+            const ok = confirm('¿Seguro que quieres cerrar este ticket?');
+            if (!ok) return;
+            try {
+                setSupportStatus('Cerrando...', false);
+                await supportApi(`/api/tickets/${encodeURIComponent(selectedTicketId)}/close`, { method: 'POST' });
+                await selectTicket(selectedTicketId, true);
+                await loadTickets();
+                setSupportStatus('Ticket cerrado.', false);
+            } catch (e) {
+                setSupportStatus(e.message || 'Error', true);
+            }
         }
 
         async function doLogout() {
@@ -521,9 +768,20 @@
             setView('account');
             await loadProfileIntoForm();
         });
+        navSupportBtn?.addEventListener('click', async () => {
+            setView('support');
+            try {
+                await loadDevices();
+                await populateTicketDeviceSelect();
+            } catch {}
+            await loadTickets();
+        });
         navLogoutBtn?.addEventListener('click', doLogout);
         btnSaveProfile?.addEventListener('click', saveProfileFromForm);
         btnDeleteAccount?.addEventListener('click', deleteAccount);
+        btnCreateTicket?.addEventListener('click', createTicket);
+        btnReplyTicket?.addEventListener('click', replyToTicket);
+        btnCloseTicket?.addEventListener('click', closeTicket);
 
         function rebootsOffsetKey(code) { return `rebootsOffset:${code}`; }
         function getLocalRebootsOffset(code) {

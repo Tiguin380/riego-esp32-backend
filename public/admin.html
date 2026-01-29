@@ -55,6 +55,17 @@
     .muted { color: #8fa3bf; font-size: 12px; }
     .right { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; justify-content:flex-end; }
 
+    .list { display:flex; flex-direction:column; gap: 8px; }
+    .item { padding: 10px; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; background: rgba(15,52,96,0.20); cursor: pointer; }
+    .item:hover { background: rgba(15,52,96,0.28); }
+    .item-title { font-weight: 800; }
+    .item-meta { color: #8fa3bf; font-size: 12px; margin-top: 4px; }
+
+    .messages { border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; background: rgba(0,0,0,0.10); padding: 10px; max-height: 320px; overflow:auto; }
+    .msg { padding: 10px; border-radius: 12px; background: rgba(15,52,96,0.22); border: 1px solid rgba(255,255,255,0.06); margin-bottom: 8px; }
+    .msg-meta { color:#8fa3bf; font-size: 12px; margin-bottom: 6px; }
+    .msg-body { white-space: pre-wrap; }
+
     @media (max-width: 640px) {
       body { padding: 10px; }
       .section { padding: 14px; }
@@ -162,6 +173,67 @@
         </div>
       </div>
     </div>
+
+    <div class="section">
+      <h2>TICKETS</h2>
+      <div class="row">
+        <label>Estado</label>
+        <select id="tStatus" style="padding: 10px; border: none; border-radius: 10px; background: #0f3460; color: #fff; font-size: 14px;">
+          <option value="open">open</option>
+          <option value="pending">pending</option>
+          <option value="closed">closed</option>
+          <option value="">(todos)</option>
+        </select>
+        <label style="flex: 0 0 120px;">Device</label>
+        <input id="tDevice" placeholder="RIEGO_001" />
+        <div class="right" style="flex: 1 1 auto; justify-content:flex-end;">
+          <button class="mini-btn" id="btnTickets" type="button">Actualizar</button>
+        </div>
+      </div>
+      <div style="height: 10px"></div>
+      <div id="ticketsList" class="list"></div>
+      <div class="status" id="ticketsStatus">—</div>
+    </div>
+
+    <div class="section">
+      <h2>DETALLE TICKET</h2>
+      <div class="row"><label>ID</label><input id="tId" placeholder="(selecciona un ticket)" disabled /></div>
+      <div style="height: 8px"></div>
+      <div class="row"><label>Asunto</label><input id="tSubject" placeholder="Asunto" /></div>
+      <div style="height: 8px"></div>
+      <div class="row">
+        <label>Estado</label>
+        <select id="tStatusEdit" style="padding: 10px; border: none; border-radius: 10px; background: #0f3460; color: #fff; font-size: 14px;">
+          <option value="open">open</option>
+          <option value="pending">pending</option>
+          <option value="closed">closed</option>
+        </select>
+        <label style="flex: 0 0 120px;">Prioridad</label>
+        <select id="tPriority" style="padding: 10px; border: none; border-radius: 10px; background: #0f3460; color: #fff; font-size: 14px;">
+          <option value="low">low</option>
+          <option value="normal">normal</option>
+          <option value="high">high</option>
+        </select>
+      </div>
+      <div style="height: 8px"></div>
+      <div class="row"><label>Cliente</label><input id="tCustomer" placeholder="—" disabled /></div>
+      <div style="height: 8px"></div>
+      <div class="row"><label>Usuario</label><input id="tUser" placeholder="—" disabled /></div>
+      <div style="height: 8px"></div>
+      <div class="row"><label>Dispositivo</label><input id="tDeviceView" placeholder="—" disabled /></div>
+
+      <div style="height: 12px"></div>
+      <div class="row"><label>Mensajes</label><div id="tMessages" class="messages" style="flex: 1 1 600px;"></div></div>
+      <div style="height: 12px"></div>
+      <div class="row"><label>Respuesta</label><textarea id="tReply" placeholder="Escribe aquí tu respuesta..."></textarea></div>
+      <div style="height: 10px"></div>
+      <div class="right">
+        <button class="mini-btn primary" id="btnTicketSave" type="button">Guardar</button>
+        <button class="mini-btn primary" id="btnTicketReply" type="button">Enviar</button>
+        <button class="mini-btn danger" id="btnTicketClose" type="button">Cerrar</button>
+      </div>
+      <div class="status" id="ticketStatus">—</div>
+    </div>
   </div>
 
   <script>
@@ -197,7 +269,28 @@
     const btnAssign = document.getElementById('btnAssign');
     const btnUnassign = document.getElementById('btnUnassign');
 
+    const tStatus = document.getElementById('tStatus');
+    const tDevice = document.getElementById('tDevice');
+    const btnTickets = document.getElementById('btnTickets');
+    const ticketsList = document.getElementById('ticketsList');
+    const ticketsStatus = document.getElementById('ticketsStatus');
+
+    const tId = document.getElementById('tId');
+    const tSubject = document.getElementById('tSubject');
+    const tStatusEdit = document.getElementById('tStatusEdit');
+    const tPriority = document.getElementById('tPriority');
+    const tCustomer = document.getElementById('tCustomer');
+    const tUser = document.getElementById('tUser');
+    const tDeviceView = document.getElementById('tDeviceView');
+    const tMessages = document.getElementById('tMessages');
+    const tReply = document.getElementById('tReply');
+    const btnTicketSave = document.getElementById('btnTicketSave');
+    const btnTicketReply = document.getElementById('btnTicketReply');
+    const btnTicketClose = document.getElementById('btnTicketClose');
+    const ticketStatus = document.getElementById('ticketStatus');
+
     let selectedCustomerId = null;
+    let selectedTicketId = null;
 
     function setConn(ok, msg) {
       connDot.className = 'dot ' + (ok ? 'ok' : 'bad');
@@ -386,6 +479,155 @@
       }
     }
 
+    function renderTicketsList(tickets) {
+      const rows = Array.isArray(tickets) ? tickets : [];
+      if (!rows.length) {
+        ticketsList.innerHTML = '<span class="tag red">Sin tickets</span>';
+        return;
+      }
+      ticketsList.innerHTML = '';
+      for (const t of rows) {
+        const el = document.createElement('div');
+        el.className = 'item';
+        el.innerHTML = `
+          <div class="item-title">${escapeHtml(t.subject || '(sin asunto)')}</div>
+          <div class="item-meta">
+            ${escapeHtml(String(t.status || ''))} · ${escapeHtml(String(t.priority || ''))}
+            ${t.device_code ? ' · ' + escapeHtml(t.device_code) : ''}
+            ${t.customer_name ? ' · ' + escapeHtml(t.customer_name) : ''}
+          </div>
+          ${t.last_message ? `<div class="item-meta">${escapeHtml(String(t.last_message)).slice(0, 140)}</div>` : ''}
+        `;
+        el.addEventListener('click', async () => {
+          await selectTicket(t.id);
+        });
+        ticketsList.appendChild(el);
+      }
+    }
+
+    function renderTicketMessages(messages) {
+      const rows = Array.isArray(messages) ? messages : [];
+      if (!rows.length) {
+        tMessages.innerHTML = '<div class="muted">Sin mensajes</div>';
+        return;
+      }
+      tMessages.innerHTML = rows.map(m => {
+        const who = m.author_type === 'admin' ? 'Admin' : 'Cliente';
+        const when = m.created_at_madrid || m.created_at || '';
+        return `
+          <div class="msg">
+            <div class="msg-meta">${escapeHtml(who)} · ${escapeHtml(when)}</div>
+            <div class="msg-body">${escapeHtml(m.body)}</div>
+          </div>
+        `;
+      }).join('');
+      tMessages.scrollTop = tMessages.scrollHeight;
+    }
+
+    function clearTicketSelection() {
+      selectedTicketId = null;
+      if (tId) tId.value = '';
+      if (tSubject) tSubject.value = '';
+      if (tCustomer) tCustomer.value = '';
+      if (tUser) tUser.value = '';
+      if (tDeviceView) tDeviceView.value = '';
+      if (tReply) tReply.value = '';
+      if (tMessages) tMessages.innerHTML = '<div class="muted">Selecciona un ticket</div>';
+      setStatus(ticketStatus, '—', '');
+    }
+
+    async function loadTickets() {
+      setStatus(ticketsStatus, 'Cargando...', '');
+      try {
+        const qs = new URLSearchParams();
+        const st = String(tStatus.value || '').trim();
+        const dc = String(tDevice.value || '').trim();
+        if (st) qs.set('status', st);
+        if (dc) qs.set('device_code', dc);
+
+        const j = await api(`/api/admin/tickets${qs.toString() ? `?${qs.toString()}` : ''}`);
+        renderTicketsList(j.tickets || []);
+        setStatus(ticketsStatus, 'Listo.', 'ok');
+
+        if (selectedTicketId) {
+          await selectTicket(selectedTicketId, true);
+        }
+      } catch (e) {
+        setStatus(ticketsStatus, e.message || 'Error', 'bad');
+      }
+    }
+
+    async function selectTicket(id, silent = false) {
+      const tid = String(id || '').trim();
+      if (!tid) return;
+      selectedTicketId = tid;
+      if (!silent) setStatus(ticketStatus, 'Cargando...', '');
+      try {
+        const j = await api(`/api/admin/tickets/${encodeURIComponent(tid)}`);
+        const t = j.ticket || {};
+        if (tId) tId.value = t.id || tid;
+        if (tSubject) tSubject.value = t.subject || '';
+        if (tStatusEdit) tStatusEdit.value = t.status || 'open';
+        if (tPriority) tPriority.value = t.priority || 'normal';
+        if (tCustomer) tCustomer.value = t.customer_name || t.customer_id || '';
+        if (tUser) tUser.value = t.user_email || t.user_id || '';
+        if (tDeviceView) tDeviceView.value = t.device_code || '';
+        renderTicketMessages(j.messages || []);
+        if (!silent) setStatus(ticketStatus, 'Ticket cargado.', 'ok');
+      } catch (e) {
+        if (!silent) setStatus(ticketStatus, e.message || 'Error', 'bad');
+      }
+    }
+
+    async function saveTicket() {
+      if (!selectedTicketId) return setStatus(ticketStatus, 'Selecciona un ticket.', 'bad');
+      setStatus(ticketStatus, 'Guardando...', '');
+      try {
+        const payload = {
+          subject: String(tSubject.value || '').trim(),
+          status: String(tStatusEdit.value || '').trim(),
+          priority: String(tPriority.value || '').trim()
+        };
+        await api(`/api/admin/tickets/${encodeURIComponent(selectedTicketId)}`, { method: 'PUT', body: JSON.stringify(payload) });
+        setStatus(ticketStatus, 'Guardado.', 'ok');
+        await loadTickets();
+        await selectTicket(selectedTicketId, true);
+      } catch (e) {
+        setStatus(ticketStatus, e.message || 'Error', 'bad');
+      }
+    }
+
+    async function replyTicket() {
+      if (!selectedTicketId) return setStatus(ticketStatus, 'Selecciona un ticket.', 'bad');
+      const body = String(tReply.value || '').trim();
+      if (!body) return setStatus(ticketStatus, 'Escribe una respuesta.', 'bad');
+      setStatus(ticketStatus, 'Enviando...', '');
+      try {
+        await api(`/api/admin/tickets/${encodeURIComponent(selectedTicketId)}/messages`, { method: 'POST', body: JSON.stringify({ body }) });
+        tReply.value = '';
+        setStatus(ticketStatus, 'Enviado.', 'ok');
+        await selectTicket(selectedTicketId, true);
+        await loadTickets();
+      } catch (e) {
+        setStatus(ticketStatus, e.message || 'Error', 'bad');
+      }
+    }
+
+    async function closeTicket() {
+      if (!selectedTicketId) return setStatus(ticketStatus, 'Selecciona un ticket.', 'bad');
+      const ok = confirm('¿Seguro que quieres cerrar este ticket?');
+      if (!ok) return;
+      setStatus(ticketStatus, 'Cerrando...', '');
+      try {
+        await api(`/api/admin/tickets/${encodeURIComponent(selectedTicketId)}`, { method: 'PUT', body: JSON.stringify({ status: 'closed' }) });
+        setStatus(ticketStatus, 'Cerrado.', 'ok');
+        await loadTickets();
+        await selectTicket(selectedTicketId, true);
+      } catch (e) {
+        setStatus(ticketStatus, e.message || 'Error', 'bad');
+      }
+    }
+
     function escapeHtml(s) {
       return String(s || '').replace(/[&<>\"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
     }
@@ -402,6 +644,7 @@
         renderKpis(summary);
         renderCustomers(customers.customers || []);
         renderDevices(devices.devices || []);
+        await loadTickets();
         setStatus(statusEl, 'Listo.', 'ok');
 
         if (selectedCustomerId) {
@@ -417,6 +660,11 @@
     }
 
     btnReload.addEventListener('click', reloadAll);
+
+    btnTickets.addEventListener('click', loadTickets);
+    btnTicketSave.addEventListener('click', saveTicket);
+    btnTicketReply.addEventListener('click', replyTicket);
+    btnTicketClose.addEventListener('click', closeTicket);
 
     btnClearCustomer.addEventListener('click', () => {
       clearCustomerSelection();
@@ -525,7 +773,9 @@
         window.location.href = '/admin';
         return;
       }
+      if (tStatus && !tStatus.value) tStatus.value = 'open';
       clearCustomerSelection();
+      clearTicketSelection();
       reloadAll();
     })();
   </script>
