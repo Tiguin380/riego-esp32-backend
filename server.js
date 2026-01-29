@@ -1351,39 +1351,97 @@ async function getUserRow(userId) {
   return r.rows[0] || null;
 }
 
-// Tickets: columnas de estado de lectura (pueden faltar en instalaciones antiguas si initDB se cortó).
+// Tickets: esquema (tablas + columnas de lectura) puede faltar en instalaciones antiguas si initDB se cortó.
 // Auto-migramos on-demand para evitar 500 en producción.
-let ticketsSeenColsCache = { ok: null, checkedAtMs: 0 };
-async function ensureTicketsSeenColumns() {
+let supportSchemaCache = { ok: null, checkedAtMs: 0 };
+async function ensureSupportSchema() {
   const now = Date.now();
-  if (ticketsSeenColsCache.ok === true && now - ticketsSeenColsCache.checkedAtMs < 5 * 60 * 1000) return true;
+  if (supportSchemaCache.ok === true && now - supportSchemaCache.checkedAtMs < 5 * 60 * 1000) return true;
 
   try {
-    const q = await pool.query(
-      `SELECT column_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public'
-         AND table_name = 'tickets'
-         AND column_name IN ('last_user_seen_at', 'last_admin_seen_at')`
-    );
-    const cols = new Set((q.rows || []).map((r) => String(r.column_name)));
-    const hasBoth = cols.has('last_user_seen_at') && cols.has('last_admin_seen_at');
-    if (hasBoth) {
-      ticketsSeenColsCache = { ok: true, checkedAtMs: now };
-      return true;
-    }
+    // Mínimo viable para soporte: customers + tickets + ticket_messages
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS customers (
+        id UUID PRIMARY KEY,
+        name VARCHAR(120) NOT NULL,
+        email VARCHAR(255),
+        phone VARCHAR(60),
+        address VARCHAR(255),
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-    // Intentar migración mínima (idempotente)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tickets (
+        id UUID PRIMARY KEY,
+        customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        device_id UUID REFERENCES devices(id) ON DELETE SET NULL,
+        subject VARCHAR(200) NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'open',
+        priority VARCHAR(20) NOT NULL DEFAULT 'normal',
+        assigned_to VARCHAR(80),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        closed_at TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ticket_messages (
+        id UUID PRIMARY KEY,
+        ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
+        author_type VARCHAR(10) NOT NULL,
+        author_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        body TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_user_time ON tickets(user_id, created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_customer_time ON tickets(customer_id, created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_status_time ON tickets(status, created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket_time ON ticket_messages(ticket_id, created_at ASC)`);
+
+    // Estado de lectura (badges)
     await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS last_user_seen_at TIMESTAMP`);
     await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS last_admin_seen_at TIMESTAMP`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_last_user_seen ON tickets(last_user_seen_at)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_last_admin_seen ON tickets(last_admin_seen_at)`);
 
-    ticketsSeenColsCache = { ok: true, checkedAtMs: now };
+    supportSchemaCache = { ok: true, checkedAtMs: now };
     return true;
   } catch (e) {
-    console.warn('ensureTicketsSeenColumns failed:', e.message);
-    ticketsSeenColsCache = { ok: false, checkedAtMs: now };
+    console.warn('ensureSupportSchema failed:', e.message);
+    supportSchemaCache = { ok: false, checkedAtMs: now };
+    return false;
+  }
+}
+
+// device_config: algunas columnas nuevas (notificaciones/zones) pueden faltar en DBs antiguas.
+let deviceConfigSchemaCache = { ok: null, checkedAtMs: 0 };
+async function ensureDeviceConfigSchema() {
+  const now = Date.now();
+  if (deviceConfigSchemaCache.ok === true && now - deviceConfigSchemaCache.checkedAtMs < 5 * 60 * 1000) return true;
+  try {
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS wet_v DECIMAL(6,3)`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS dry_v DECIMAL(6,3)`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS reboot_count_offset INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_humidity_low_minutes INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_valve_on_max_minutes INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_sensor_dead_minutes INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_voltage_min DECIMAL(6,3)`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_voltage_max DECIMAL(6,3)`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS notify_webhook_url TEXT`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS notify_telegram_chat_id TEXT`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS zones_json JSONB`);
+    deviceConfigSchemaCache = { ok: true, checkedAtMs: now };
+    return true;
+  } catch (e) {
+    console.warn('ensureDeviceConfigSchema failed:', e.message);
+    deviceConfigSchemaCache = { ok: false, checkedAtMs: now };
     return false;
   }
 }
@@ -1754,16 +1812,14 @@ app.get('/api/tickets/unread-count', async (req, res) => {
     const userRow = await getUserRow(req.user.id);
     if (!userRow) return res.status(401).json({ error: 'No autenticado' });
 
+    // Asegurar esquema de soporte (si falla, devolvemos 0 en vez de romper UI)
+    const schemaOk = await ensureSupportSchema();
+    if (!schemaOk) return res.json({ unread_count: 0 });
+
     const customerId = userRow.customer_id ?? null;
     const params = [userRow.id];
     const whereOwner = customerId ? `(t.user_id = $1 OR t.customer_id = $2)` : `(t.user_id = $1)`;
     if (customerId) params.push(customerId);
-
-    const hasSeenCols = await ensureTicketsSeenColumns();
-
-    const existsCond = hasSeenCols
-      ? `AND tm.created_at > COALESCE(t.last_user_seen_at, to_timestamp(0)::timestamp)`
-      : ``;
 
     const r = await pool.query(
       `SELECT COUNT(*)::int AS unread_count
@@ -1774,13 +1830,18 @@ app.get('/api/tickets/unread-count', async (req, res) => {
            FROM ticket_messages tm
            WHERE tm.ticket_id = t.id
              AND tm.author_type = 'admin'
-             ${existsCond}
+             AND tm.created_at > COALESCE(t.last_user_seen_at, to_timestamp(0)::timestamp)
          )`,
       params
     );
     res.json({ unread_count: r.rows[0]?.unread_count || 0 });
   } catch (e) {
     console.error(e);
+    // Degradación: si falla por tablas/columnas, no romper el panel
+    if (/relation .* does not exist|column .* does not exist/i.test(String(e.message))) {
+      try { await ensureSupportSchema(); } catch {}
+      return res.json({ unread_count: 0 });
+    }
     res.status(500).json({ error: e.message });
   }
 });
@@ -1792,8 +1853,8 @@ app.post('/api/tickets/:id/mark-read', async (req, res) => {
     const t = await requireTicketAccess(req, res, ticketId);
     if (!t) return res.status(404).json({ error: 'Ticket no encontrado' });
 
-    const hasSeenCols = await ensureTicketsSeenColumns();
-    if (hasSeenCols) {
+    const schemaOk = await ensureSupportSchema();
+    if (schemaOk) {
       await pool.query(`UPDATE tickets SET last_user_seen_at = CURRENT_TIMESTAMP WHERE id = $1`, [ticketId]);
     }
     res.json({ ok: true });
@@ -1807,10 +1868,9 @@ app.get('/api/admin/tickets/unread-count', async (req, res) => {
   try {
     if (!requireAdminKey(req, res)) return;
 
-    const hasSeenCols = await ensureTicketsSeenColumns();
-    const existsCond = hasSeenCols
-      ? `AND tm.created_at > COALESCE(t.last_admin_seen_at, to_timestamp(0)::timestamp)`
-      : ``;
+    const schemaOk = await ensureSupportSchema();
+    if (!schemaOk) return res.json({ unread_count: 0 });
+    const existsCond = `AND tm.created_at > COALESCE(t.last_admin_seen_at, to_timestamp(0)::timestamp)`;
 
     const r = await pool.query(
       `SELECT COUNT(*)::int AS unread_count
@@ -1836,8 +1896,8 @@ app.post('/api/admin/tickets/:id/mark-read', async (req, res) => {
     if (!requireAdminKey(req, res)) return;
     const ticketId = String(req.params.id || '').trim();
 
-    const hasSeenCols = await ensureTicketsSeenColumns();
-    if (hasSeenCols) {
+    const schemaOk = await ensureSupportSchema();
+    if (schemaOk) {
       await pool.query(`UPDATE tickets SET last_admin_seen_at = CURRENT_TIMESTAMP WHERE id = $1`, [ticketId]);
     }
     res.json({ ok: true });
@@ -3658,6 +3718,10 @@ app.post('/api/config/:device_code', async (req, res) => {
 
     const device_id = device.rows[0].id;
 
+    // Asegurar que device_config tiene las columnas nuevas (zones_json, notify_*, etc.)
+    // para evitar 500 en DBs antiguas.
+    await ensureDeviceConfigSchema();
+
     // Auth (opcional): por defecto NO exige token; activar con REQUIRE_DEVICE_TOKEN=true
     const ok = await enforceDeviceTokenIfRequired(req, res, device_code);
     if (!ok) return;
@@ -3749,6 +3813,12 @@ app.post('/api/config/:device_code', async (req, res) => {
     res.json({ status: 'Configuración guardada' });
   } catch (error) {
     console.error(error);
+    // Si falla por columnas faltantes, intentar migración y reintentar una vez.
+    if (/column .* does not exist|relation .* does not exist/i.test(String(error.message))) {
+      try {
+        await ensureDeviceConfigSchema();
+      } catch {}
+    }
     res.status(500).json({ error: error.message });
   }
 });
