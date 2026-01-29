@@ -105,6 +105,29 @@ npm run gen:device-token
 
 ## Configurar ESP32
 
+## Configuración WiFi para el cliente (AP + portal cautivo)
+
+Para que el dispositivo funcione en casa de cualquier cliente **sin grabar tu WiFi**, el firmware incluye un modo de configuración:
+
+- Si el ESP32 **no puede conectarse** a la WiFi configurada, crea una red WiFi propia (AP) llamada `AgroSense-<DEVICE_CODE>`.
+- Al conectarte a esa red, se abre un **portal cautivo** para elegir la WiFi del cliente y poner la contraseña.
+- Una vez guardado, el ESP32 se conectará a la WiFi del cliente y empezará a enviar datos al servidor.
+
+### Pasos (cliente)
+
+1. Enciende el dispositivo y espera ~30–60s.
+2. En el móvil/PC, busca una red WiFi llamada `AgroSense-RIEGO_001` (o similar).
+3. Conéctate a esa red. La contraseña del AP es la que viene en la etiqueta/manual (en el firmware se configura como `wifi_ap_password`).
+4. Si no se abre automáticamente, abre el navegador y entra en `http://192.168.4.1`.
+5. Selecciona la WiFi de tu casa y escribe la contraseña.
+6. Espera a que el dispositivo se conecte y vuelva al modo normal.
+
+### Nota para fabricación (tú)
+
+- No flashees dispositivos con tu WiFi real.
+- Para “modo cliente”, puedes compilar con valores dummy en `wifi_ssid`/`wifi_password` (fallará la conexión y arrancará el AP automáticamente), y mantener una contraseña común en `wifi_ap_password`.
+- El AP/portal está definido en [riego_esp32_base.yaml](riego_esp32_base.yaml) y la contraseña del AP se define en `secrets.yaml` (local, ignorado por git).
+
 Actualiza la URL en `riego_esp32.yaml` para apuntar a tu app desplegada en Railway:
 
 ```yaml
