@@ -1577,7 +1577,7 @@ app.get('/api/tickets', async (req, res) => {
   }
 });
 
-app.get('/api/tickets/:id', async (req, res) => {
+app.get('/api/tickets/:id([0-9a-fA-F-]{36})', async (req, res) => {
   try {
     if (!requireUser(req, res)) return;
     const ticketId = String(req.params.id || '').trim();
@@ -1599,7 +1599,7 @@ app.get('/api/tickets/:id', async (req, res) => {
   }
 });
 
-app.post('/api/tickets/:id/messages', async (req, res) => {
+app.post('/api/tickets/:id([0-9a-fA-F-]{36})/messages', async (req, res) => {
   try {
     if (!requireUser(req, res)) return;
     const ticketId = String(req.params.id || '').trim();
@@ -1634,7 +1634,7 @@ app.post('/api/tickets/:id/messages', async (req, res) => {
   }
 });
 
-app.post('/api/tickets/:id/close', async (req, res) => {
+app.post('/api/tickets/:id([0-9a-fA-F-]{36})/close', async (req, res) => {
   try {
     if (!requireUser(req, res)) return;
     const ticketId = String(req.params.id || '').trim();
@@ -1713,7 +1713,7 @@ app.get('/api/admin/tickets', async (req, res) => {
   }
 });
 
-app.get('/api/admin/tickets/:id', async (req, res) => {
+app.get('/api/admin/tickets/:id([0-9a-fA-F-]{36})', async (req, res) => {
   try {
     if (!requireAdminKey(req, res)) return;
     const ticketId = String(req.params.id || '').trim();
@@ -1743,7 +1743,7 @@ app.get('/api/admin/tickets/:id', async (req, res) => {
   }
 });
 
-app.put('/api/admin/tickets/:id', async (req, res) => {
+app.put('/api/admin/tickets/:id([0-9a-fA-F-]{36})', async (req, res) => {
   try {
     if (!requireAdminKey(req, res)) return;
     const ticketId = String(req.params.id || '').trim();
@@ -1774,7 +1774,7 @@ app.put('/api/admin/tickets/:id', async (req, res) => {
   }
 });
 
-app.post('/api/admin/tickets/:id/messages', async (req, res) => {
+app.post('/api/admin/tickets/:id([0-9a-fA-F-]{36})/messages', async (req, res) => {
   try {
     if (!requireAdminKey(req, res)) return;
     const ticketId = String(req.params.id || '').trim();
@@ -1844,7 +1844,7 @@ app.get('/api/tickets/unread-count', async (req, res) => {
   }
 });
 
-app.post('/api/tickets/:id/mark-read', async (req, res) => {
+app.post('/api/tickets/:id([0-9a-fA-F-]{36})/mark-read', async (req, res) => {
   try {
     if (!requireUser(req, res)) return;
     const ticketId = String(req.params.id || '').trim();
@@ -1889,7 +1889,7 @@ app.get('/api/admin/tickets/unread-count', async (req, res) => {
   }
 });
 
-app.post('/api/admin/tickets/:id/mark-read', async (req, res) => {
+app.post('/api/admin/tickets/:id([0-9a-fA-F-]{36})/mark-read', async (req, res) => {
   try {
     if (!requireAdminKey(req, res)) return;
     const ticketId = String(req.params.id || '').trim();
