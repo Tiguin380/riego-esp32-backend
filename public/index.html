@@ -86,6 +86,8 @@
         .summary .k { color: #888; font-size: 11px; text-transform: uppercase; }
         .summary .v { color: #ddd; font-weight: bold; }
 
+        .hidden { display: none; }
+
         .mini-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); color: #ddd; padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; }
         .mini-btn:hover { background: rgba(255,255,255,0.12); }
         .mini-btn.danger { border-color: rgba(255,77,77,0.35); color: #ffb3b3; }
@@ -239,20 +241,21 @@
             </div>
             <div class="summary">
                 <div>
-                    <div class="k" id="periodLabel">Periodo</div>
-                    <div class="v" id="periodValue">--</div>
+                    <div class="k">Media Humedad</div>
+                    <div class="v" id="avgHumidity">--</div>
                 </div>
                 <div>
                     <div class="k">Último punto</div>
                     <div class="v" id="lastPoint">--</div>
                 </div>
                 <div>
-                    <div class="k">Media Humedad</div>
-                    <div class="v" id="avgHumidity">--</div>
-                </div>
-                <div>
                     <div class="k">Tiempo Válvula ON</div>
                     <div class="v" id="totalValveOn">--</div>
+                </div>
+                <!-- Mantener estos IDs para que el JS pueda actualizar el periodo, pero sin mostrarlo en la UI -->
+                <div class="hidden">
+                    <div class="k" id="periodLabel">Periodo</div>
+                    <div class="v" id="periodValue">--</div>
                 </div>
             </div>
             <div class="charts-grid">
