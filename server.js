@@ -10,6 +10,13 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED_REJECTION', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT_EXCEPTION', err);
+});
+
 const app = express();
 // Railway/Proxies: necesario para que rate-limit y req.ip funcionen bien
 app.set('trust proxy', 1);
@@ -18,6 +25,12 @@ app.set('trust proxy', 1);
 // el navegador rechazará la cookie y parecerá que “no inicia sesión”.
 // Forzamos HTTPS para evitar ese bucle.
 app.use((req, res, next) => {
+  // Nunca forzar HTTPS en la API: healthchecks/ingest internos pueden ir por HTTP
+  // y algunos checkers consideran 3xx como fallo.
+  if (req.path && String(req.path).startsWith('/api/')) return next();
+  // Solo redirigir navegación (evita afectar POSTs u otros métodos)
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+
   const cookieSecure = envBool('COOKIE_SECURE', process.env.NODE_ENV === 'production') || COOKIE_SAMESITE === 'none';
   if (!cookieSecure) return next();
 
@@ -25,6 +38,10 @@ app.use((req, res, next) => {
     .split(',')[0]
     .trim()
     .toLowerCase();
+
+  // Si no hay x-forwarded-proto, asumimos entorno interno y NO forzamos.
+  if (!xfProto) return next();
+
   const isHttps = Boolean(req.secure) || xfProto === 'https';
   if (isHttps) return next();
 
