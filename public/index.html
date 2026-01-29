@@ -88,6 +88,15 @@
 
         .hidden { display: none; }
 
+        /* Selector de canales (más moderno) */
+        .channel-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0 6px; }
+        @media (max-width: 900px) { .channel-cards { grid-template-columns: 1fr; } }
+        .channel-card { background: rgba(15,52,96,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px; min-width: 0; }
+        .channel-title { display:flex; align-items:center; justify-content:space-between; gap: 10px; margin-bottom: 8px; }
+        .channel-title .sensor-label { margin-bottom: 0; }
+        .channel-actions { display:flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+        .channel-card select { width: 100%; }
+
         .mini-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); color: #ddd; padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; }
         .mini-btn:hover { background: rgba(255,255,255,0.12); }
         .mini-btn.danger { border-color: rgba(255,77,77,0.35); color: #ffb3b3; }
@@ -143,10 +152,6 @@
             <div class="status" style="margin-top: 10px;" id="deviceMeta">--</div>
 
             <div class="topbar-mini">
-                <div class="left">
-                    <span class="mini-k">España</span>
-                    <span class="mini-v" id="topNowEs">--</span>
-                </div>
                 <div class="right">
                     <span class="pill" title="Conexión del dispositivo">
                         <span class="dot unknown" id="topConnDot"></span>
@@ -155,6 +160,8 @@
                     <span class="pill" id="topStatusText">Conectando...</span>
                 </div>
             </div>
+            <!-- Mantener el ID para compatibilidad (JS lo actualiza si existe), pero oculto -->
+            <span class="hidden" id="topNowEs">--</span>
         </div>
         <div class="section">
             <h2> SENSORES EN TIEMPO REAL</h2>
@@ -221,19 +228,23 @@
                 </div>
             </div>
 
-            <div style="display:flex; gap: 12px; align-items:flex-end; flex-wrap: wrap; margin: 10px 0 6px;">
-                <div style="min-width: 220px; flex: 1;">
-                    <div class="sensor-label">Sensor de humedad (gráfica)</div>
+            <div class="channel-cards">
+                <div class="channel-card">
+                    <div class="channel-title">
+                        <div class="sensor-label">Sensor de humedad (gráfica)</div>
+                    </div>
                     <select id="humChannelSelect" title="Seleccionar sensor de humedad"></select>
-                    <div style="margin-top: 8px; display:flex; gap: 8px;">
+                    <div class="channel-actions">
                         <button class="mini-btn" id="btnRenameHum" type="button">Renombrar</button>
                         <button class="mini-btn danger" id="btnDeleteHum" type="button" title="Eliminar sensores añadidos">Eliminar</button>
                     </div>
                 </div>
-                <div style="min-width: 220px; flex: 1;">
-                    <div class="sensor-label">Válvula (gráfica)</div>
+                <div class="channel-card">
+                    <div class="channel-title">
+                        <div class="sensor-label">Válvula (gráfica)</div>
+                    </div>
                     <select id="valveChannelSelect" title="Seleccionar válvula"></select>
-                    <div style="margin-top: 8px; display:flex; gap: 8px;">
+                    <div class="channel-actions">
                         <button class="mini-btn" id="btnRenameValve" type="button">Renombrar</button>
                         <button class="mini-btn danger" id="btnDeleteValve" type="button" title="Eliminar válvulas añadidas">Eliminar</button>
                     </div>
