@@ -1816,7 +1816,7 @@ app.get('/api/channel/history/:device_code/:channel_id', async (req, res) => {
         `SELECT (ts AT TIME ZONE current_setting('TIMEZONE')) AS ts, value, state
          FROM channel_samples
          WHERE channel_id = $1 AND ts >= $2 AND ts <= $3
-         ORDER BY ts ASC
+         ORDER BY ts DESC
          LIMIT $4`,
         [channel_id, from, to, limit]
       );
@@ -1826,7 +1826,9 @@ app.get('/api/channel/history/:device_code/:channel_id', async (req, res) => {
         step,
         range: { from: from.toISOString(), to: to.toISOString() },
         server_now: new Date().toISOString(),
-        rows: r.rows.map(enrichRowWithMadridTs)
+        // Importante: en RAW hay muchos puntos; con LIMIT queremos los más recientes.
+        // Devolvemos en orden ascendente para que el frontend pinte correctamente.
+        rows: r.rows.reverse().map(enrichRowWithMadridTs)
       });
     }
 
@@ -2136,7 +2138,7 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
          FROM sensor_data sd
          LEFT JOIN device_config dc ON dc.device_id = sd.device_id
          WHERE sd.device_id = $1 AND sd.created_at >= $2 AND sd.created_at <= $3
-         ORDER BY sd.created_at ASC
+         ORDER BY sd.created_at DESC
          LIMIT $4`,
         [device_id, from, to, limit]
       );
@@ -2145,7 +2147,8 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
         step,
         range: { from: from.toISOString(), to: to.toISOString() },
         server_now: new Date().toISOString(),
-        rows: result.rows.map(enrichRowWithMadridTs)
+        // En RAW, el LIMIT debe devolver los puntos más recientes.
+        rows: result.rows.reverse().map(enrichRowWithMadridTs)
       });
     }
 
