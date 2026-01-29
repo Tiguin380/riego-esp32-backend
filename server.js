@@ -2510,6 +2510,89 @@ app.get('/api/debug/time/:device_code', async (req, res) => {
   }
 });
 
+// Diagnóstico de canales (útil cuando las gráficas/tablas no se mueven)
+app.get('/api/debug/channels/:device_code', async (req, res) => {
+  try {
+    const { device_code } = req.params;
+    const dev = await getDeviceByCode(device_code);
+    if (!dev) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+
+    // Auth: admin, usuario dueño, o token del dispositivo
+    if (!hasValidAdminKey(req)) {
+      if (REQUIRE_USER_LOGIN && req.user?.id) {
+        const owned = await pool.query(
+          `SELECT 1 FROM user_devices WHERE user_id = $1 AND device_id = $2 LIMIT 1`,
+          [req.user.id, dev.id]
+        );
+        if (owned.rows.length === 0) {
+          const token = getDeviceTokenFromReq(req);
+          if (!token || token !== dev.api_token) return res.status(403).json({ error: 'No tienes acceso a este dispositivo' });
+        }
+      } else if (!REQUIRE_USER_LOGIN) {
+        // modo abierto: permitir
+      } else {
+        const token = getDeviceTokenFromReq(req);
+        if (!token || token !== dev.api_token) return res.status(401).json({ error: 'No autenticado' });
+      }
+    }
+
+    const serverNow = new Date();
+    const nowMs = serverNow.getTime();
+
+    // Buscar los canales base (1) que usa el panel por defecto
+    const channels = await pool.query(
+      `SELECT id, kind, channel_index, name
+       FROM device_channels
+       WHERE device_id = $1 AND ((kind = 'soil_sensor' AND channel_index = 1) OR (kind = 'valve' AND channel_index = 1))`,
+      [dev.id]
+    );
+
+    const out = [];
+    for (const ch of channels.rows) {
+      const latest = await pool.query(
+        `SELECT
+           ts AS ts_raw,
+           (EXTRACT(EPOCH FROM (ts AT TIME ZONE current_setting('TIMEZONE'))) * 1000)::bigint AS ts_ms,
+           value,
+           state
+         FROM channel_samples
+         WHERE channel_id = $1
+         ORDER BY ts DESC
+         LIMIT 1`,
+        [ch.id]
+      );
+
+      const row = latest.rows[0] || null;
+      const tsMs = Number(row?.ts_ms || 0);
+      const ts = epochMsToDate(tsMs);
+      out.push({
+        id: ch.id,
+        kind: ch.kind,
+        channel_index: ch.channel_index,
+        name: ch.name,
+        latest: {
+          ts_raw: row?.ts_raw ?? null,
+          ts: ts ? ts.toISOString() : null,
+          ts_madrid: ts ? fmtEsLabel.format(ts) : null,
+          age_minutes: ts ? Math.round(Math.max(0, nowMs - ts.getTime()) / 60000) : null,
+          value: row?.value ?? null,
+          state: row?.state ?? null
+        }
+      });
+    }
+
+    res.json({
+      device_code,
+      server_now: serverNow.toISOString(),
+      server_now_madrid: fmtEsLabel.format(serverNow),
+      channels: out
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Actualizar configuración del dispositivo
 app.post('/api/config/:device_code', async (req, res) => {
   try {
