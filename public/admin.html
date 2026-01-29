@@ -7,7 +7,12 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: Arial, sans-serif; background: #0b1220; color: #e9eef7; padding: 16px; min-height: 100vh; }
-    :root { --logo-w: clamp(240px, 50vw, 520px); }
+    :root {
+      --logo-w: clamp(240px, 50vw, 520px);
+      --c-primary: #4CAF50;
+      --btn-radius: 12px;
+      --btn-border: rgba(255,255,255,0.14);
+    }
     .container { width: 100%; max-width: 1100px; margin: 0 auto; }
     .brand-header { display:flex; align-items:center; justify-content:center; margin: 6px 0 10px; }
     .brand-header img { width: var(--logo-w); max-width: 100%; height: auto; object-fit: contain; display:block; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55)); }
@@ -21,10 +26,32 @@
     .dot.ok { background: #22c55e; }
     .dot.bad { background: #ef4444; }
 
-    .mini-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); color: #ddd; padding: 10px 12px; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 700; }
-    .mini-btn:hover { background: rgba(255,255,255,0.12); }
-    .mini-btn.primary { border-color: rgba(76,175,80,0.35); color: #b8f5c1; }
-    .mini-btn.danger { border-color: rgba(255,77,77,0.35); color: #ffb3b3; }
+    .mini-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.06));
+      border: 1px solid var(--btn-border);
+      color: #e9eef7;
+      padding: 10px 14px;
+      border-radius: var(--btn-radius);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      box-shadow: 0 12px 26px rgba(0,0,0,0.20);
+      transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    a.mini-btn { text-decoration: none; }
+    .mini-btn:hover { transform: translateY(-1px); box-shadow: 0 16px 34px rgba(0,0,0,0.28); filter: brightness(1.04); }
+    .mini-btn:active { transform: translateY(0); filter: brightness(0.98); }
+    .mini-btn:focus-visible { outline: 2px solid rgba(76,175,80,0.45); outline-offset: 2px; }
+    .mini-btn.primary { border-color: rgba(76,175,80,0.40); color: #d7ffe0; background: linear-gradient(180deg, rgba(76,175,80,0.22), rgba(255,255,255,0.06)); }
+    .mini-btn.danger { border-color: rgba(255,77,77,0.35); color: #ffd1d1; background: linear-gradient(180deg, rgba(255,77,77,0.18), rgba(255,255,255,0.06)); }
 
     .badge { display:inline-flex; align-items:center; justify-content:center; min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 800; background: rgba(239,68,68,0.95); color: #fff; margin-left: 8px; border: 1px solid rgba(255,255,255,0.20); }
     .badge.hidden { display:none; }
