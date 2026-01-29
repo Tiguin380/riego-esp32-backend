@@ -2609,7 +2609,8 @@
                 document.getElementById('voltage').textContent = (v == null || Number.isNaN(v) ? '--' : v.toFixed(2));
 
                 const rssi = (data.wifi_rssi == null ? null : Number(data.wifi_rssi));
-                document.getElementById('rssi').textContent = (rssi == null || Number.isNaN(rssi) ? '--' : String(Math.trunc(rssi)));
+                const rssiOk = !(rssi == null || Number.isNaN(rssi) || rssi === 0);
+                document.getElementById('rssi').textContent = (!rssiOk ? '--' : String(Math.trunc(rssi)));
 
                 const rbRaw = (data.reboot_count_display != null ? data.reboot_count_display : data.reboot_count);
                 const rb = (rbRaw == null ? null : Number(rbRaw));
@@ -2635,7 +2636,7 @@
                     setMetricStateById('voltage', st);
                 }
 
-                if (rssi == null || Number.isNaN(rssi)) {
+                if (!rssiOk) {
                     setMetricStateById('rssi', 'metric-neutral');
                 } else {
                     const st = rssi >= -60 ? 'metric-good' : (rssi >= -75 ? 'metric-warn' : 'metric-bad');

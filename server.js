@@ -1351,6 +1351,43 @@ async function getUserRow(userId) {
   return r.rows[0] || null;
 }
 
+// Tickets: columnas de estado de lectura (pueden faltar en instalaciones antiguas si initDB se cortó).
+// Auto-migramos on-demand para evitar 500 en producción.
+let ticketsSeenColsCache = { ok: null, checkedAtMs: 0 };
+async function ensureTicketsSeenColumns() {
+  const now = Date.now();
+  if (ticketsSeenColsCache.ok === true && now - ticketsSeenColsCache.checkedAtMs < 5 * 60 * 1000) return true;
+
+  try {
+    const q = await pool.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'tickets'
+         AND column_name IN ('last_user_seen_at', 'last_admin_seen_at')`
+    );
+    const cols = new Set((q.rows || []).map((r) => String(r.column_name)));
+    const hasBoth = cols.has('last_user_seen_at') && cols.has('last_admin_seen_at');
+    if (hasBoth) {
+      ticketsSeenColsCache = { ok: true, checkedAtMs: now };
+      return true;
+    }
+
+    // Intentar migración mínima (idempotente)
+    await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS last_user_seen_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS last_admin_seen_at TIMESTAMP`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_last_user_seen ON tickets(last_user_seen_at)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_last_admin_seen ON tickets(last_admin_seen_at)`);
+
+    ticketsSeenColsCache = { ok: true, checkedAtMs: now };
+    return true;
+  } catch (e) {
+    console.warn('ensureTicketsSeenColumns failed:', e.message);
+    ticketsSeenColsCache = { ok: false, checkedAtMs: now };
+    return false;
+  }
+}
+
 async function ensureUserHasCustomer(userRow) {
   if (!userRow) return null;
   if (userRow.customer_id) return userRow.customer_id;
@@ -1722,6 +1759,12 @@ app.get('/api/tickets/unread-count', async (req, res) => {
     const whereOwner = customerId ? `(t.user_id = $1 OR t.customer_id = $2)` : `(t.user_id = $1)`;
     if (customerId) params.push(customerId);
 
+    const hasSeenCols = await ensureTicketsSeenColumns();
+
+    const existsCond = hasSeenCols
+      ? `AND tm.created_at > COALESCE(t.last_user_seen_at, to_timestamp(0)::timestamp)`
+      : ``;
+
     const r = await pool.query(
       `SELECT COUNT(*)::int AS unread_count
        FROM tickets t
@@ -1731,7 +1774,7 @@ app.get('/api/tickets/unread-count', async (req, res) => {
            FROM ticket_messages tm
            WHERE tm.ticket_id = t.id
              AND tm.author_type = 'admin'
-             AND tm.created_at > COALESCE(t.last_user_seen_at, to_timestamp(0)::timestamp)
+             ${existsCond}
          )`,
       params
     );
@@ -1749,7 +1792,10 @@ app.post('/api/tickets/:id/mark-read', async (req, res) => {
     const t = await requireTicketAccess(req, res, ticketId);
     if (!t) return res.status(404).json({ error: 'Ticket no encontrado' });
 
-    await pool.query(`UPDATE tickets SET last_user_seen_at = CURRENT_TIMESTAMP WHERE id = $1`, [ticketId]);
+    const hasSeenCols = await ensureTicketsSeenColumns();
+    if (hasSeenCols) {
+      await pool.query(`UPDATE tickets SET last_user_seen_at = CURRENT_TIMESTAMP WHERE id = $1`, [ticketId]);
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -1761,6 +1807,11 @@ app.get('/api/admin/tickets/unread-count', async (req, res) => {
   try {
     if (!requireAdminKey(req, res)) return;
 
+    const hasSeenCols = await ensureTicketsSeenColumns();
+    const existsCond = hasSeenCols
+      ? `AND tm.created_at > COALESCE(t.last_admin_seen_at, to_timestamp(0)::timestamp)`
+      : ``;
+
     const r = await pool.query(
       `SELECT COUNT(*)::int AS unread_count
        FROM tickets t
@@ -1770,7 +1821,7 @@ app.get('/api/admin/tickets/unread-count', async (req, res) => {
            FROM ticket_messages tm
            WHERE tm.ticket_id = t.id
              AND tm.author_type = 'user'
-             AND tm.created_at > COALESCE(t.last_admin_seen_at, '1970-01-01'::timestamp)
+             ${existsCond}
          )`
     );
     res.json({ unread_count: r.rows[0]?.unread_count || 0 });
@@ -1784,7 +1835,11 @@ app.post('/api/admin/tickets/:id/mark-read', async (req, res) => {
   try {
     if (!requireAdminKey(req, res)) return;
     const ticketId = String(req.params.id || '').trim();
-    await pool.query(`UPDATE tickets SET last_admin_seen_at = CURRENT_TIMESTAMP WHERE id = $1`, [ticketId]);
+
+    const hasSeenCols = await ensureTicketsSeenColumns();
+    if (hasSeenCols) {
+      await pool.query(`UPDATE tickets SET last_admin_seen_at = CURRENT_TIMESTAMP WHERE id = $1`, [ticketId]);
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
