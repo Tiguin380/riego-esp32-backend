@@ -1837,12 +1837,10 @@ app.get('/api/tickets/unread-count', async (req, res) => {
     res.json({ unread_count: r.rows[0]?.unread_count || 0 });
   } catch (e) {
     console.error(e);
-    // Degradación: si falla por tablas/columnas, no romper el panel
-    if (/relation .* does not exist|column .* does not exist/i.test(String(e.message))) {
-      try { await ensureSupportSchema(); } catch {}
-      return res.json({ unread_count: 0 });
-    }
-    res.status(500).json({ error: e.message });
+    // Degradación total: este endpoint no debe romper el panel.
+    // Si hay cualquier error de DB (esquema/permiso/etc.), respondemos 200 con 0.
+    try { await ensureSupportSchema(); } catch {}
+    return res.json({ unread_count: 0 });
   }
 });
 
@@ -3726,88 +3724,101 @@ app.post('/api/config/:device_code', async (req, res) => {
     const ok = await enforceDeviceTokenIfRequired(req, res, device_code);
     if (!ok) return;
 
-    // Verificar si existe configuración
-    const existing = await pool.query(
-      'SELECT id FROM device_config WHERE device_id = $1',
-      [device_id]
-    );
+    async function upsertConfigOnce() {
+      // Verificar si existe configuración
+      const existing = await pool.query('SELECT id FROM device_config WHERE device_id = $1', [device_id]);
 
-    if (existing.rows.length === 0) {
-      // Crear nueva configuración
-      const config_id = uuidv4();
-      await pool.query(
-        `INSERT INTO device_config (
-           id, device_id,
-           humidity_low_threshold, humidity_low_color, humidity_good_color,
-           led_mode, led_manual_color,
-           wet_v, dry_v,
-           alert_humidity_low_minutes, alert_valve_on_max_minutes, alert_sensor_dead_minutes,
-           alert_voltage_min, alert_voltage_max,
-           notify_webhook_url, notify_telegram_chat_id,
-           zones_json
-         )
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
-        [
-          config_id,
-          device_id,
-          parsed.data.humidity_low_threshold,
-          parsed.data.humidity_low_color,
-          parsed.data.humidity_good_color,
-          parsed.data.led_mode,
-          parsed.data.led_manual_color,
-          parsed.data.wet_v,
-          parsed.data.dry_v,
-          parsed.data.alert_humidity_low_minutes,
-          parsed.data.alert_valve_on_max_minutes,
-          parsed.data.alert_sensor_dead_minutes,
-          parsed.data.alert_voltage_min ?? null,
-          parsed.data.alert_voltage_max ?? null,
-          parsed.data.notify_webhook_url ?? null,
-          parsed.data.notify_telegram_chat_id ?? null,
-          Array.isArray(parsed.data.zones) ? parsed.data.zones : null
-        ]
-      );
-    } else {
-      // Actualizar configuración existente
-      await pool.query(
-        `UPDATE device_config 
-         SET
-           humidity_low_threshold = COALESCE($1, humidity_low_threshold),
-           humidity_low_color = COALESCE($2, humidity_low_color),
-           humidity_good_color = COALESCE($3, humidity_good_color),
-           led_mode = COALESCE($4, led_mode),
-           led_manual_color = COALESCE($5, led_manual_color),
-           wet_v = COALESCE($6, wet_v),
-           dry_v = COALESCE($7, dry_v),
-           alert_humidity_low_minutes = COALESCE($8, alert_humidity_low_minutes),
-           alert_valve_on_max_minutes = COALESCE($9, alert_valve_on_max_minutes),
-           alert_sensor_dead_minutes = COALESCE($10, alert_sensor_dead_minutes),
-           alert_voltage_min = COALESCE($11, alert_voltage_min),
-           alert_voltage_max = COALESCE($12, alert_voltage_max),
-           notify_webhook_url = COALESCE($13, notify_webhook_url),
-           notify_telegram_chat_id = COALESCE($14, notify_telegram_chat_id),
-           zones_json = COALESCE($15, zones_json),
-           updated_at = CURRENT_TIMESTAMP
-         WHERE device_id = $16`,
-        [
-          parsed.data.humidity_low_threshold,
-          parsed.data.humidity_low_color,
-          parsed.data.humidity_good_color,
-          parsed.data.led_mode,
-          parsed.data.led_manual_color,
-          parsed.data.wet_v,
-          parsed.data.dry_v,
-          parsed.data.alert_humidity_low_minutes,
-          parsed.data.alert_valve_on_max_minutes,
-          parsed.data.alert_sensor_dead_minutes,
-          parsed.data.alert_voltage_min ?? null,
-          parsed.data.alert_voltage_max ?? null,
-          parsed.data.notify_webhook_url ?? null,
-          parsed.data.notify_telegram_chat_id ?? null,
-          Array.isArray(parsed.data.zones) ? parsed.data.zones : null,
-          device_id
-        ]
-      );
+      if (existing.rows.length === 0) {
+        // Crear nueva configuración
+        const config_id = uuidv4();
+        await pool.query(
+          `INSERT INTO device_config (
+             id, device_id,
+             humidity_low_threshold, humidity_low_color, humidity_good_color,
+             led_mode, led_manual_color,
+             wet_v, dry_v,
+             alert_humidity_low_minutes, alert_valve_on_max_minutes, alert_sensor_dead_minutes,
+             alert_voltage_min, alert_voltage_max,
+             notify_webhook_url, notify_telegram_chat_id,
+             zones_json
+           )
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+          [
+            config_id,
+            device_id,
+            parsed.data.humidity_low_threshold,
+            parsed.data.humidity_low_color,
+            parsed.data.humidity_good_color,
+            parsed.data.led_mode,
+            parsed.data.led_manual_color,
+            parsed.data.wet_v,
+            parsed.data.dry_v,
+            parsed.data.alert_humidity_low_minutes,
+            parsed.data.alert_valve_on_max_minutes,
+            parsed.data.alert_sensor_dead_minutes,
+            parsed.data.alert_voltage_min ?? null,
+            parsed.data.alert_voltage_max ?? null,
+            parsed.data.notify_webhook_url ?? null,
+            parsed.data.notify_telegram_chat_id ?? null,
+            Array.isArray(parsed.data.zones) ? parsed.data.zones : null
+          ]
+        );
+      } else {
+        // Actualizar configuración existente
+        await pool.query(
+          `UPDATE device_config 
+           SET
+             humidity_low_threshold = COALESCE($1, humidity_low_threshold),
+             humidity_low_color = COALESCE($2, humidity_low_color),
+             humidity_good_color = COALESCE($3, humidity_good_color),
+             led_mode = COALESCE($4, led_mode),
+             led_manual_color = COALESCE($5, led_manual_color),
+             wet_v = COALESCE($6, wet_v),
+             dry_v = COALESCE($7, dry_v),
+             alert_humidity_low_minutes = COALESCE($8, alert_humidity_low_minutes),
+             alert_valve_on_max_minutes = COALESCE($9, alert_valve_on_max_minutes),
+             alert_sensor_dead_minutes = COALESCE($10, alert_sensor_dead_minutes),
+             alert_voltage_min = COALESCE($11, alert_voltage_min),
+             alert_voltage_max = COALESCE($12, alert_voltage_max),
+             notify_webhook_url = COALESCE($13, notify_webhook_url),
+             notify_telegram_chat_id = COALESCE($14, notify_telegram_chat_id),
+             zones_json = COALESCE($15, zones_json),
+             updated_at = CURRENT_TIMESTAMP
+           WHERE device_id = $16`,
+          [
+            parsed.data.humidity_low_threshold,
+            parsed.data.humidity_low_color,
+            parsed.data.humidity_good_color,
+            parsed.data.led_mode,
+            parsed.data.led_manual_color,
+            parsed.data.wet_v,
+            parsed.data.dry_v,
+            parsed.data.alert_humidity_low_minutes,
+            parsed.data.alert_valve_on_max_minutes,
+            parsed.data.alert_sensor_dead_minutes,
+            parsed.data.alert_voltage_min ?? null,
+            parsed.data.alert_voltage_max ?? null,
+            parsed.data.notify_webhook_url ?? null,
+            parsed.data.notify_telegram_chat_id ?? null,
+            Array.isArray(parsed.data.zones) ? parsed.data.zones : null,
+            device_id
+          ]
+        );
+      }
+    }
+
+    try {
+      await upsertConfigOnce();
+    } catch (e) {
+      // Si es un error de esquema/migración incompleta, forzamos initDB y reintentamos una vez.
+      if (/column .* does not exist|relation .* does not exist|does not exist/i.test(String(e.message))) {
+        console.warn('POST /api/config detected schema issue, running initDB and retrying:', e.message);
+        try { await initDB(); } catch (ie) { console.warn('initDB retry failed:', ie.message); }
+        try { await ensureDeviceConfigSchema(); } catch {}
+        await upsertConfigOnce();
+      } else {
+        throw e;
+      }
     }
 
     res.json({ status: 'Configuración guardada' });
