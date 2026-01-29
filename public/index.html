@@ -243,6 +243,10 @@
                     <div class="v" id="periodValue">--</div>
                 </div>
                 <div>
+                    <div class="k">Último punto</div>
+                    <div class="v" id="lastPoint">--</div>
+                </div>
+                <div>
                     <div class="k">Media Humedad</div>
                     <div class="v" id="avgHumidity">--</div>
                 </div>
@@ -985,6 +989,9 @@
             document.getElementById('totalValveOn').textContent = totalValveOnMs ? formatDuration(totalValveOnMs) : '--';
             document.getElementById('valveOnTime').textContent = `Tiempo ON (periodo): ${totalValveOnMs ? formatDuration(totalValveOnMs) : '--'}`;
 
+            const lastPointEl = document.getElementById('lastPoint');
+            if (lastPointEl) lastPointEl.textContent = labels.length ? String(labels[labels.length - 1]) : '--';
+
             setSeries(humLabels, humSeries, labels, hum);
             setSeries(valveLabels, valveSeries, labels, valve);
             humChart.update('none');
@@ -1196,6 +1203,9 @@
                 document.getElementById('totalValveOn').textContent = totalValveOnMs ? formatDuration(totalValveOnMs) : '--';
                 document.getElementById('valveOnTime').textContent = `Tiempo ON (periodo): ${totalValveOnMs ? formatDuration(totalValveOnMs) : '--'}`;
 
+                const lastPointEl = document.getElementById('lastPoint');
+                if (lastPointEl) lastPointEl.textContent = labels.length ? String(labels[labels.length - 1]) : '--';
+
                 setSeries(humLabels, humSeries, labels, hum);
                 setSeries(valveLabels, valveSeries, labels, valve);
                 humChart.update('none');
@@ -1377,6 +1387,9 @@
             document.getElementById('avgHumidity').textContent = avgHum === null ? '--' : `${avgHum.toFixed(1)}%`;
             document.getElementById('totalValveOn').textContent = totalValveOnMs ? formatDuration(totalValveOnMs) : '--';
             document.getElementById('valveOnTime').textContent = `Tiempo ON (periodo): ${totalValveOnMs ? formatDuration(totalValveOnMs) : '--'}`;
+
+            const lastPointEl = document.getElementById('lastPoint');
+            if (lastPointEl) lastPointEl.textContent = labels.length ? String(labels[labels.length - 1]) : '--';
 
             setSeries(humLabels, humSeries, labels, hum);
             setSeries(valveLabels, valveSeries, labels, valve);
