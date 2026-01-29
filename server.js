@@ -683,7 +683,15 @@ const SensorDataSchema = z
     humidity_low_color: z.string().optional().nullable(),
     humidity_good_color: z.string().optional().nullable(),
     voltage: z.coerce.number().optional().nullable(),
-    wifi_rssi: z.coerce.number().int().optional().nullable(),
+    // Nota: algunos firmwares envían '' cuando no hay RSSI; z.coerce.number() convertiría '' -> 0.
+    // Preferimos NULL para que la UI muestre “--” en vez de 0.
+    wifi_rssi: z.preprocess(
+      (v) => {
+        if (v === '' || v === 'null' || v === 'NULL') return null;
+        return v;
+      },
+      z.coerce.number().int().nullable()
+    ).optional(),
     uptime_s: z.coerce.number().int().optional().nullable(),
     reboot_count: z.coerce.number().int().optional().nullable(),
     heap_free: z.coerce.number().int().optional().nullable(),
@@ -1709,18 +1717,23 @@ app.get('/api/tickets/unread-count', async (req, res) => {
     const userRow = await getUserRow(req.user.id);
     if (!userRow) return res.status(401).json({ error: 'No autenticado' });
 
+    const customerId = userRow.customer_id ?? null;
+    const params = [userRow.id];
+    const whereOwner = customerId ? `(t.user_id = $1 OR t.customer_id = $2)` : `(t.user_id = $1)`;
+    if (customerId) params.push(customerId);
+
     const r = await pool.query(
       `SELECT COUNT(*)::int AS unread_count
        FROM tickets t
-       WHERE (t.user_id = $1 OR (t.customer_id IS NOT NULL AND t.customer_id = $2))
+       WHERE ${whereOwner}
          AND EXISTS(
            SELECT 1
            FROM ticket_messages tm
            WHERE tm.ticket_id = t.id
              AND tm.author_type = 'admin'
-             AND tm.created_at > COALESCE(t.last_user_seen_at, '1970-01-01'::timestamp)
+             AND tm.created_at > COALESCE(t.last_user_seen_at, to_timestamp(0)::timestamp)
          )`,
-      [userRow.id, userRow.customer_id]
+      params
     );
     res.json({ unread_count: r.rows[0]?.unread_count || 0 });
   } catch (e) {
