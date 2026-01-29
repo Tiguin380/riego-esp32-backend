@@ -12,6 +12,16 @@ globals:
     type: float
     initial_value: '50.0'
 
+  - id: wifi_connected
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+
+  - id: server_config_ok
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+
   - id: soil_v_min
     type: float
     initial_value: '1000.0'
@@ -52,6 +62,13 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   reboot_timeout: 15min
+  on_connect:
+    - lambda: |-
+        id(wifi_connected) = true;
+  on_disconnect:
+    - lambda: |-
+        id(wifi_connected) = false;
+        id(server_config_ok) = false;
   # Modo "cliente": si el dispositivo no puede conectarse a la WiFi configurada,
   # levantará un AP temporal para que el usuario final pueda meter sus credenciales.
   ap:
@@ -148,6 +165,7 @@ script:
           on_response:
             then:
               - lambda: |-
+                  id(server_config_ok) = true;
                   std::string resp_body = body;
                   ESP_LOGI("HTTP", "Body length: %d", resp_body.length());
                   ESP_LOGI("RAW", "Response: %.200s", resp_body.c_str());
@@ -346,7 +364,15 @@ script:
                   }
           on_error:
             then:
-              - logger.log: "ERROR al obtener configuracion"
+              - lambda: |-
+                  id(server_config_ok) = false;
+                  ESP_LOGW("HTTP", "ERROR al obtener configuracion (server_config_ok=false)");
+
+image:
+  - file: "public/logo-wide.png"
+    id: agro_logo
+    resize: 128x24
+    type: BINARY
 
 # -------- Parámetros configurables --------
 number:
@@ -497,15 +523,20 @@ display:
     id: oled_test
     update_interval: 500ms
     lambda: |-
-      // Línea 1: lectura actual
+      // Modo setup (AP/portal): mostrar logo + instrucciones
+      if (!id(wifi_connected)) {
+        it.image(0, 0, id(agro_logo));
+        it.printf(0, 28, id(oled_font), "MODO SETUP WiFi");
+        it.printf(0, 44, id(oled_font), "Abrir 192.168.4.1");
+        return;
+      }
+
+      // Modo normal (conectado): lectura + estado
       it.printf(0, 0, id(oled_font), "V: %.2f  H: %.0f%%", id(soil_raw).state, id(soil_hum).state);
-      // Línea 2: estado válvula
       if (id(valve_relay).state) it.printf(0, 16, id(oled_font), "VALVULA: ON");
       else it.printf(0, 16, id(oled_font), "VALVULA: OFF");
-      // Línea 3: umbral
       it.printf(0, 32, id(oled_font), "Umbral: %.0f%%", id(humidity_low).state);
-      // Línea 4: min/max observados
-      it.printf(0, 48, id(oled_font), "Min:%.2f Max:%.2f", id(soil_v_min), id(soil_v_max));
+      it.printf(0, 48, id(oled_font), "CFG: %s", id(server_config_ok) ? "OK" : "FAIL");
 
 # -------- Sensores --------
 sensor:
