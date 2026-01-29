@@ -55,6 +55,13 @@
         .metric-warn { border-color: rgba(255,204,0,0.25); box-shadow: 0 12px 28px rgba(255,204,0,0.08), 0 10px 26px rgba(0,0,0,0.25); }
         .metric-bad  { border-color: rgba(255,77,77,0.30); box-shadow: 0 12px 28px rgba(255,77,77,0.10), 0 10px 26px rgba(0,0,0,0.25); }
         .metric-neutral { border-color: rgba(255,255,255,0.08); }
+
+        /* Zonas / Plantas */
+        .zone-off { opacity: 0.62; }
+        .zone-subtitle { color:#8fa3bf; font-size: 12px; margin-top: -6px; margin-bottom: 8px; }
+        .zone-row { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+        .zone-row .control-row { margin-bottom: 0; flex: 1 1 320px; }
+        .zone-mini { font-size: 11px; color:#8fa3bf; }
         .valve-indicator { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
         .valve-dot { width: 14px; height: 14px; border-radius: 50%; background: #666; box-shadow: 0 0 10px #000; }
         .valve-dot.on { background: #33cc33; box-shadow: 0 0 18px #33cc33; }
@@ -369,6 +376,15 @@
             </div>
         </div>
 
+        <div class="section" id="zonesSection">
+            <h2> ZONAS / PLANTAS (1–8)</h2>
+            <div class="muted" style="margin-top: -6px; margin-bottom: 10px; font-size:12px; color:#8fa3bf; line-height:1.35;">
+                Configura cada planta con su sensor de humedad, su válvula y su umbral.
+                Si un sensor/válvula no está enviando datos, la zona se verá “apagada”.
+            </div>
+            <div id="zonesContainer"></div>
+        </div>
+
         <div class="section">
             <h2> GRÁFICAS EN TIEMPO REAL</h2>
             <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; flex-wrap: wrap; margin: 4px 0 8px;">
@@ -546,6 +562,307 @@
             alert_voltage_min: null,
             alert_voltage_max: null
         };
+
+        function makeDefaultZones(baseThreshold) {
+            const thr = Number(baseThreshold);
+            const t = Number.isFinite(thr) ? Math.max(0, Math.min(100, thr)) : 25;
+            return Array.from({ length: 8 }, (_, i) => ({
+                zone: i + 1,
+                soil_channel_index: i + 1,
+                valve_channel_index: i + 1,
+                humidity_low_threshold: t
+            }));
+        }
+
+        let zonesState = makeDefaultZones(25);
+
+        function normalizeZonesFromServer(raw, baseThreshold) {
+            const out = makeDefaultZones(baseThreshold);
+            const arr = Array.isArray(raw) ? raw : [];
+            for (const z of arr) {
+                const zone = Number(z?.zone);
+                if (!Number.isInteger(zone) || zone < 1 || zone > 8) continue;
+                const idx = zone - 1;
+
+                const soilIdx = z?.soil_channel_index == null ? null : Number(z.soil_channel_index);
+                const valveIdx = z?.valve_channel_index == null ? null : Number(z.valve_channel_index);
+                const thr = z?.humidity_low_threshold == null ? null : Number(z.humidity_low_threshold);
+
+                out[idx] = {
+                    zone,
+                    soil_channel_index: Number.isFinite(soilIdx) ? soilIdx : null,
+                    valve_channel_index: Number.isFinite(valveIdx) ? valveIdx : null,
+                    humidity_low_threshold: Number.isFinite(thr)
+                        ? Math.max(0, Math.min(100, thr))
+                        : out[idx].humidity_low_threshold
+                };
+            }
+            return out;
+        }
+
+        function updateZoneSubtitles() {
+            const soil = (channels || []).filter(c => c && c.kind === 'soil_sensor');
+            const valves = (channels || []).filter(c => c && c.kind === 'valve');
+            const findName = (arr, idx) => {
+                const n = Number(idx);
+                const c = arr.find(x => Number(x.channel_index) === n);
+                return c ? c.name : null;
+            };
+
+            for (let i = 0; i < 8; i++) {
+                const zoneNum = i + 1;
+                const el = document.getElementById(`zoneSubtitle${zoneNum}`);
+                if (!el) continue;
+                const z = zonesState[i];
+                const sName = z.soil_channel_index == null ? null : findName(soil, z.soil_channel_index);
+                const vName = z.valve_channel_index == null ? null : findName(valves, z.valve_channel_index);
+                const sTxt = z.soil_channel_index == null ? 'Sensor: (sin asignar)' : `Sensor: ${sName || '—'} (${z.soil_channel_index})`;
+                const vTxt = z.valve_channel_index == null ? 'Válvula: (sin asignar)' : `Válvula: ${vName || '—'} (${z.valve_channel_index})`;
+                el.textContent = `${sTxt} · ${vTxt} · Umbral: ${Math.round(Number(z.humidity_low_threshold ?? 25))}%`;
+            }
+        }
+
+        function renderZonesUI() {
+            const container = document.getElementById('zonesContainer');
+            if (!container) return;
+
+            const soil = (channels || [])
+                .filter(c => c && c.kind === 'soil_sensor')
+                .slice()
+                .sort((a, b) => Number(a.channel_index) - Number(b.channel_index));
+            const valves = (channels || [])
+                .filter(c => c && c.kind === 'valve')
+                .slice()
+                .sort((a, b) => Number(a.channel_index) - Number(b.channel_index));
+
+            container.innerHTML = '';
+
+            for (let i = 0; i < 8; i++) {
+                const zoneNum = i + 1;
+
+                const sec = document.createElement('div');
+                sec.className = 'section';
+                sec.id = `zoneSec${zoneNum}`;
+
+                const h2 = document.createElement('h2');
+                h2.textContent = `PLANTA ${zoneNum}`;
+                sec.appendChild(h2);
+
+                const subtitle = document.createElement('div');
+                subtitle.className = 'zone-subtitle';
+                subtitle.id = `zoneSubtitle${zoneNum}`;
+                subtitle.textContent = '—';
+                sec.appendChild(subtitle);
+
+                const zoneRow = document.createElement('div');
+                zoneRow.className = 'zone-row';
+
+                // Selector sensor
+                {
+                    const row = document.createElement('div');
+                    row.className = 'control-row';
+                    const label = document.createElement('label');
+                    label.textContent = 'Sensor de humedad:';
+                    const sel = document.createElement('select');
+                    sel.id = `zoneSoilSel${zoneNum}`;
+                    sel.title = 'Seleccionar sensor de humedad (canal)';
+                    const optNone = document.createElement('option');
+                    optNone.value = '';
+                    optNone.textContent = '(sin asignar)';
+                    sel.appendChild(optNone);
+                    for (let idx = 1; idx <= 8; idx++) {
+                        const c = soil.find(x => Number(x.channel_index) === idx) || null;
+                        const opt = document.createElement('option');
+                        opt.value = String(idx);
+                        opt.textContent = c ? `${c.name} (${idx})` : `Sensor ${idx} (no creado / sin datos)`;
+                        if (!c) opt.disabled = false;
+                        sel.appendChild(opt);
+                    }
+                    row.appendChild(label);
+                    row.appendChild(sel);
+                    zoneRow.appendChild(row);
+
+                    sel.addEventListener('change', () => {
+                        const v = sel.value === '' ? null : Number(sel.value);
+                        zonesState[i].soil_channel_index = Number.isFinite(v) ? v : null;
+                        updateZoneSubtitles();
+                    });
+                }
+
+                // Selector válvula
+                {
+                    const row = document.createElement('div');
+                    row.className = 'control-row';
+                    const label = document.createElement('label');
+                    label.textContent = 'Válvula:';
+                    const sel = document.createElement('select');
+                    sel.id = `zoneValveSel${zoneNum}`;
+                    sel.title = 'Seleccionar válvula (canal)';
+                    const optNone = document.createElement('option');
+                    optNone.value = '';
+                    optNone.textContent = '(sin asignar)';
+                    sel.appendChild(optNone);
+                    for (let idx = 1; idx <= 8; idx++) {
+                        const c = valves.find(x => Number(x.channel_index) === idx) || null;
+                        const opt = document.createElement('option');
+                        opt.value = String(idx);
+                        opt.textContent = c ? `${c.name} (${idx})` : `Válvula ${idx} (no creada / sin datos)`;
+                        if (!c) opt.disabled = false;
+                        sel.appendChild(opt);
+                    }
+                    row.appendChild(label);
+                    row.appendChild(sel);
+                    zoneRow.appendChild(row);
+
+                    sel.addEventListener('change', () => {
+                        const v = sel.value === '' ? null : Number(sel.value);
+                        zonesState[i].valve_channel_index = Number.isFinite(v) ? v : null;
+                        updateZoneSubtitles();
+                    });
+                }
+
+                // Umbral por planta
+                {
+                    const row = document.createElement('div');
+                    row.className = 'control-row';
+                    const label = document.createElement('label');
+                    label.textContent = 'Umbral riego automático:';
+                    const wrap = document.createElement('div');
+                    wrap.style.display = 'flex';
+                    wrap.style.gap = '10px';
+                    wrap.style.alignItems = 'center';
+                    wrap.style.flex = '2';
+                    const rng = document.createElement('input');
+                    rng.type = 'range';
+                    rng.min = '1';
+                    rng.max = '100';
+                    rng.id = `zoneThr${zoneNum}`;
+                    rng.title = 'Umbral de humedad baja (zona)';
+                    const val = document.createElement('span');
+                    val.id = `zoneThrVal${zoneNum}`;
+                    val.style.width = '50px';
+                    val.style.textAlign = 'right';
+                    wrap.appendChild(rng);
+                    wrap.appendChild(val);
+                    row.appendChild(label);
+                    row.appendChild(wrap);
+                    zoneRow.appendChild(row);
+
+                    rng.addEventListener('input', () => {
+                        const n = Number(rng.value);
+                        zonesState[i].humidity_low_threshold = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : zonesState[i].humidity_low_threshold;
+                        val.textContent = `${zonesState[i].humidity_low_threshold}%`;
+                        updateZoneSubtitles();
+                    });
+                }
+
+                sec.appendChild(zoneRow);
+
+                const grid = document.createElement('div');
+                grid.className = 'sensor-grid';
+
+                const humCard = document.createElement('div');
+                humCard.className = 'sensor-card metric-neutral';
+                humCard.innerHTML = `<div class="sensor-label">Humedad (zona)</div><div class="sensor-value" id="zoneHum${zoneNum}">--</div><div class="sensor-unit">%</div>`;
+
+                const valveCard = document.createElement('div');
+                valveCard.className = 'sensor-card metric-neutral';
+                valveCard.innerHTML = `<div class="sensor-label">Válvula (zona)</div><div class="sensor-value" id="zoneValve${zoneNum}">--</div><div class="valve-indicator"><div class="valve-dot" id="zoneValveDot${zoneNum}"></div><div class="valve-text" id="zoneValveText${zoneNum}">--</div></div>`;
+
+                const statusCard = document.createElement('div');
+                statusCard.className = 'sensor-card metric-neutral';
+                statusCard.innerHTML = `<div class="sensor-label">Estado</div><div class="sensor-value" id="zoneState${zoneNum}">--</div><div class="sensor-unit zone-mini" id="zoneAge${zoneNum}"></div>`;
+
+                grid.appendChild(humCard);
+                grid.appendChild(valveCard);
+                grid.appendChild(statusCard);
+
+                sec.appendChild(grid);
+                container.appendChild(sec);
+            }
+
+            applyZonesStateToUI();
+            initCollapsibles();
+            updateZoneSubtitles();
+        }
+
+        function applyZonesStateToUI() {
+            for (let i = 0; i < 8; i++) {
+                const zoneNum = i + 1;
+                const z = zonesState[i];
+                const soilSel = document.getElementById(`zoneSoilSel${zoneNum}`);
+                const valveSel = document.getElementById(`zoneValveSel${zoneNum}`);
+                const thr = document.getElementById(`zoneThr${zoneNum}`);
+                const thrVal = document.getElementById(`zoneThrVal${zoneNum}`);
+
+                if (soilSel) soilSel.value = z.soil_channel_index == null ? '' : String(z.soil_channel_index);
+                if (valveSel) valveSel.value = z.valve_channel_index == null ? '' : String(z.valve_channel_index);
+                if (thr) thr.value = String(Math.round(Number(z.humidity_low_threshold ?? 25)));
+                if (thrVal) thrVal.textContent = `${Math.round(Number(z.humidity_low_threshold ?? 25))}%`;
+            }
+        }
+
+        function updateZonesFromLatestPayload(payload) {
+            const ch = Array.isArray(payload?.channels) ? payload.channels : [];
+            const byKey = new Map();
+            for (const c of ch) {
+                const kind = String(c?.kind || '');
+                const idx = Number(c?.channel_index);
+                if (!kind || !Number.isFinite(idx)) continue;
+                byKey.set(`${kind}:${idx}`, c.latest || null);
+            }
+
+            const STALE_MIN = 10;
+
+            for (let i = 0; i < 8; i++) {
+                const zoneNum = i + 1;
+                const z = zonesState[i];
+                const sec = document.getElementById(`zoneSec${zoneNum}`);
+
+                const soilIdx = z.soil_channel_index;
+                const valveIdx = z.valve_channel_index;
+                const soilLatest = soilIdx == null ? null : byKey.get(`soil_sensor:${soilIdx}`);
+                const valveLatest = valveIdx == null ? null : byKey.get(`valve:${valveIdx}`);
+
+                const humEl = document.getElementById(`zoneHum${zoneNum}`);
+                const valveEl = document.getElementById(`zoneValve${zoneNum}`);
+                const dotEl = document.getElementById(`zoneValveDot${zoneNum}`);
+                const txtEl = document.getElementById(`zoneValveText${zoneNum}`);
+                const stateEl = document.getElementById(`zoneState${zoneNum}`);
+                const ageEl = document.getElementById(`zoneAge${zoneNum}`);
+
+                const soilAge = soilLatest?.age_minutes;
+                const valveAge = valveLatest?.age_minutes;
+                const soilOk = soilLatest && soilLatest.value != null && (soilAge == null || Number(soilAge) <= STALE_MIN);
+                const valveOk = valveLatest && valveLatest.state != null && (valveAge == null || Number(valveAge) <= STALE_MIN);
+
+                if (humEl) {
+                    const v = soilLatest?.value;
+                    const num = v == null ? null : Number(v);
+                    humEl.textContent = soilOk && Number.isFinite(num) ? num.toFixed(1) : '--';
+                }
+
+                if (valveEl || dotEl || txtEl) {
+                    const s = valveLatest?.state;
+                    const st = s == null ? null : Number(s);
+                    const isOn = valveOk && Number.isFinite(st) && st >= 1;
+                    if (valveEl) valveEl.textContent = valveOk ? (isOn ? 'ON' : 'OFF') : '--';
+                    if (dotEl) dotEl.className = 'valve-dot' + (valveOk ? (isOn ? ' on' : ' off') : '');
+                    if (txtEl) txtEl.textContent = valveOk ? (isOn ? 'ENCENDIDA' : 'APAGADA') : 'SIN DATOS';
+                }
+
+                const anyAssigned = (soilIdx != null || valveIdx != null);
+                const anyOk = soilOk || valveOk;
+                if (stateEl) stateEl.textContent = !anyAssigned ? 'SIN ASIGNAR' : (anyOk ? 'ACTIVA' : 'APAGADA');
+
+                const parts = [];
+                if (soilIdx != null) parts.push(`S${soilIdx}:${soilLatest?.age_minutes ?? '--'}m`);
+                if (valveIdx != null) parts.push(`V${valveIdx}:${valveLatest?.age_minutes ?? '--'}m`);
+                if (ageEl) ageEl.textContent = parts.join(' · ');
+
+                if (sec) sec.classList.toggle('zone-off', anyAssigned && !anyOk);
+            }
+        }
 
         let channels = [];
         let humChannelId = null;
@@ -1015,15 +1332,8 @@
                 const j = await r.json();
                 channels = Array.isArray(j.channels) ? j.channels : [];
 
-                const allHums = channels.filter(c => c.kind === 'soil_sensor');
-                // Por defecto mostramos solo el sensor 1 (instalación típica con un sensor).
-                // Si no existe canal 1, mostramos todos para no dejar la UI vacía.
-                let hums = allHums.filter(c => Number(c.channel_index) === 1);
-                if (hums.length === 0) hums = allHums;
-                const allValves = channels.filter(c => c.kind === 'valve');
-                // Por defecto mostramos solo la válvula 1 (instalación típica con una válvula).
-                let valves = allValves.filter(c => Number(c.channel_index) === 1);
-                if (valves.length === 0) valves = allValves;
+                const hums = channels.filter(c => c.kind === 'soil_sensor');
+                const valves = channels.filter(c => c.kind === 'valve');
 
                 const humSel = document.getElementById('humChannelSelect');
                 const valveSel = document.getElementById('valveChannelSelect');
@@ -1060,6 +1370,9 @@
                 // Si no hay canales, ocultar gráficas (pero normalmente habrá canal 1 por defecto)
                 document.getElementById('humChannelSelect').disabled = hums.length === 0;
                 document.getElementById('valveChannelSelect').disabled = valves.length === 0;
+
+                // Re-render zonas para actualizar selects/labels
+                renderZonesUI();
 
             } catch (e) {
                 // Si falla, no rompemos
@@ -1976,6 +2289,10 @@
                 document.getElementById('alertVmax').value = (cfg.alert_voltage_max == null ? '' : cfg.alert_voltage_max);
                 document.getElementById('notifyWebhook').value = (cfg.notify_webhook_url == null ? '' : cfg.notify_webhook_url);
                 document.getElementById('notifyTelegram').value = (cfg.notify_telegram_chat_id == null ? '' : cfg.notify_telegram_chat_id);
+
+                // Zonas (8 plantas): umbral y asignación por canal
+                zonesState = normalizeZonesFromServer(cfg?.zones, config.threshold);
+                renderZonesUI();
             } catch (e) {
                 console.log('Error cargando config');
             }
@@ -2045,7 +2362,13 @@
                     alert_voltage_min: alertVmin === '' ? null : Number(alertVmin),
                     alert_voltage_max: alertVmax === '' ? null : Number(alertVmax),
                     notify_webhook_url: notifyWebhook === '' ? null : String(notifyWebhook),
-                    notify_telegram_chat_id: notifyTelegram === '' ? null : String(notifyTelegram)
+                    notify_telegram_chat_id: notifyTelegram === '' ? null : String(notifyTelegram),
+                    zones: (zonesState || []).slice(0, 8).map((z, i) => ({
+                        zone: i + 1,
+                        soil_channel_index: z?.soil_channel_index == null ? null : Number(z.soil_channel_index),
+                        valve_channel_index: z?.valve_channel_index == null ? null : Number(z.valve_channel_index),
+                        humidity_low_threshold: z?.humidity_low_threshold == null ? null : Number(z.humidity_low_threshold)
+                    }))
                 };
 
                 async function doSave(headers) {
@@ -2246,6 +2569,17 @@
                 setStatusText(' Sin conexion');
                 setStatusClass(false);
             }
+
+            // Zonas: últimos valores por canal
+            try {
+                const r2 = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}/latest`, { credentials: 'include' });
+                if (r2.ok) {
+                    const p = await r2.json();
+                    updateZonesFromLatestPayload(p);
+                }
+            } catch {
+                // ignore
+            }
         }
 
         async function cargarAlertas() {
@@ -2300,6 +2634,7 @@
             await cargarConfig();
             updateThresholdCard();
             await loadChannels();
+            renderZonesUI();
             scheduleChartsRebuild();
             rebuildCharts();
             cargarAlertas();
@@ -2369,6 +2704,11 @@
             (async () => {
                 const btn = document.getElementById('btnAddValve');
                 await withBusy(btn, 'Añadiendo...', async () => {
+                const current = (channels || []).filter(c => c && c.kind === 'valve').length;
+                if (current >= 8) {
+                    alert('Máximo 8 válvulas por dispositivo (modelo de 8 zonas).');
+                    return;
+                }
                 const nameRaw = prompt('Nombre de la nueva válvula (ej: Válvula 2):');
                 if (nameRaw === null) return; // Cancel
                 const name = String(nameRaw || '').trim();
@@ -2406,6 +2746,11 @@
             (async () => {
                 const btn = document.getElementById('btnAddSensor');
                 await withBusy(btn, 'Añadiendo...', async () => {
+                const current = (channels || []).filter(c => c && c.kind === 'soil_sensor').length;
+                if (current >= 8) {
+                    alert('Máximo 8 sensores de humedad por dispositivo (modelo de 8 zonas).');
+                    return;
+                }
                 const nameRaw = prompt('Nombre del nuevo sensor (ej: Sensor 2):');
                 if (nameRaw === null) return; // Cancel
                 const name = String(nameRaw || '').trim();

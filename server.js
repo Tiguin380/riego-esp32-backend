@@ -720,7 +720,22 @@ const DeviceConfigSchema = z
     alert_voltage_min: z.coerce.number().optional().nullable(),
     alert_voltage_max: z.coerce.number().optional().nullable(),
     notify_webhook_url: z.string().url().optional().nullable(),
-    notify_telegram_chat_id: z.string().optional().nullable()
+    notify_telegram_chat_id: z.string().optional().nullable(),
+
+    // Nuevo: zonas (hasta 8) para umbrales por planta y asignación de canales por índice
+    zones: z
+      .array(
+        z
+          .object({
+            zone: z.coerce.number().int().min(1).max(8),
+            soil_channel_index: z.coerce.number().int().min(1).max(32).optional().nullable(),
+            valve_channel_index: z.coerce.number().int().min(1).max(32).optional().nullable(),
+            humidity_low_threshold: z.coerce.number().min(0).max(100).optional().nullable()
+          })
+          .passthrough()
+      )
+      .max(8)
+      .optional()
   })
   .passthrough();
 
@@ -849,6 +864,7 @@ async function initDB() {
         alert_voltage_max DECIMAL(6,3),
         notify_webhook_url TEXT,
         notify_telegram_chat_id TEXT,
+        zones_json JSONB,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -924,6 +940,7 @@ async function initDB() {
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_voltage_max DECIMAL(6,3)`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS notify_webhook_url TEXT`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS notify_telegram_chat_id TEXT`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS zones_json JSONB`);
 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sensor_device_time ON sensor_data(device_id, created_at DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_alert_events_device_time ON alert_events(device_id, created_at DESC)`);
@@ -2470,6 +2487,71 @@ app.get('/api/channels/:device_code', async (req, res) => {
   }
 });
 
+// Último valor/estado por canal (para UI multi-zona)
+app.get('/api/channels/:device_code/latest', async (req, res) => {
+  try {
+    const { device_code } = req.params;
+    const dev = await requireUserDevice(req, res, device_code);
+    if (!dev) return;
+    await ensureDefaultChannels(dev.id);
+
+    const serverNow = new Date();
+    const nowMs = serverNow.getTime();
+
+    const r = await pool.query(
+      `SELECT
+         dc.id,
+         dc.kind,
+         dc.channel_index,
+         dc.name,
+         s.ts AS ts_raw,
+         (EXTRACT(EPOCH FROM (s.ts AT TIME ZONE current_setting('TIMEZONE'))) * 1000)::bigint AS ts_ms,
+         s.value,
+         s.state
+       FROM device_channels dc
+       LEFT JOIN LATERAL (
+         SELECT ts, value, state
+         FROM channel_samples
+         WHERE channel_id = dc.id
+         ORDER BY ts DESC
+         LIMIT 1
+       ) s ON TRUE
+       WHERE dc.device_id = $1
+       ORDER BY dc.kind ASC, dc.channel_index ASC`,
+      [dev.id]
+    );
+
+    const out = r.rows.map((row) => {
+      const tsMs = Number(row.ts_ms || 0);
+      const ts = epochMsToDate(tsMs);
+      return {
+        id: row.id,
+        kind: row.kind,
+        channel_index: row.channel_index,
+        name: row.name,
+        latest: {
+          ts_raw: row.ts_raw ?? null,
+          ts: ts ? ts.toISOString() : null,
+          ts_madrid: ts ? fmtEsLabel.format(ts) : null,
+          age_minutes: ts ? Math.round(Math.max(0, nowMs - ts.getTime()) / 60000) : null,
+          value: row.value ?? null,
+          state: row.state ?? null
+        }
+      };
+    });
+
+    res.json({
+      device_code,
+      server_now: serverNow.toISOString(),
+      server_now_madrid: fmtEsLabel.format(serverNow),
+      channels: out
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/channels/:device_code', async (req, res) => {
   try {
     const { device_code } = req.params;
@@ -3187,6 +3269,7 @@ app.get('/api/config/:device_code', async (req, res) => {
       alert_voltage_max: null,
       notify_webhook_url: null,
       notify_telegram_chat_id: null,
+      zones: [],
       updated_at: new Date().toISOString()
     });
   }
@@ -3225,11 +3308,27 @@ app.get('/api/config/:device_code', async (req, res) => {
         alert_voltage_max: null,
         notify_webhook_url: null,
         notify_telegram_chat_id: null,
+        zones: [],
         updated_at: new Date().toISOString()
       });
     }
 
-    res.json(result.rows[0]);
+    {
+      const row = { ...result.rows[0] };
+      let zones = [];
+      if (Array.isArray(row.zones_json)) {
+        zones = row.zones_json;
+      } else if (typeof row.zones_json === 'string') {
+        try {
+          const parsed = JSON.parse(row.zones_json);
+          if (Array.isArray(parsed)) zones = parsed;
+        } catch {
+          zones = [];
+        }
+      }
+      row.zones = zones;
+      res.json(row);
+    }
   } catch (error) {
     console.error('GET /api/config error:', error.message);
 
@@ -3266,6 +3365,7 @@ app.get('/api/config/:device_code', async (req, res) => {
       alert_voltage_max: null,
       notify_webhook_url: null,
       notify_telegram_chat_id: null,
+      zones: [],
       updated_at: new Date().toISOString()
     });
   }
@@ -3511,9 +3611,10 @@ app.post('/api/config/:device_code', async (req, res) => {
            wet_v, dry_v,
            alert_humidity_low_minutes, alert_valve_on_max_minutes, alert_sensor_dead_minutes,
            alert_voltage_min, alert_voltage_max,
-           notify_webhook_url, notify_telegram_chat_id
+           notify_webhook_url, notify_telegram_chat_id,
+           zones_json
          )
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
         [
           config_id,
           device_id,
@@ -3530,7 +3631,8 @@ app.post('/api/config/:device_code', async (req, res) => {
           parsed.data.alert_voltage_min ?? null,
           parsed.data.alert_voltage_max ?? null,
           parsed.data.notify_webhook_url ?? null,
-          parsed.data.notify_telegram_chat_id ?? null
+          parsed.data.notify_telegram_chat_id ?? null,
+          Array.isArray(parsed.data.zones) ? parsed.data.zones : null
         ]
       );
     } else {
@@ -3552,8 +3654,9 @@ app.post('/api/config/:device_code', async (req, res) => {
            alert_voltage_max = COALESCE($12, alert_voltage_max),
            notify_webhook_url = COALESCE($13, notify_webhook_url),
            notify_telegram_chat_id = COALESCE($14, notify_telegram_chat_id),
+           zones_json = COALESCE($15, zones_json),
            updated_at = CURRENT_TIMESTAMP
-         WHERE device_id = $15`,
+         WHERE device_id = $16`,
         [
           parsed.data.humidity_low_threshold,
           parsed.data.humidity_low_color,
@@ -3569,6 +3672,7 @@ app.post('/api/config/:device_code', async (req, res) => {
           parsed.data.alert_voltage_max ?? null,
           parsed.data.notify_webhook_url ?? null,
           parsed.data.notify_telegram_chat_id ?? null,
+          Array.isArray(parsed.data.zones) ? parsed.data.zones : null,
           device_id
         ]
       );
