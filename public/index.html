@@ -190,8 +190,29 @@
 
         /* Secciones plegables */
         .section-head { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
-        .collapse-btn { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color:#dbe7ff; padding: 6px 10px; border-radius: 10px; cursor:pointer; font-size: 12px; }
-        .collapse-btn:hover { background: rgba(255,255,255,0.10); }
+        .collapse-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.06));
+            border: 1px solid var(--btn-border);
+            color: #e9eef7;
+            padding: 7px 10px;
+            border-radius: var(--btn-radius);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: .02em;
+            box-shadow: 0 12px 26px rgba(0,0,0,0.20);
+            transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .collapse-btn:hover { transform: translateY(-1px); box-shadow: 0 16px 34px rgba(0,0,0,0.28); filter: brightness(1.04); }
+        .collapse-btn:active { transform: translateY(0); filter: brightness(0.98); }
+        .collapse-btn:focus-visible { outline: 2px solid rgba(76,175,80,0.45); outline-offset: 2px; }
         .section.collapsed .section-body { display:none; }
 
         /* Compacto en móvil */
@@ -497,7 +518,10 @@
                 <label>Telegram Chat ID:</label>
                 <input id="notifyTelegram" type="text" placeholder="123456789" />
             </div>
-            <button class="btn btn-save" id="btnSaveConfig" onclick="guardar()"> GUARDAR CONFIGURACION</button>
+            <div style="display:flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+                <button class="mini-btn" id="btnResetDefaults" type="button">Reset a valores por defecto</button>
+                <button class="btn btn-save" id="btnSaveConfig" onclick="guardar()" type="button"> GUARDAR CONFIGURACION</button>
+            </div>
         </div>
 
         <div class="section">
@@ -512,6 +536,16 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script>
         let config = { threshold: 25, colorB: 'Rojo', colorG: 'Verde' };
+
+        const DEFAULT_AUTO_CONFIG = {
+            wet_v: 1.10,
+            dry_v: 2.60,
+            alert_humidity_low_minutes: 0,
+            alert_valve_on_max_minutes: 0,
+            alert_sensor_dead_minutes: 0,
+            alert_voltage_min: null,
+            alert_voltage_max: null
+        };
 
         let channels = [];
         let humChannelId = null;
@@ -1933,17 +1967,38 @@
                 updateThresholdCard();
 
                 // Campos avanzados
-                document.getElementById('wetV').value = (cfg.wet_v == null ? '' : cfg.wet_v);
-                document.getElementById('dryV').value = (cfg.dry_v == null ? '' : cfg.dry_v);
-                document.getElementById('alertHumLowMin').value = cfg.alert_humidity_low_minutes ?? 0;
-                document.getElementById('alertValveMaxMin').value = cfg.alert_valve_on_max_minutes ?? 0;
-                document.getElementById('alertDeadMin').value = cfg.alert_sensor_dead_minutes ?? 0;
+                document.getElementById('wetV').value = (cfg.wet_v == null ? String(DEFAULT_AUTO_CONFIG.wet_v) : cfg.wet_v);
+                document.getElementById('dryV').value = (cfg.dry_v == null ? String(DEFAULT_AUTO_CONFIG.dry_v) : cfg.dry_v);
+                document.getElementById('alertHumLowMin').value = cfg.alert_humidity_low_minutes ?? DEFAULT_AUTO_CONFIG.alert_humidity_low_minutes;
+                document.getElementById('alertValveMaxMin').value = cfg.alert_valve_on_max_minutes ?? DEFAULT_AUTO_CONFIG.alert_valve_on_max_minutes;
+                document.getElementById('alertDeadMin').value = cfg.alert_sensor_dead_minutes ?? DEFAULT_AUTO_CONFIG.alert_sensor_dead_minutes;
                 document.getElementById('alertVmin').value = (cfg.alert_voltage_min == null ? '' : cfg.alert_voltage_min);
                 document.getElementById('alertVmax').value = (cfg.alert_voltage_max == null ? '' : cfg.alert_voltage_max);
                 document.getElementById('notifyWebhook').value = (cfg.notify_webhook_url == null ? '' : cfg.notify_webhook_url);
                 document.getElementById('notifyTelegram').value = (cfg.notify_telegram_chat_id == null ? '' : cfg.notify_telegram_chat_id);
             } catch (e) {
                 console.log('Error cargando config');
+            }
+        }
+
+        function applyDefaultAutoConfigToUI() {
+            document.getElementById('wetV').value = String(DEFAULT_AUTO_CONFIG.wet_v);
+            document.getElementById('dryV').value = String(DEFAULT_AUTO_CONFIG.dry_v);
+            document.getElementById('alertHumLowMin').value = String(DEFAULT_AUTO_CONFIG.alert_humidity_low_minutes);
+            document.getElementById('alertValveMaxMin').value = String(DEFAULT_AUTO_CONFIG.alert_valve_on_max_minutes);
+            document.getElementById('alertDeadMin').value = String(DEFAULT_AUTO_CONFIG.alert_sensor_dead_minutes);
+            document.getElementById('alertVmin').value = '';
+            document.getElementById('alertVmax').value = '';
+        }
+
+        async function resetearDefaults() {
+            const ok = confirm('¿Restablecer los valores por defecto de CONFIGURACIÓN AUTOMÁTICA?\n\nSe aplicarán estos valores:\n- WET_V: 1.10\n- DRY_V: 2.60\n- Alertas (min): 0\n- Voltaje mín/máx: vacío (desactivado)');
+            if (!ok) return;
+            applyDefaultAutoConfigToUI();
+
+            const okSave = confirm('¿Quieres guardarlos ahora en el dispositivo?');
+            if (okSave) {
+                await guardar();
             }
         }
 
@@ -2033,6 +2088,11 @@
             }
             });
         }
+
+        // Hook UI: reset defaults
+        document.getElementById('btnResetDefaults')?.addEventListener('click', () => {
+            resetearDefaults();
+        });
 
         async function actualizarSensores() {
             try {
