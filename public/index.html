@@ -1026,14 +1026,19 @@
             if (!humChannelId && !valveChannelId) throw new Error('no channels');
 
             const now = nowAdjusted();
+            const range = rangeForMode(viewMode);
             let step;
             let limit;
             if (viewMode === 'day') { step = 'raw'; limit = 1500; }
             else if (viewMode === 'month') { step = '1h'; limit = 2000; }
             else { step = '1h'; limit = 4000; }
 
-            const baseHum = humChannelId ? `/api/channel/history/${encodeURIComponent(deviceCode)}/${encodeURIComponent(humChannelId)}?step=${encodeURIComponent(step)}&limit=${limit}` : null;
-            const baseValve = valveChannelId ? `/api/channel/history/${encodeURIComponent(deviceCode)}/${encodeURIComponent(valveChannelId)}?step=${encodeURIComponent(step)}&limit=${limit}` : null;
+            const rangeQs = (range && range.from && range.to)
+                ? `&from=${encodeURIComponent(range.from.toISOString())}&to=${encodeURIComponent(range.to.toISOString())}`
+                : '';
+
+            const baseHum = humChannelId ? `/api/channel/history/${encodeURIComponent(deviceCode)}/${encodeURIComponent(humChannelId)}?step=${encodeURIComponent(step)}&limit=${limit}${rangeQs}` : null;
+            const baseValve = valveChannelId ? `/api/channel/history/${encodeURIComponent(deviceCode)}/${encodeURIComponent(valveChannelId)}?step=${encodeURIComponent(step)}&limit=${limit}${rangeQs}` : null;
 
             const [humRes, valveRes] = await Promise.all([
                 baseHum ? fetch(baseHum) : Promise.resolve(null),
