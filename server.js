@@ -3704,6 +3704,8 @@ app.post('/api/config/:device_code', async (req, res) => {
       return res.status(400).json({ error: 'Payload inválido', details: parsed.error.issues });
     }
 
+    const zonesJsonb = Array.isArray(parsed.data.zones) ? JSON.stringify(parsed.data.zones) : null;
+
     // Obtener device_id
     const device = await pool.query(
       'SELECT id FROM devices WHERE device_code = $1',
@@ -3742,7 +3744,7 @@ app.post('/api/config/:device_code', async (req, res) => {
              notify_webhook_url, notify_telegram_chat_id,
              zones_json
            )
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb)`,
           [
             config_id,
             device_id,
@@ -3760,7 +3762,7 @@ app.post('/api/config/:device_code', async (req, res) => {
             parsed.data.alert_voltage_max ?? null,
             parsed.data.notify_webhook_url ?? null,
             parsed.data.notify_telegram_chat_id ?? null,
-            Array.isArray(parsed.data.zones) ? parsed.data.zones : null
+            zonesJsonb
           ]
         );
       } else {
@@ -3782,7 +3784,7 @@ app.post('/api/config/:device_code', async (req, res) => {
              alert_voltage_max = COALESCE($12, alert_voltage_max),
              notify_webhook_url = COALESCE($13, notify_webhook_url),
              notify_telegram_chat_id = COALESCE($14, notify_telegram_chat_id),
-             zones_json = COALESCE($15, zones_json),
+             zones_json = COALESCE($15::jsonb, zones_json),
              updated_at = CURRENT_TIMESTAMP
            WHERE device_id = $16`,
           [
@@ -3800,7 +3802,7 @@ app.post('/api/config/:device_code', async (req, res) => {
             parsed.data.alert_voltage_max ?? null,
             parsed.data.notify_webhook_url ?? null,
             parsed.data.notify_telegram_chat_id ?? null,
-            Array.isArray(parsed.data.zones) ? parsed.data.zones : null,
+            zonesJsonb,
             device_id
           ]
         );
