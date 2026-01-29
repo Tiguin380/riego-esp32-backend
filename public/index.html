@@ -56,7 +56,11 @@
         .led { width: 40px; height: 40px; border-radius: 50%; border: 3px solid #333; transition: all 0.3s; }
         .control-row { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
         .control-row label { flex: 1; color: #ffffff; }
-        .control-row input, .control-row select { flex: 2; padding: 10px; border: none; border-radius: 6px; background: #0f3460; color: #fff; font-size: 14px; }
+        .control-row input, .control-row select { flex: 2; padding: 10px; border: none; border-radius: 6px; background: #0f3460; color: #fff; font-size: 14px; min-width: 0; }
+        .control-row textarea { flex: 2; width: 100%; min-width: 0; padding: 12px; border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; background: rgba(15,52,96,0.55); color: #fff; font-size: 14px; line-height: 1.4; min-height: 140px; resize: vertical; box-shadow: 0 12px 28px rgba(0,0,0,0.18); }
+        .control-row input:focus, .control-row select:focus, .control-row textarea:focus { outline: 2px solid rgba(76,175,80,0.35); outline-offset: 2px; }
+        .control-row.textarea-row { align-items: flex-start; }
+        .control-row.textarea-row label { padding-top: 10px; }
         .control-row input[type="range"] { -webkit-appearance: none; appearance: none; height: 8px; }
         .control-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: #4CAF50; border-radius: 50%; cursor: pointer; }
         .btn-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 15px 0; }
@@ -203,7 +207,7 @@
                     <option value="">(sin dispositivo)</option>
                 </select>
             </div>
-            <div class="control-row"><label>Mensaje:</label><textarea id="tMessage" placeholder="Describe el problema..." style="min-height: 120px;"></textarea></div>
+            <div class="control-row textarea-row"><label>Mensaje:</label><textarea id="tMessage" placeholder="Describe el problema..."></textarea></div>
             <button class="btn btn-save" id="btnCreateTicket" type="button">ENVIAR TICKET</button>
 
             <div style="margin-top: 16px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);"></div>
@@ -215,7 +219,7 @@
             <div class="control-row"><label>ID:</label><input id="tId" type="text" disabled /></div>
             <div class="control-row"><label>Estado:</label><input id="tStatus" type="text" disabled /></div>
             <div class="control-row"><label>Mensajes:</label><div id="tMessages" class="messages" style="flex:2;"></div></div>
-            <div class="control-row"><label>Responder:</label><textarea id="tReply" placeholder="Añade más información..." style="min-height: 110px;"></textarea></div>
+            <div class="control-row textarea-row"><label>Responder:</label><textarea id="tReply" placeholder="Añade más información..."></textarea></div>
             <div style="display:flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
                 <button class="mini-btn primary" id="btnReplyTicket" type="button">Enviar respuesta</button>
                 <button class="mini-btn danger" id="btnCloseTicket" type="button">Cerrar ticket</button>
