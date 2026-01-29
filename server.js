@@ -293,6 +293,14 @@ function signUserJwt(user) {
   );
 }
 
+function signAdminJwt() {
+  return jwt.sign(
+    { sub: 'admin', admin: true },
+    JWT_SECRET,
+    { expiresIn: Math.floor(COOKIE_MAX_AGE_MS / 1000) }
+  );
+}
+
 function authMiddleware(req, _res, next) {
   const cookieToken = getJwtFromReq(req);
   const bearerToken = getBearerJwtFromReq(req);
@@ -308,7 +316,7 @@ function authMiddleware(req, _res, next) {
   const tryVerify = (token, source) => {
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
-      req.user = { id: decoded.sub, email: decoded.email || null };
+      req.user = { id: decoded.sub, email: decoded.email || null, admin: Boolean(decoded.admin) };
       req.auth.source = source;
       req.auth.valid = true;
       req.auth.error = null;
@@ -437,12 +445,14 @@ async function requireDeviceForConfig(req, res, device_code) {
 
 function hasValidAdminKey(req) {
   const adminKey = process.env.ADMIN_KEY;
+  if (req.user?.admin) return true;
   if (!adminKey) return false;
   return req.get('x-admin-key') === adminKey;
 }
 
 function requireAdminKey(req, res) {
   const adminKey = process.env.ADMIN_KEY;
+  if (req.user?.admin) return true;
   if (!adminKey) {
     res.status(403).json({ error: 'ADMIN_KEY no configurada' });
     return false;
@@ -749,6 +759,13 @@ async function initDB() {
         id UUID PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
+        full_name VARCHAR(160),
+        phone VARCHAR(60),
+        address VARCHAR(255),
+        province VARCHAR(120),
+        city VARCHAR(120),
+        country VARCHAR(120),
+        customer_id UUID,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -915,6 +932,16 @@ async function initDB() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_customer_devices_customer ON customer_devices(customer_id)`);
 
     // Auth extra: verificación email + reset password
+    // Perfil/CRM: campos extendidos en users
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(160)`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(60)`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS address VARCHAR(255)`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS province VARCHAR(120)`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS city VARCHAR(120)`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS country VARCHAR(120)`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_id UUID`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_customer_id ON users(customer_id)`);
+
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verify_token TEXT`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verify_token_created_at TIMESTAMP`);
@@ -952,8 +979,25 @@ async function initDB() {
 // --- Auth (registro/login) ---
 const RegisterSchema = z.object({
   email: z.string().email().max(255),
-  password: z.string().min(8).max(200)
+  password: z.string().min(8).max(200),
+  full_name: z.string().min(2).max(160).optional(),
+  phone: z.string().min(3).max(60).optional().nullable(),
+  address: z.string().min(2).max(255).optional().nullable(),
+  province: z.string().min(2).max(120).optional().nullable(),
+  city: z.string().min(2).max(120).optional().nullable(),
+  country: z.string().min(2).max(120).optional().nullable()
 });
+
+const ProfileUpdateSchema = z
+  .object({
+    full_name: z.string().min(2).max(160).optional(),
+    phone: z.string().min(3).max(60).optional().nullable(),
+    address: z.string().min(2).max(255).optional().nullable(),
+    province: z.string().min(2).max(120).optional().nullable(),
+    city: z.string().min(2).max(120).optional().nullable(),
+    country: z.string().min(2).max(120).optional().nullable()
+  })
+  .passthrough();
 
 const ChangePasswordSchema = z.object({
   current_password: z.string().min(1).max(200),
@@ -989,7 +1033,28 @@ function friendlyZodAuthError(issues) {
 
 app.get('/api/auth/me', async (req, res) => {
   if (!req.user?.id) return res.status(401).json({ error: 'No autenticado' });
-  res.json({ id: req.user.id, email: req.user.email });
+  try {
+    const r = await pool.query(
+      'SELECT id, email, full_name, phone, address, province, city, country, customer_id FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    const u = r.rows[0];
+    if (!u) return res.status(401).json({ error: 'No autenticado' });
+    res.json({
+      id: u.id,
+      email: u.email,
+      full_name: u.full_name || null,
+      phone: u.phone || null,
+      address: u.address || null,
+      province: u.province || null,
+      city: u.city || null,
+      country: u.country || null,
+      customer_id: u.customer_id || null
+    });
+  } catch (e) {
+    console.error(e);
+    res.json({ id: req.user.id, email: req.user.email });
+  }
 });
 
 app.post('/api/auth/register', async (req, res) => {
@@ -1002,14 +1067,64 @@ app.post('/api/auth/register', async (req, res) => {
     const password_hash = await bcrypt.hash(parsed.data.password, 10);
     const id = uuidv4();
 
+    const profile = {
+      full_name: parsed.data.full_name ? String(parsed.data.full_name).trim() : null,
+      phone: parsed.data.phone != null ? String(parsed.data.phone || '').trim() || null : null,
+      address: parsed.data.address != null ? String(parsed.data.address || '').trim() || null : null,
+      province: parsed.data.province != null ? String(parsed.data.province || '').trim() || null : null,
+      city: parsed.data.city != null ? String(parsed.data.city || '').trim() || null : null,
+      country: parsed.data.country != null ? String(parsed.data.country || '').trim() || null : null
+    };
+
     const verify_token = uuidv4();
 
-    await pool.query(
-      `INSERT INTO users (id, email, password_hash, email_verified, verify_token, verify_token_created_at)
-       VALUES ($1, $2, $3, FALSE, $4, CURRENT_TIMESTAMP)`
-      ,
-      [id, email, password_hash, verify_token]
-    );
+    // Crear user + customer en transacción para que quede consistente
+    const client = await pool.connect();
+    let customer_id = null;
+    try {
+      await client.query('BEGIN');
+
+      // Autocreación de cliente asociado
+      customer_id = uuidv4();
+      await client.query(
+        `INSERT INTO customers (id, name, email, phone, address, notes)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          customer_id,
+          profile.full_name || email,
+          email,
+          profile.phone,
+          profile.address,
+          null
+        ]
+      );
+
+      await client.query(
+        `INSERT INTO users (id, email, password_hash, email_verified, verify_token, verify_token_created_at,
+                            full_name, phone, address, province, city, country, customer_id)
+         VALUES ($1, $2, $3, FALSE, $4, CURRENT_TIMESTAMP, $5, $6, $7, $8, $9, $10, $11)`,
+        [
+          id,
+          email,
+          password_hash,
+          verify_token,
+          profile.full_name,
+          profile.phone,
+          profile.address,
+          profile.province,
+          profile.city,
+          profile.country,
+          customer_id
+        ]
+      );
+
+      await client.query('COMMIT');
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch {}
+      throw e;
+    } finally {
+      client.release();
+    }
 
     // Email de bienvenida/confirmación (no bloqueante)
     let email_sent = false;
@@ -1029,7 +1144,7 @@ app.post('/api/auth/register', async (req, res) => {
 
     const token = signUserJwt({ id, email });
     setAuthCookie(res, token);
-    res.json({ status: 'OK', user: { id, email }, email_sent });
+    res.json({ status: 'OK', user: { id, email, customer_id }, email_sent });
   } catch (e) {
     if (/duplicate key value|unique constraint/i.test(String(e.message))) {
       return res.status(409).json({ error: 'Email ya registrado' });
@@ -1037,6 +1152,130 @@ app.post('/api/auth/register', async (req, res) => {
     console.error(e);
     res.status(500).json({ error: e.message });
   }
+});
+
+// --- Perfil (cliente) ---
+app.get('/api/me/profile', async (req, res) => {
+  try {
+    if (!requireUser(req, res)) return;
+    if (!req.user?.id) return res.status(401).json({ error: 'No autenticado' });
+    const r = await pool.query(
+      'SELECT id, email, full_name, phone, address, province, city, country, customer_id FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    const u = r.rows[0];
+    if (!u) return res.status(401).json({ error: 'No autenticado' });
+    res.json({
+      id: u.id,
+      email: u.email,
+      full_name: u.full_name || null,
+      phone: u.phone || null,
+      address: u.address || null,
+      province: u.province || null,
+      city: u.city || null,
+      country: u.country || null,
+      customer_id: u.customer_id || null
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/me/profile', async (req, res) => {
+  try {
+    if (!requireUser(req, res)) return;
+    if (!req.user?.id) return res.status(401).json({ error: 'No autenticado' });
+    const parsed = ProfileUpdateSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: 'Datos inválidos', details: parsed.error.flatten() });
+
+    const current = await pool.query(
+      'SELECT id, email, full_name, phone, address, province, city, country, customer_id FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    const u = current.rows[0];
+    if (!u) return res.status(401).json({ error: 'No autenticado' });
+
+    const merged = {
+      full_name: parsed.data.full_name !== undefined ? String(parsed.data.full_name || '').trim() || null : (u.full_name || null),
+      phone: parsed.data.phone !== undefined ? (parsed.data.phone == null ? null : String(parsed.data.phone || '').trim() || null) : (u.phone || null),
+      address: parsed.data.address !== undefined ? (parsed.data.address == null ? null : String(parsed.data.address || '').trim() || null) : (u.address || null),
+      province: parsed.data.province !== undefined ? (parsed.data.province == null ? null : String(parsed.data.province || '').trim() || null) : (u.province || null),
+      city: parsed.data.city !== undefined ? (parsed.data.city == null ? null : String(parsed.data.city || '').trim() || null) : (u.city || null),
+      country: parsed.data.country !== undefined ? (parsed.data.country == null ? null : String(parsed.data.country || '').trim() || null) : (u.country || null)
+    };
+
+    // Mantener también el customer asociado (si existe)
+    if (u.customer_id) {
+      await pool.query(
+        `UPDATE customers
+         SET name = $1, email = $2, phone = $3, address = $4, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $5`,
+        [merged.full_name || u.email, u.email, merged.phone, merged.address, u.customer_id]
+      );
+    }
+
+    const r = await pool.query(
+      `UPDATE users
+       SET full_name = $1, phone = $2, address = $3, province = $4, city = $5, country = $6
+       WHERE id = $7
+       RETURNING id, email, full_name, phone, address, province, city, country, customer_id`,
+      [merged.full_name, merged.phone, merged.address, merged.province, merged.city, merged.country, req.user.id]
+    );
+    res.json({ profile: r.rows[0] });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/me', async (req, res) => {
+  try {
+    if (!requireUser(req, res)) return;
+    if (!req.user?.id) return res.status(401).json({ error: 'No autenticado' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const r = await client.query('SELECT customer_id FROM users WHERE id = $1', [req.user.id]);
+      const customerId = r.rows[0]?.customer_id || null;
+      await client.query('DELETE FROM users WHERE id = $1', [req.user.id]);
+      if (customerId) {
+        await client.query('DELETE FROM customers WHERE id = $1', [customerId]);
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch {}
+      throw e;
+    } finally {
+      client.release();
+    }
+    clearAuthCookie(res);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Admin: login por cookie (para soporte/navegación a /panel) ---
+app.post('/api/admin/login', async (req, res) => {
+  try {
+    const adminKey = process.env.ADMIN_KEY;
+    if (!adminKey) return res.status(403).json({ error: 'ADMIN_KEY no configurada' });
+    const key = String(req.body?.admin_key || '').trim();
+    if (!key || key !== adminKey) return res.status(401).json({ error: 'admin_key inválida' });
+    const token = signAdminJwt();
+    setAuthCookie(res, token);
+    res.json({ status: 'OK' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/logout', async (_req, res) => {
+  clearAuthCookie(res);
+  res.json({ status: 'OK' });
 });
 
 app.post('/api/auth/resend-verification', async (req, res) => {

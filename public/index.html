@@ -92,6 +92,15 @@
 
         .hidden { display: none; }
 
+        /* Navegación Cuenta/Dispositivos */
+        .top-nav { display:flex; gap: 10px; align-items:center; flex-wrap: wrap; margin: 6px 0 12px; }
+        .top-nav .spacer { flex: 1 1 auto; }
+        .mini-btn.active { outline: 2px solid rgba(255,255,255,0.30); }
+
+        body.mode-account .container > .section { display: none; }
+        body.mode-account #accountSection { display: block; }
+        body.mode-account #status { display:none; }
+
         /* Selector de canales (más moderno) */
         .channel-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0 6px; }
         @media (max-width: 900px) { .channel-cards { grid-template-columns: 1fr; } }
@@ -140,6 +149,32 @@
             />
         </div>
         <div class="status" style="margin-bottom: 12px;">UI vRt1548A</div>
+
+        <div class="top-nav">
+            <button class="mini-btn active" id="navDevices" type="button">Dispositivos</button>
+            <button class="mini-btn" id="navAccount" type="button">Cuenta</button>
+            <span class="spacer"></span>
+            <button class="mini-btn danger" id="navLogout" type="button">Salir</button>
+        </div>
+
+        <div class="section hidden" id="accountSection">
+            <h2> CUENTA</h2>
+            <div class="status" id="accountStatus">—</div>
+            <div class="control-row"><label>Email:</label><input id="accEmail" type="email" disabled /></div>
+            <div class="control-row"><label>Nombre:</label><input id="accFullName" type="text" placeholder="Nombre y apellidos" /></div>
+            <div class="control-row"><label>Teléfono:</label><input id="accPhone" type="tel" placeholder="Teléfono" /></div>
+            <div class="control-row"><label>Dirección:</label><input id="accAddress" type="text" placeholder="Calle, número, etc." /></div>
+            <div class="control-row"><label>Provincia:</label><input id="accProvince" type="text" placeholder="Provincia" /></div>
+            <div class="control-row"><label>Ciudad:</label><input id="accCity" type="text" placeholder="Ciudad" /></div>
+            <div class="control-row"><label>País:</label><input id="accCountry" type="text" placeholder="País" /></div>
+            <div style="display:flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+                <button class="mini-btn primary" id="btnSaveProfile" type="button">Guardar</button>
+                <button class="mini-btn danger" id="btnDeleteAccount" type="button">Eliminar cuenta</button>
+            </div>
+            <div class="muted" style="margin-top:10px; font-size:12px; color:#8fa3bf; line-height:1.35;">
+                Eliminar cuenta borra tu usuario y desvincula tus dispositivos.
+            </div>
+        </div>
 
         <div class="section" id="deviceSection" style="padding: 14px 20px;">
             <h2> DISPOSITIVO</h2>
@@ -384,6 +419,111 @@
         let valveChannelId = null;
 
         let lastRebootsBase = null;
+
+        // --- Cuenta / navegación ---
+        const navDevicesBtn = document.getElementById('navDevices');
+        const navAccountBtn = document.getElementById('navAccount');
+        const navLogoutBtn = document.getElementById('navLogout');
+
+        const accountSection = document.getElementById('accountSection');
+        const accountStatus = document.getElementById('accountStatus');
+        const accEmail = document.getElementById('accEmail');
+        const accFullName = document.getElementById('accFullName');
+        const accPhone = document.getElementById('accPhone');
+        const accAddress = document.getElementById('accAddress');
+        const accProvince = document.getElementById('accProvince');
+        const accCity = document.getElementById('accCity');
+        const accCountry = document.getElementById('accCountry');
+        const btnSaveProfile = document.getElementById('btnSaveProfile');
+        const btnDeleteAccount = document.getElementById('btnDeleteAccount');
+
+        function setAccountStatus(text, isErr = false) {
+            if (!accountStatus) return;
+            accountStatus.textContent = text || '—';
+            accountStatus.className = 'status' + (isErr ? ' offline' : ' online');
+        }
+
+        function setView(view) {
+            const isAccount = view === 'account';
+            document.body.classList.toggle('mode-account', isAccount);
+            accountSection?.classList.toggle('hidden', !isAccount);
+            navDevicesBtn?.classList.toggle('active', !isAccount);
+            navAccountBtn?.classList.toggle('active', isAccount);
+        }
+
+        async function doLogout() {
+            try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
+            const next = encodeURIComponent(location.pathname + location.search + location.hash);
+            window.location.href = `/login?next=${next}`;
+        }
+
+        async function loadProfileIntoForm() {
+            try {
+                setAccountStatus('Cargando...', false);
+                const r = await fetch('/api/me/profile', { credentials: 'include' });
+                if (r.status === 401) return doLogout();
+                const p = await r.json().catch(() => ({}));
+                accEmail.value = p.email || '';
+                accFullName.value = p.full_name || '';
+                accPhone.value = p.phone || '';
+                accAddress.value = p.address || '';
+                accProvince.value = p.province || '';
+                accCity.value = p.city || '';
+                accCountry.value = p.country || '';
+                setAccountStatus('Listo.', false);
+            } catch {
+                setAccountStatus('No se pudo cargar tu perfil.', true);
+            }
+        }
+
+        async function saveProfileFromForm() {
+            try {
+                setAccountStatus('Guardando...', false);
+                const payload = {
+                    full_name: String(accFullName.value || '').trim() || undefined,
+                    phone: String(accPhone.value || '').trim() || null,
+                    address: String(accAddress.value || '').trim() || null,
+                    province: String(accProvince.value || '').trim() || null,
+                    city: String(accCity.value || '').trim() || null,
+                    country: String(accCountry.value || '').trim() || null
+                };
+                const r = await fetch('/api/me/profile', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(payload)
+                });
+                if (r.status === 401) return doLogout();
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(j.error || 'No se pudo guardar');
+                setAccountStatus('Guardado.', false);
+            } catch (e) {
+                setAccountStatus(e.message || 'Error guardando.', true);
+            }
+        }
+
+        async function deleteAccount() {
+            const ok = confirm('¿Seguro que quieres eliminar tu cuenta? Esta acción no se puede deshacer.');
+            if (!ok) return;
+            try {
+                setAccountStatus('Eliminando cuenta...', false);
+                const r = await fetch('/api/me', { method: 'DELETE', credentials: 'include' });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(j.error || 'No se pudo eliminar');
+                window.location.href = '/login';
+            } catch (e) {
+                setAccountStatus(e.message || 'Error eliminando.', true);
+            }
+        }
+
+        navDevicesBtn?.addEventListener('click', () => setView('devices'));
+        navAccountBtn?.addEventListener('click', async () => {
+            setView('account');
+            await loadProfileIntoForm();
+        });
+        navLogoutBtn?.addEventListener('click', doLogout);
+        btnSaveProfile?.addEventListener('click', saveProfileFromForm);
+        btnDeleteAccount?.addEventListener('click', deleteAccount);
 
         function rebootsOffsetKey(code) { return `rebootsOffset:${code}`; }
         function getLocalRebootsOffset(code) {

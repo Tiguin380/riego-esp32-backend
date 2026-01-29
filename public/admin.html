@@ -94,6 +94,8 @@
     <div class="grid">
       <div class="section">
         <h2>CLIENTES</h2>
+        <div class="row"><label>ID</label><input id="cId" placeholder="(selecciona un cliente)" disabled /></div>
+        <div style="height: 8px"></div>
         <div class="row"><label>Nombre</label><input id="cName" placeholder="Nombre cliente" /></div>
         <div style="height: 8px"></div>
         <div class="row"><label>Email</label><input id="cEmail" placeholder="email@cliente.com" /></div>
@@ -105,9 +107,17 @@
         <div class="row"><label>Notas</label><textarea id="cNotes" placeholder="Notas internas"></textarea></div>
         <div style="height: 10px"></div>
         <div class="right">
-          <button class="mini-btn primary" id="btnCreateCustomer" type="button">Crear cliente</button>
+          <button class="mini-btn" id="btnClearCustomer" type="button">Limpiar</button>
+          <button class="mini-btn primary" id="btnCreateCustomer" type="button">Crear</button>
+          <button class="mini-btn primary" id="btnUpdateCustomer" type="button">Guardar cambios</button>
+          <button class="mini-btn danger" id="btnDeleteCustomer" type="button">Borrar</button>
         </div>
         <div class="status" id="customerStatus">—</div>
+
+        <div style="height: 10px"></div>
+        <div class="muted">Dispositivos del cliente (detalle).</div>
+        <div style="height: 8px"></div>
+        <div id="customerDevicesList" class="muted" style="display:flex; flex-direction:column; gap: 8px;"></div>
         <div style="height: 12px"></div>
         <div class="muted">Lista (clic para ver detalle y asignar dispositivos).</div>
         <div style="height: 10px"></div>
@@ -144,6 +154,7 @@
                 <th>Device</th>
                 <th>Cliente</th>
                 <th>Última lectura</th>
+                <th>Soporte</th>
               </tr>
             </thead>
             <tbody id="devicesTbody"></tbody>
@@ -164,12 +175,14 @@
     const customersTbody = document.getElementById('customersTbody');
     const devicesTbody = document.getElementById('devicesTbody');
 
+    const cId = document.getElementById('cId');
     const cName = document.getElementById('cName');
     const cEmail = document.getElementById('cEmail');
     const cPhone = document.getElementById('cPhone');
     const cAddress = document.getElementById('cAddress');
     const cNotes = document.getElementById('cNotes');
     const customerStatus = document.getElementById('customerStatus');
+    const customerDevicesList = document.getElementById('customerDevicesList');
 
     const assignDeviceCode = document.getElementById('assignDeviceCode');
     const assignCustomerId = document.getElementById('assignCustomerId');
@@ -177,9 +190,14 @@
 
     const btnReload = document.getElementById('btnReload');
     const btnLogout = document.getElementById('btnLogout');
+    const btnClearCustomer = document.getElementById('btnClearCustomer');
     const btnCreateCustomer = document.getElementById('btnCreateCustomer');
+    const btnUpdateCustomer = document.getElementById('btnUpdateCustomer');
+    const btnDeleteCustomer = document.getElementById('btnDeleteCustomer');
     const btnAssign = document.getElementById('btnAssign');
     const btnUnassign = document.getElementById('btnUnassign');
+
+    let selectedCustomerId = null;
 
     function setConn(ok, msg) {
       connDot.className = 'dot ' + (ok ? 'ok' : 'bad');
@@ -243,9 +261,108 @@
         `;
         tr.addEventListener('click', () => {
           assignCustomerId.value = c.id;
-          setStatus(customerStatus, `Seleccionado: ${c.name}`, 'ok');
+          selectCustomer(c.id);
         });
         customersTbody.appendChild(tr);
+      }
+    }
+
+    function setCustomerFormEnabled(hasSelection) {
+      btnUpdateCustomer.disabled = !hasSelection;
+      btnDeleteCustomer.disabled = !hasSelection;
+      if (cId) cId.value = hasSelection ? String(selectedCustomerId || '') : '';
+    }
+
+    function clearCustomerSelection() {
+      selectedCustomerId = null;
+      setCustomerFormEnabled(false);
+      if (cName) cName.value = '';
+      if (cEmail) cEmail.value = '';
+      if (cPhone) cPhone.value = '';
+      if (cAddress) cAddress.value = '';
+      if (cNotes) cNotes.value = '';
+      if (assignCustomerId) assignCustomerId.value = '';
+      if (customerDevicesList) customerDevicesList.innerHTML = '';
+      setStatus(customerStatus, '—', '');
+    }
+
+    function renderCustomerDevices(devices) {
+      if (!customerDevicesList) return;
+      const rows = Array.isArray(devices) ? devices : [];
+      if (!rows.length) {
+        customerDevicesList.innerHTML = '<span class="tag red">Sin dispositivos</span>';
+        return;
+      }
+      customerDevicesList.innerHTML = '';
+      for (const d of rows) {
+        const wrap = document.createElement('div');
+        wrap.style.display = 'flex';
+        wrap.style.alignItems = 'center';
+        wrap.style.justifyContent = 'space-between';
+        wrap.style.gap = '10px';
+        wrap.style.padding = '10px';
+        wrap.style.border = '1px solid rgba(255,255,255,0.08)';
+        wrap.style.borderRadius = '12px';
+        wrap.style.background = 'rgba(15,52,96,0.20)';
+
+        const left = document.createElement('div');
+        left.innerHTML = `<div style="font-weight:800">${escapeHtml(d.device_code)}</div><div class="muted">${escapeHtml(d.name || '')}</div>`;
+
+        const right = document.createElement('div');
+        right.style.display = 'flex';
+        right.style.gap = '8px';
+        right.style.flexWrap = 'wrap';
+        right.innerHTML = `
+          <a class="mini-btn primary" href="/panel/${encodeURIComponent(String(d.device_code || ''))}" target="_blank" rel="noopener">Abrir</a>
+          <button class="mini-btn" type="button" data-unassign="${escapeHtml(d.device_code)}">Desasignar</button>
+        `;
+
+        wrap.appendChild(left);
+        wrap.appendChild(right);
+        customerDevicesList.appendChild(wrap);
+      }
+
+      customerDevicesList.querySelectorAll('button[data-unassign]').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          const dc = String(btn.getAttribute('data-unassign') || '').trim();
+          if (!selectedCustomerId || !dc) return;
+          setStatus(customerStatus, 'Desasignando...', '');
+          try {
+            await api(`/api/admin/customers/${encodeURIComponent(selectedCustomerId)}/unassign-device`, {
+              method: 'POST',
+              body: JSON.stringify({ device_code: dc })
+            });
+            setStatus(customerStatus, 'Dispositivo desasignado.', 'ok');
+            await selectCustomer(selectedCustomerId, true);
+            await reloadAll();
+          } catch (err) {
+            setStatus(customerStatus, err.message || 'Error', 'bad');
+          }
+        });
+      });
+    }
+
+    async function selectCustomer(id, silent = false) {
+      const cid = String(id || '').trim();
+      if (!cid) return;
+      selectedCustomerId = cid;
+      setCustomerFormEnabled(true);
+      if (!silent) setStatus(customerStatus, 'Cargando detalle...', '');
+      try {
+        const j = await api(`/api/admin/customers/${encodeURIComponent(cid)}`);
+        const c = j.customer || {};
+        if (cId) cId.value = c.id || cid;
+        if (cName) cName.value = c.name || '';
+        if (cEmail) cEmail.value = c.email || '';
+        if (cPhone) cPhone.value = c.phone || '';
+        if (cAddress) cAddress.value = c.address || '';
+        if (cNotes) cNotes.value = c.notes || '';
+        if (assignCustomerId) assignCustomerId.value = c.id || cid;
+        renderCustomerDevices(j.devices || []);
+        if (!silent) setStatus(customerStatus, `Seleccionado: ${c.name || cid}`, 'ok');
+      } catch (e) {
+        if (!silent) setStatus(customerStatus, e.message || 'Error', 'bad');
       }
     }
 
@@ -261,6 +378,9 @@
           </td>
           <td>${customer}</td>
           <td>${escapeHtml(fmt(d.last_seen || d.last_seen_madrid || d.last_seen_madrid_label || '—'))}</td>
+          <td>
+            <a class="mini-btn primary" href="/panel/${encodeURIComponent(String(d.device_code || ''))}" target="_blank" rel="noopener">Abrir</a>
+          </td>
         `;
         devicesTbody.appendChild(tr);
       }
@@ -283,6 +403,13 @@
         renderCustomers(customers.customers || []);
         renderDevices(devices.devices || []);
         setStatus(statusEl, 'Listo.', 'ok');
+
+        if (selectedCustomerId) {
+          await selectCustomer(selectedCustomerId, true);
+          setStatus(customerStatus, `Seleccionado: ${String(cName.value || selectedCustomerId)}`, 'ok');
+        } else {
+          setCustomerFormEnabled(false);
+        }
       } catch (e) {
         setConn(false, 'Error');
         setStatus(statusEl, e.message || 'Error', 'bad');
@@ -291,9 +418,15 @@
 
     btnReload.addEventListener('click', reloadAll);
 
+    btnClearCustomer.addEventListener('click', () => {
+      clearCustomerSelection();
+    });
+
     btnLogout.addEventListener('click', () => {
       localStorage.removeItem(KEY_STORAGE);
-      window.location.href = '/admin';
+      fetch('/api/admin/logout', { method: 'POST', credentials: 'include' }).finally(() => {
+        window.location.href = '/admin';
+      });
     });
 
     btnCreateCustomer.addEventListener('click', async () => {
@@ -310,6 +443,44 @@
         await api('/api/admin/customers', { method: 'POST', body: JSON.stringify(payload) });
         setStatus(customerStatus, 'Cliente creado.', 'ok');
         cName.value = ''; cEmail.value = ''; cPhone.value = ''; cAddress.value = ''; cNotes.value='';
+        clearCustomerSelection();
+        await reloadAll();
+      } catch (e) {
+        setStatus(customerStatus, e.message || 'Error', 'bad');
+      }
+    });
+
+    btnUpdateCustomer.addEventListener('click', async () => {
+      const cid = String(selectedCustomerId || '').trim();
+      if (!cid) return setStatus(customerStatus, 'Selecciona un cliente de la lista.', 'bad');
+      setStatus(customerStatus, 'Guardando...', '');
+      try {
+        const payload = {
+          name: String(cName.value || '').trim(),
+          email: String(cEmail.value || '').trim() || null,
+          phone: String(cPhone.value || '').trim() || null,
+          address: String(cAddress.value || '').trim() || null,
+          notes: String(cNotes.value || '').trim() || null
+        };
+        if (!payload.name) return setStatus(customerStatus, 'Falta nombre.', 'bad');
+        await api(`/api/admin/customers/${encodeURIComponent(cid)}`, { method: 'PUT', body: JSON.stringify(payload) });
+        setStatus(customerStatus, 'Cambios guardados.', 'ok');
+        await reloadAll();
+      } catch (e) {
+        setStatus(customerStatus, e.message || 'Error', 'bad');
+      }
+    });
+
+    btnDeleteCustomer.addEventListener('click', async () => {
+      const cid = String(selectedCustomerId || '').trim();
+      if (!cid) return setStatus(customerStatus, 'Selecciona un cliente de la lista.', 'bad');
+      const ok = confirm('¿Seguro que quieres borrar este cliente?');
+      if (!ok) return;
+      setStatus(customerStatus, 'Borrando...', '');
+      try {
+        await api(`/api/admin/customers/${encodeURIComponent(cid)}`, { method: 'DELETE' });
+        setStatus(customerStatus, 'Cliente borrado.', 'ok');
+        clearCustomerSelection();
         await reloadAll();
       } catch (e) {
         setStatus(customerStatus, e.message || 'Error', 'bad');
@@ -325,6 +496,8 @@
         if (!dc) return setStatus(assignStatus, 'Falta device_code.', 'bad');
         await api(`/api/admin/customers/${encodeURIComponent(cid)}/assign-device`, { method: 'POST', body: JSON.stringify({ device_code: dc }) });
         setStatus(assignStatus, 'Asignado.', 'ok');
+        selectedCustomerId = cid;
+        setCustomerFormEnabled(true);
         await reloadAll();
       } catch (e) {
         setStatus(assignStatus, e.message || 'Error', 'bad');
@@ -352,6 +525,7 @@
         window.location.href = '/admin';
         return;
       }
+      clearCustomerSelection();
       reloadAll();
     })();
   </script>

@@ -87,6 +87,20 @@
       return r.json();
     }
 
+    async function loginCookie(key) {
+      const r = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ admin_key: key })
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || 'No se pudo crear sesión admin');
+      }
+      return r.json().catch(() => ({}));
+    }
+
     (function init() {
       const saved = localStorage.getItem(KEY_STORAGE);
       if (saved) adminKeyInput.value = saved;
@@ -105,6 +119,7 @@
       setStatus('Verificando...', '');
       try {
         await ping(key);
+        await loginCookie(key);
         localStorage.setItem(KEY_STORAGE, key);
         setStatus('OK. Entrando...', 'ok');
         window.location.href = '/admin/app';
