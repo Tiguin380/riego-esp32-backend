@@ -1054,6 +1054,18 @@
             const humRows = Array.isArray(humPayload.rows) ? humPayload.rows : [];
             const valveRows = Array.isArray(valvePayload.rows) ? valvePayload.rows : [];
 
+            // Si el backend no está rellenando channel_samples (o están desfasados),
+            // la gráfica puede quedarse “clavada” en un timestamp antiguo.
+            // En ese caso, usamos el store local (alimentado por /api/sensor/latest).
+            if (viewMode === 'day') {
+                const lastRow = humRows.length ? humRows[humRows.length - 1] : (valveRows.length ? valveRows[valveRows.length - 1] : null);
+                const lastTs = lastRow ? parseTsToDate(lastRow.ts) : null;
+                const ageMs = lastTs ? (now.getTime() - lastTs.getTime()) : Infinity;
+                if (!lastTs || !Number.isFinite(ageMs) || ageMs > 10 * 60000) {
+                    throw new Error('history stale/empty; fallback to store');
+                }
+            }
+
             let labels = [];
             let hum = [];
             let valve = [];
