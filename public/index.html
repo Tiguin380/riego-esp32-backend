@@ -740,7 +740,11 @@
                 };
 
                 const body = {
-                    humidity_low_threshold: cfg?.humidity_low_threshold ?? config.threshold,
+                    // Compat: muchos firmwares/ OLED solo leen el umbral global.
+                    // Si hay umbral por planta, usamos PLANTA 1 como umbral global.
+                    humidity_low_threshold: (zones && zones[0] && zones[0].humidity_low_threshold != null)
+                        ? Number(zones[0].humidity_low_threshold)
+                        : (cfg?.humidity_low_threshold ?? config.threshold),
                     humidity_low_color: cfg?.humidity_low_color ?? config.colorB,
                     humidity_good_color: cfg?.humidity_good_color ?? config.colorG,
                     wet_v: cfg?.wet_v,
@@ -2516,7 +2520,10 @@
                 const notifyTelegram = document.getElementById('notifyTelegram').value;
 
                 const body = {
-                    humidity_low_threshold: config.threshold,
+                    // Compat: mantener el umbral global sincronizado con PLANTA 1
+                    humidity_low_threshold: (zonesState && zonesState[0] && zonesState[0].humidity_low_threshold != null)
+                        ? Number(zonesState[0].humidity_low_threshold)
+                        : config.threshold,
                     humidity_low_color: config.colorB,
                     humidity_good_color: config.colorG,
                     wet_v: wetV === '' ? undefined : Number(wetV),
