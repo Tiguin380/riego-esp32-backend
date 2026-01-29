@@ -52,6 +52,14 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   reboot_timeout: 15min
+  # Modo "cliente": si el dispositivo no puede conectarse a la WiFi configurada,
+  # levantará un AP temporal para que el usuario final pueda meter sus credenciales.
+  ap:
+    ssid: "AgroSense-${device_code}"
+    password: !secret wifi_ap_password
+
+# Portal cautivo para configurar WiFi (192.168.4.1 al conectarte al AP)
+captive_portal:
 
 # -------- OTA y API --------
 ota:
