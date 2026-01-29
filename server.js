@@ -4188,6 +4188,34 @@ app.get('/admin/app', (req, res) => {
   res.sendFile(__dirname + '/public/admin.html');
 });
 
+// Error handler global (debe ir después de las rutas)
+app.use((err, req, res, next) => {
+  try {
+    console.error('EXPRESS_ERROR', err);
+
+    // Este endpoint se consulta en polling desde el panel: nunca debe romper la UI.
+    if (req.path === '/api/tickets/unread-count') {
+      if (!res.headersSent) return res.status(200).json({ unread_count: 0 });
+      return;
+    }
+
+    // JSON inválido en config: devolver 400, no 500
+    if (req.path && String(req.path).startsWith('/api/config/')) {
+      const msg = String(err && (err.message || err.type || '') || '');
+      if (err && (err.type === 'entity.parse.failed' || err instanceof SyntaxError || /JSON/i.test(msg))) {
+        if (!res.headersSent) return res.status(400).json({ error: 'JSON inválido' });
+        return;
+      }
+    }
+
+    if (res.headersSent) return next(err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  } catch (e) {
+    if (res.headersSent) return next(err);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
