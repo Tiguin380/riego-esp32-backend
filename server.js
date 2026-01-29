@@ -1849,15 +1849,21 @@ app.get('/api/sse/:device_code', async (req, res) => {
   const dev = await requireUserDevice(req, res, device_code);
   if (!dev) return;
   res.status(200);
-  res.setHeader('Content-Type', 'text/event-stream');
+  // Nota: en HTTP/2 NO se pueden enviar headers tipo "Connection".
+  // Railway puede servir HTTP/2 al navegador; si enviamos ese header, Chrome lanza
+  // net::ERR_HTTP2_PROTOCOL_ERROR aunque el status sea 200.
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
+  // Evitar buffering en proxies (nginx/CDN) para que los eventos lleguen en streaming.
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
 
   const set = sseClientsByDevice.get(device_code) || new Set();
   set.add(res);
   sseClientsByDevice.set(device_code, set);
 
+  // Comentario inicial para abrir el stream inmediatamente
+  res.write(`:ok\n\n`);
   res.write(`event: hello\ndata: ${JSON.stringify({ device_code, ts: new Date().toISOString() })}\n\n`);
   const keepAlive = setInterval(() => {
     try {
