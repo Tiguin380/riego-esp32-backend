@@ -62,6 +62,7 @@
         .zone-row { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
         .zone-row .control-row { margin-bottom: 0; flex: 1 1 320px; }
         .zone-mini { font-size: 11px; color:#8fa3bf; }
+        .mini-btn.tiny { padding: 6px 10px; font-size: 11px; border-radius: 10px; box-shadow: 0 10px 22px rgba(0,0,0,0.18); }
         .valve-indicator { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
         .valve-dot { width: 14px; height: 14px; border-radius: 50%; background: #666; box-shadow: 0 0 10px #000; }
         .valve-dot.on { background: #33cc33; box-shadow: 0 0 18px #33cc33; }
@@ -566,10 +567,12 @@
         function makeDefaultZones(baseThreshold) {
             const thr = Number(baseThreshold);
             const t = Number.isFinite(thr) ? Math.max(0, Math.min(100, thr)) : 25;
+            // Por defecto solo dejamos asignada PLANTA 1 (si existe), el resto SIN ASIGNAR.
+            // Así plantas 2..8 aparecen apagadas hasta que haya sensores/válvulas reales.
             return Array.from({ length: 8 }, (_, i) => ({
                 zone: i + 1,
-                soil_channel_index: i + 1,
-                valve_channel_index: i + 1,
+                soil_channel_index: i === 0 ? 1 : null,
+                valve_channel_index: i === 0 ? 1 : null,
                 humidity_low_threshold: t
             }));
         }
@@ -635,6 +638,150 @@
                 .slice()
                 .sort((a, b) => Number(a.channel_index) - Number(b.channel_index));
 
+            // Auto-asignar: si una planta está sin asignar y existe el canal con el mismo índice,
+            // lo asignamos (sin reutilizar canales ya usados por otras plantas).
+            function autoAssignIfPossible() {
+                const usedSoil = new Set((zonesState || []).map(z => z?.soil_channel_index).filter(v => v != null).map(v => Number(v)));
+                const usedValve = new Set((zonesState || []).map(z => z?.valve_channel_index).filter(v => v != null).map(v => Number(v)));
+                for (let i = 0; i < 8; i++) {
+                    const desiredIdx = i + 1;
+                    const z = zonesState[i];
+                    if (!z) continue;
+                    if (z.soil_channel_index == null) {
+                        const exists = soil.some(x => Number(x.channel_index) === desiredIdx);
+                        if (exists && !usedSoil.has(desiredIdx)) {
+                            z.soil_channel_index = desiredIdx;
+                            usedSoil.add(desiredIdx);
+                        }
+                    }
+                    if (z.valve_channel_index == null) {
+                        const exists = valves.some(x => Number(x.channel_index) === desiredIdx);
+                        if (exists && !usedValve.has(desiredIdx)) {
+                            z.valve_channel_index = desiredIdx;
+                            usedValve.add(desiredIdx);
+                        }
+                    }
+                }
+            }
+
+            autoAssignIfPossible();
+
+            function usedSetFor(kind, excludeIdx) {
+                const s = new Set();
+                for (let i = 0; i < 8; i++) {
+                    if (i === excludeIdx) continue;
+                    const z = zonesState[i];
+                    if (!z) continue;
+                    const v = kind === 'soil' ? z.soil_channel_index : z.valve_channel_index;
+                    if (v == null) continue;
+                    const n = Number(v);
+                    if (Number.isFinite(n)) s.add(n);
+                }
+                return s;
+            }
+
+            function populateSelect(sel, list, currentValue, usedSet, kindLabel) {
+                if (!sel) return;
+                sel.innerHTML = '';
+
+                const optNone = document.createElement('option');
+                optNone.value = '';
+                optNone.textContent = '(sin asignar)';
+                sel.appendChild(optNone);
+
+                for (const c of list) {
+                    const idx = Number(c.channel_index);
+                    if (!Number.isFinite(idx)) continue;
+                    const opt = document.createElement('option');
+                    opt.value = String(idx);
+                    const nm = String(c.name || `${kindLabel} ${idx}`);
+                    opt.textContent = `${nm} (${idx})`;
+                    // No permitir reutilizar el mismo canal en varias plantas
+                    if (usedSet.has(idx) && Number(currentValue) !== idx) {
+                        opt.disabled = true;
+                        opt.textContent = `${nm} (${idx}) — usado en otra planta`;
+                    }
+                    sel.appendChild(opt);
+                }
+
+                sel.value = currentValue == null ? '' : String(currentValue);
+            }
+
+            async function saveZoneConfig(zoneNum, btnEl) {
+                const i = zoneNum - 1;
+                const z = zonesState[i];
+                if (!z) return;
+                const headersBase = { 'Content-Type': 'application/json' };
+
+                async function doSave(headers, body) {
+                    return fetch(`/api/config/${encodeURIComponent(deviceCode)}`, {
+                        method: 'POST',
+                        headers,
+                        credentials: 'include',
+                        body: JSON.stringify(body)
+                    });
+                }
+
+                const saved = (getSavedToken(deviceCode) || '').trim();
+                const headers1 = { ...headersBase };
+                if (saved) headers1['X-Device-Token'] = saved;
+
+                // Traemos config actual y solo tocamos zones
+                const rCfg = await fetch(`/api/config/${encodeURIComponent(deviceCode)}`, { credentials: 'include' });
+                if (rCfg.status === 401) return doLogout();
+                const cfg = await rCfg.json().catch(() => ({}));
+                const baseThr = Number(cfg?.humidity_low_threshold ?? config.threshold ?? 25);
+                const zones = normalizeZonesFromServer(cfg?.zones, baseThr);
+                zones[i] = {
+                    zone: zoneNum,
+                    soil_channel_index: z.soil_channel_index == null ? null : Number(z.soil_channel_index),
+                    valve_channel_index: z.valve_channel_index == null ? null : Number(z.valve_channel_index),
+                    humidity_low_threshold: z.humidity_low_threshold == null ? null : Number(z.humidity_low_threshold)
+                };
+
+                const body = {
+                    humidity_low_threshold: cfg?.humidity_low_threshold ?? config.threshold,
+                    humidity_low_color: cfg?.humidity_low_color ?? config.colorB,
+                    humidity_good_color: cfg?.humidity_good_color ?? config.colorG,
+                    wet_v: cfg?.wet_v,
+                    dry_v: cfg?.dry_v,
+                    alert_humidity_low_minutes: cfg?.alert_humidity_low_minutes ?? 0,
+                    alert_valve_on_max_minutes: cfg?.alert_valve_on_max_minutes ?? 0,
+                    alert_sensor_dead_minutes: cfg?.alert_sensor_dead_minutes ?? 0,
+                    alert_voltage_min: (cfg?.alert_voltage_min == null ? null : cfg.alert_voltage_min),
+                    alert_voltage_max: (cfg?.alert_voltage_max == null ? null : cfg.alert_voltage_max),
+                    notify_webhook_url: (cfg?.notify_webhook_url == null ? null : cfg.notify_webhook_url),
+                    notify_telegram_chat_id: (cfg?.notify_telegram_chat_id == null ? null : cfg.notify_telegram_chat_id),
+                    zones
+                };
+
+                if (btnEl) btnEl.disabled = true;
+                const oldText = btnEl ? btnEl.textContent : '';
+                if (btnEl) btnEl.textContent = 'Guardando…';
+
+                try {
+                    let res = await doSave(headers1, body);
+                    if (res.status === 401 || res.status === 403) {
+                        const msg = saved
+                            ? 'Token guardado inválido o caducado. Pega el token correcto:'
+                            : 'Este dispositivo requiere token para guardar. Pégalo aquí:';
+                        const t = (prompt(msg) || '').trim();
+                        if (t) {
+                            saveToken(deviceCode, t);
+                            const headers2 = { ...headersBase, 'X-Device-Token': t };
+                            res = await doSave(headers2, body);
+                        }
+                    }
+                    if (!res.ok) throw new Error('Error guardando');
+                    if (btnEl) btnEl.textContent = 'Guardado';
+                    setTimeout(() => {
+                        if (btnEl) btnEl.textContent = oldText || 'Guardar';
+                    }, 1200);
+                } finally {
+                    if (btnEl) btnEl.disabled = false;
+                }
+            }
+
             container.innerHTML = '';
 
             for (let i = 0; i < 8; i++) {
@@ -666,18 +813,7 @@
                     const sel = document.createElement('select');
                     sel.id = `zoneSoilSel${zoneNum}`;
                     sel.title = 'Seleccionar sensor de humedad (canal)';
-                    const optNone = document.createElement('option');
-                    optNone.value = '';
-                    optNone.textContent = '(sin asignar)';
-                    sel.appendChild(optNone);
-                    for (let idx = 1; idx <= 8; idx++) {
-                        const c = soil.find(x => Number(x.channel_index) === idx) || null;
-                        const opt = document.createElement('option');
-                        opt.value = String(idx);
-                        opt.textContent = c ? `${c.name} (${idx})` : `Sensor ${idx} (no creado / sin datos)`;
-                        if (!c) opt.disabled = false;
-                        sel.appendChild(opt);
-                    }
+                    populateSelect(sel, soil, zonesState[i]?.soil_channel_index ?? null, usedSetFor('soil', i), 'Sensor');
                     row.appendChild(label);
                     row.appendChild(sel);
                     zoneRow.appendChild(row);
@@ -685,7 +821,17 @@
                     sel.addEventListener('change', () => {
                         const v = sel.value === '' ? null : Number(sel.value);
                         zonesState[i].soil_channel_index = Number.isFinite(v) ? v : null;
+                        // Refrescar disables para no reutilizar canales
+                        for (let zi = 0; zi < 8; zi++) {
+                            const zNum = zi + 1;
+                            const sSel = document.getElementById(`zoneSoilSel${zNum}`);
+                            populateSelect(sSel, soil, zonesState[zi]?.soil_channel_index ?? null, usedSetFor('soil', zi), 'Sensor');
+                        }
                         updateZoneSubtitles();
+                        // Apagar visualmente si queda sin asignar
+                        const sec = document.getElementById(`zoneSec${zoneNum}`);
+                        const anyAssigned = zonesState[i]?.soil_channel_index != null || zonesState[i]?.valve_channel_index != null;
+                        if (sec) sec.classList.toggle('zone-off', !anyAssigned);
                     });
                 }
 
@@ -698,18 +844,7 @@
                     const sel = document.createElement('select');
                     sel.id = `zoneValveSel${zoneNum}`;
                     sel.title = 'Seleccionar válvula (canal)';
-                    const optNone = document.createElement('option');
-                    optNone.value = '';
-                    optNone.textContent = '(sin asignar)';
-                    sel.appendChild(optNone);
-                    for (let idx = 1; idx <= 8; idx++) {
-                        const c = valves.find(x => Number(x.channel_index) === idx) || null;
-                        const opt = document.createElement('option');
-                        opt.value = String(idx);
-                        opt.textContent = c ? `${c.name} (${idx})` : `Válvula ${idx} (no creada / sin datos)`;
-                        if (!c) opt.disabled = false;
-                        sel.appendChild(opt);
-                    }
+                    populateSelect(sel, valves, zonesState[i]?.valve_channel_index ?? null, usedSetFor('valve', i), 'Válvula');
                     row.appendChild(label);
                     row.appendChild(sel);
                     zoneRow.appendChild(row);
@@ -717,7 +852,16 @@
                     sel.addEventListener('change', () => {
                         const v = sel.value === '' ? null : Number(sel.value);
                         zonesState[i].valve_channel_index = Number.isFinite(v) ? v : null;
+                        // Refrescar disables para no reutilizar canales
+                        for (let zi = 0; zi < 8; zi++) {
+                            const zNum = zi + 1;
+                            const vSel = document.getElementById(`zoneValveSel${zNum}`);
+                            populateSelect(vSel, valves, zonesState[zi]?.valve_channel_index ?? null, usedSetFor('valve', zi), 'Válvula');
+                        }
                         updateZoneSubtitles();
+                        const sec = document.getElementById(`zoneSec${zoneNum}`);
+                        const anyAssigned = zonesState[i]?.soil_channel_index != null || zonesState[i]?.valve_channel_index != null;
+                        if (sec) sec.classList.toggle('zone-off', !anyAssigned);
                     });
                 }
 
@@ -742,8 +886,16 @@
                     val.id = `zoneThrVal${zoneNum}`;
                     val.style.width = '50px';
                     val.style.textAlign = 'right';
+
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'mini-btn primary tiny';
+                    btn.textContent = 'Guardar';
+                    btn.title = 'Guardar umbral (y asignación) solo de esta planta';
+
                     wrap.appendChild(rng);
                     wrap.appendChild(val);
+                    wrap.appendChild(btn);
                     row.appendChild(label);
                     row.appendChild(wrap);
                     zoneRow.appendChild(row);
@@ -753,6 +905,10 @@
                         zonesState[i].humidity_low_threshold = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : zonesState[i].humidity_low_threshold;
                         val.textContent = `${zonesState[i].humidity_low_threshold}%`;
                         updateZoneSubtitles();
+                    });
+
+                    btn.addEventListener('click', async () => {
+                        await saveZoneConfig(zoneNum, btn);
                     });
                 }
 
@@ -784,6 +940,15 @@
             applyZonesStateToUI();
             initCollapsibles();
             updateZoneSubtitles();
+
+            // Marcar OFF las zonas sin asignar desde el primer render
+            for (let i = 0; i < 8; i++) {
+                const zoneNum = i + 1;
+                const sec = document.getElementById(`zoneSec${zoneNum}`);
+                const z = zonesState[i];
+                const anyAssigned = z?.soil_channel_index != null || z?.valve_channel_index != null;
+                if (sec) sec.classList.toggle('zone-off', !anyAssigned);
+            }
         }
 
         function applyZonesStateToUI() {
@@ -860,7 +1025,7 @@
                 if (valveIdx != null) parts.push(`V${valveIdx}:${valveLatest?.age_minutes ?? '--'}m`);
                 if (ageEl) ageEl.textContent = parts.join(' · ');
 
-                if (sec) sec.classList.toggle('zone-off', anyAssigned && !anyOk);
+                if (sec) sec.classList.toggle('zone-off', !anyAssigned || (anyAssigned && !anyOk));
             }
         }
 
@@ -2256,7 +2421,7 @@
 
         async function cargarConfig() {
             try {
-                const res = await fetch(`/api/config/${encodeURIComponent(deviceCode)}`);
+                const res = await fetch(`/api/config/${encodeURIComponent(deviceCode)}`, { credentials: 'include' });
                 const cfg = await res.json();
 
                 let threshold = parseFloat(cfg.humidity_low_threshold);
