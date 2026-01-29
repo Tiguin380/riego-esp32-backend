@@ -988,6 +988,12 @@ async function initDB() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_user_time ON tickets(user_id, created_at DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket_time ON ticket_messages(ticket_id, created_at ASC)`);
 
+    // Tickets: estado de lectura (para badges/alertas)
+    await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS last_user_seen_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS last_admin_seen_at TIMESTAMP`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_last_user_seen ON tickets(last_user_seen_at)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_last_admin_seen ON tickets(last_admin_seen_at)`);
+
     // Auth extra: verificación email + reset password
     // Perfil/CRM: campos extendidos en users
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(160)`);
@@ -1388,8 +1394,8 @@ app.post('/api/tickets', async (req, res) => {
     try {
       await client.query('BEGIN');
       await client.query(
-        `INSERT INTO tickets (id, customer_id, user_id, device_id, subject, status, priority)
-         VALUES ($1, $2, $3, $4, $5, 'open', 'normal')`,
+        `INSERT INTO tickets (id, customer_id, user_id, device_id, subject, status, priority, last_user_seen_at)
+         VALUES ($1, $2, $3, $4, $5, 'open', 'normal', CURRENT_TIMESTAMP)`,
         [ticketId, customerId, userRow.id, deviceId, subject]
       );
       await client.query(
@@ -1428,6 +1434,13 @@ app.get('/api/tickets', async (req, res) => {
          t.updated_at,
          t.closed_at,
          d.device_code,
+         EXISTS(
+           SELECT 1
+           FROM ticket_messages tm2
+           WHERE tm2.ticket_id = t.id
+             AND tm2.author_type = 'admin'
+             AND tm2.created_at > COALESCE(t.last_user_seen_at, '1970-01-01'::timestamp)
+         ) AS has_unread,
          (SELECT tm.body FROM ticket_messages tm WHERE tm.ticket_id = t.id ORDER BY tm.created_at DESC LIMIT 1) AS last_message,
          (SELECT tm.created_at FROM ticket_messages tm WHERE tm.ticket_id = t.id ORDER BY tm.created_at DESC LIMIT 1) AS last_message_at
        FROM tickets t
@@ -1479,12 +1492,20 @@ app.post('/api/tickets/:id/messages', async (req, res) => {
 
     const msgId = uuidv4();
     const body = String(parsed.data.body || '').trim();
+    const isAdmin = hasValidAdminKey(req);
     await pool.query(
       `INSERT INTO ticket_messages (id, ticket_id, author_type, author_user_id, body)
        VALUES ($1, $2, $3, $4, $5)`,
-      [msgId, ticketId, hasValidAdminKey(req) ? 'admin' : 'user', hasValidAdminKey(req) ? null : req.user.id, body]
+      [msgId, ticketId, isAdmin ? 'admin' : 'user', isAdmin ? null : req.user.id, body]
     );
-    await pool.query('UPDATE tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [ticketId]);
+    await pool.query(
+      `UPDATE tickets
+       SET updated_at = CURRENT_TIMESTAMP,
+           last_user_seen_at = CASE WHEN $2::boolean THEN last_user_seen_at ELSE CURRENT_TIMESTAMP END,
+           last_admin_seen_at = CASE WHEN $2::boolean THEN CURRENT_TIMESTAMP ELSE last_admin_seen_at END
+       WHERE id = $1`,
+      [ticketId, isAdmin]
+    );
 
     res.status(201).json({ ok: true, id: msgId });
   } catch (e) {
@@ -1546,6 +1567,13 @@ app.get('/api/admin/tickets', async (req, res) => {
          c.name AS customer_name,
          u.email AS user_email,
          d.device_code,
+         EXISTS(
+           SELECT 1
+           FROM ticket_messages tm2
+           WHERE tm2.ticket_id = t.id
+             AND tm2.author_type = 'user'
+             AND tm2.created_at > COALESCE(t.last_admin_seen_at, '1970-01-01'::timestamp)
+         ) AS has_unread,
          (SELECT tm.body FROM ticket_messages tm WHERE tm.ticket_id = t.id ORDER BY tm.created_at DESC LIMIT 1) AS last_message,
          (SELECT tm.created_at FROM ticket_messages tm WHERE tm.ticket_id = t.id ORDER BY tm.created_at DESC LIMIT 1) AS last_message_at
        FROM tickets t
@@ -1643,8 +1671,91 @@ app.post('/api/admin/tickets/:id/messages', async (req, res) => {
        VALUES ($1, $2, 'admin', NULL, $3)`,
       [msgId, ticketId, String(parsed.data.body || '').trim()]
     );
-    await pool.query('UPDATE tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [ticketId]);
+    await pool.query(
+      `UPDATE tickets
+       SET updated_at = CURRENT_TIMESTAMP,
+           last_admin_seen_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [ticketId]
+    );
     res.status(201).json({ ok: true, id: msgId });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Tickets: badges de no leídos ---
+app.get('/api/tickets/unread-count', async (req, res) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const userRow = await getUserRow(req.user.id);
+    if (!userRow) return res.status(401).json({ error: 'No autenticado' });
+
+    const r = await pool.query(
+      `SELECT COUNT(*)::int AS unread_count
+       FROM tickets t
+       WHERE (t.user_id = $1 OR (t.customer_id IS NOT NULL AND t.customer_id = $2))
+         AND EXISTS(
+           SELECT 1
+           FROM ticket_messages tm
+           WHERE tm.ticket_id = t.id
+             AND tm.author_type = 'admin'
+             AND tm.created_at > COALESCE(t.last_user_seen_at, '1970-01-01'::timestamp)
+         )`,
+      [userRow.id, userRow.customer_id]
+    );
+    res.json({ unread_count: r.rows[0]?.unread_count || 0 });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/tickets/:id/mark-read', async (req, res) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const ticketId = String(req.params.id || '').trim();
+    const t = await requireTicketAccess(req, res, ticketId);
+    if (!t) return res.status(404).json({ error: 'Ticket no encontrado' });
+
+    await pool.query(`UPDATE tickets SET last_user_seen_at = CURRENT_TIMESTAMP WHERE id = $1`, [ticketId]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/tickets/unread-count', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+
+    const r = await pool.query(
+      `SELECT COUNT(*)::int AS unread_count
+       FROM tickets t
+       WHERE t.status <> 'closed'
+         AND EXISTS(
+           SELECT 1
+           FROM ticket_messages tm
+           WHERE tm.ticket_id = t.id
+             AND tm.author_type = 'user'
+             AND tm.created_at > COALESCE(t.last_admin_seen_at, '1970-01-01'::timestamp)
+         )`
+    );
+    res.json({ unread_count: r.rows[0]?.unread_count || 0 });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/tickets/:id/mark-read', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+    const ticketId = String(req.params.id || '').trim();
+    await pool.query(`UPDATE tickets SET last_admin_seen_at = CURRENT_TIMESTAMP WHERE id = $1`, [ticketId]);
+    res.json({ ok: true });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

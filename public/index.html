@@ -132,6 +132,8 @@
         .mini-btn:hover { background: rgba(255,255,255,0.12); }
         .mini-btn.danger { border-color: rgba(255,77,77,0.35); color: #ffb3b3; }
         .mini-btn.primary { border-color: rgba(76,175,80,0.35); color: #b8f5c1; }
+            .badge { display:inline-flex; align-items:center; justify-content:center; min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 800; background: rgba(239,68,68,0.95); color: #fff; margin-left: 8px; border: 1px solid rgba(255,255,255,0.20); }
+            .badge.hidden { display:none; }
 
         .conn { display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: #c9d1d9; opacity: 0.95; }
         .dot { width: 10px; height: 10px; border-radius: 999px; background: #6b7280; box-shadow: 0 0 0 2px rgba(255,255,255,0.08) inset; }
@@ -171,7 +173,7 @@
         <div class="top-nav">
             <button class="mini-btn active" id="navDevices" type="button">Dispositivos</button>
             <button class="mini-btn" id="navAccount" type="button">Cuenta</button>
-            <button class="mini-btn" id="navSupport" type="button">Soporte</button>
+                <button class="mini-btn" id="navSupport" type="button">Soporte <span class="badge hidden" id="supportBadge">0</span></button>
             <span class="spacer"></span>
             <button class="mini-btn danger" id="navLogout" type="button">Salir</button>
         </div>
@@ -474,6 +476,7 @@
         const navDevicesBtn = document.getElementById('navDevices');
         const navAccountBtn = document.getElementById('navAccount');
         const navSupportBtn = document.getElementById('navSupport');
+            const supportBadge = document.getElementById('supportBadge');
         const navLogoutBtn = document.getElementById('navLogout');
 
         const accountSection = document.getElementById('accountSection');
@@ -538,6 +541,24 @@
             return j;
         }
 
+            function setSupportBadge(n) {
+                if (!supportBadge) return;
+                const count = Math.max(0, Number(n) || 0);
+                supportBadge.textContent = String(count);
+                supportBadge.classList.toggle('hidden', count <= 0);
+                // Si hay no leídos, resaltamos el botón
+                navSupportBtn?.classList.toggle('primary', count > 0);
+            }
+
+            async function refreshSupportBadge() {
+                try {
+                    const j = await supportApi('/api/tickets/unread-count');
+                    setSupportBadge(j.unread_count || 0);
+                } catch {
+                    // silencioso
+                }
+            }
+
         function safeText(el, text) {
             if (!el) return;
             el.textContent = text == null ? '' : String(text);
@@ -581,6 +602,7 @@
             for (const t of rows) {
                 const item = document.createElement('div');
                 item.className = 'ticket-item';
+                    if (t.has_unread) item.style.borderColor = 'rgba(239,68,68,0.55)';
                 const title = document.createElement('div');
                 title.className = 'ticket-title';
                 title.textContent = t.subject || '(sin asunto)';
@@ -602,6 +624,7 @@
                 const j = await supportApi('/api/tickets');
                 renderTicketsList(j.tickets || []);
                 if (selectedTicketId) await selectTicket(selectedTicketId, true);
+                    await refreshSupportBadge();
                 setSupportStatus('Listo.', false);
             } catch (e) {
                 setSupportStatus(e.message || 'Error cargando tickets', true);
@@ -618,6 +641,8 @@
                 safeText(tId, j.ticket?.id || tid);
                 safeText(tStatus, j.ticket?.status || '');
                 renderTicketMessages(j.messages || []);
+                    try { await supportApi(`/api/tickets/${encodeURIComponent(tid)}/mark-read`, { method: 'POST' }); } catch {}
+                    await refreshSupportBadge();
                 if (!silent) setSupportStatus('Ticket cargado.', false);
             } catch (e) {
                 if (!silent) setSupportStatus(e.message || 'Error', true);
@@ -786,6 +811,10 @@
         btnCreateTicket?.addEventListener('click', createTicket);
         btnReplyTicket?.addEventListener('click', replyToTicket);
         btnCloseTicket?.addEventListener('click', closeTicket);
+
+            // Polling ligero: badge de tickets no leídos
+            setTimeout(() => { refreshSupportBadge(); }, 800);
+            setInterval(() => { refreshSupportBadge(); }, 15000);
 
         function rebootsOffsetKey(code) { return `rebootsOffset:${code}`; }
         function getLocalRebootsOffset(code) {

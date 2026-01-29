@@ -26,6 +26,9 @@
     .mini-btn.primary { border-color: rgba(76,175,80,0.35); color: #b8f5c1; }
     .mini-btn.danger { border-color: rgba(255,77,77,0.35); color: #ffb3b3; }
 
+    .badge { display:inline-flex; align-items:center; justify-content:center; min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 800; background: rgba(239,68,68,0.95); color: #fff; margin-left: 8px; border: 1px solid rgba(255,255,255,0.20); }
+    .badge.hidden { display:none; }
+
     .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
 
@@ -175,7 +178,7 @@
     </div>
 
     <div class="section">
-      <h2>TICKETS</h2>
+      <h2>TICKETS <span class="badge hidden" id="adminTicketsBadge">0</span></h2>
       <div class="row">
         <label>Estado</label>
         <select id="tStatus" style="padding: 10px; border: none; border-radius: 10px; background: #0f3460; color: #fff; font-size: 14px;">
@@ -274,6 +277,7 @@
     const btnTickets = document.getElementById('btnTickets');
     const ticketsList = document.getElementById('ticketsList');
     const ticketsStatus = document.getElementById('ticketsStatus');
+    const adminTicketsBadge = document.getElementById('adminTicketsBadge');
 
     const tId = document.getElementById('tId');
     const tSubject = document.getElementById('tSubject');
@@ -320,6 +324,22 @@
         throw new Error(msg);
       }
       return data;
+    }
+
+    function setAdminTicketsBadge(n) {
+      if (!adminTicketsBadge) return;
+      const count = Math.max(0, Number(n) || 0);
+      adminTicketsBadge.textContent = String(count);
+      adminTicketsBadge.classList.toggle('hidden', count <= 0);
+    }
+
+    async function refreshAdminTicketsBadge() {
+      try {
+        const j = await api('/api/admin/tickets/unread-count');
+        setAdminTicketsBadge(j.unread_count || 0);
+      } catch {
+        // silencioso
+      }
     }
 
     function fmt(ts) {
@@ -489,12 +509,14 @@
       for (const t of rows) {
         const el = document.createElement('div');
         el.className = 'item';
+        if (t.has_unread) el.style.borderColor = 'rgba(239,68,68,0.55)';
         el.innerHTML = `
           <div class="item-title">${escapeHtml(t.subject || '(sin asunto)')}</div>
           <div class="item-meta">
             ${escapeHtml(String(t.status || ''))} · ${escapeHtml(String(t.priority || ''))}
             ${t.device_code ? ' · ' + escapeHtml(t.device_code) : ''}
             ${t.customer_name ? ' · ' + escapeHtml(t.customer_name) : ''}
+            ${t.has_unread ? ' · <span class="tag red">NUEVO</span>' : ''}
           </div>
           ${t.last_message ? `<div class="item-meta">${escapeHtml(String(t.last_message)).slice(0, 140)}</div>` : ''}
         `;
@@ -549,6 +571,8 @@
         renderTicketsList(j.tickets || []);
         setStatus(ticketsStatus, 'Listo.', 'ok');
 
+        await refreshAdminTicketsBadge();
+
         if (selectedTicketId) {
           await selectTicket(selectedTicketId, true);
         }
@@ -573,6 +597,8 @@
         if (tUser) tUser.value = t.user_email || t.user_id || '';
         if (tDeviceView) tDeviceView.value = t.device_code || '';
         renderTicketMessages(j.messages || []);
+        try { await api(`/api/admin/tickets/${encodeURIComponent(tid)}/mark-read`, { method: 'POST' }); } catch {}
+        await refreshAdminTicketsBadge();
         if (!silent) setStatus(ticketStatus, 'Ticket cargado.', 'ok');
       } catch (e) {
         if (!silent) setStatus(ticketStatus, e.message || 'Error', 'bad');
@@ -645,6 +671,7 @@
         renderCustomers(customers.customers || []);
         renderDevices(devices.devices || []);
         await loadTickets();
+        await refreshAdminTicketsBadge();
         setStatus(statusEl, 'Listo.', 'ok');
 
         if (selectedCustomerId) {
@@ -665,6 +692,10 @@
     btnTicketSave.addEventListener('click', saveTicket);
     btnTicketReply.addEventListener('click', replyTicket);
     btnTicketClose.addEventListener('click', closeTicket);
+
+    // Polling ligero: badge de tickets no leídos
+    setTimeout(() => { refreshAdminTicketsBadge(); }, 800);
+    setInterval(() => { refreshAdminTicketsBadge(); }, 15000);
 
     btnClearCustomer.addEventListener('click', () => {
       clearCustomerSelection();
