@@ -1230,7 +1230,14 @@ app.get('/api/init', async (req, res) => {
 app.get('/api/health', async (req, res) => {
   try {
     const db = await pool.query('SELECT 1 AS ok');
-    res.json({ ok: true, db: db.rows[0]?.ok === 1, ts: new Date().toISOString() });
+    res.set('Cache-Control', 'no-store');
+    const build =
+      process.env.RAILWAY_GIT_COMMIT_SHA ||
+      process.env.RAILWAY_GIT_COMMIT ||
+      process.env.GIT_COMMIT ||
+      process.env.BUILD_ID ||
+      null;
+    res.json({ ok: true, db: db.rows[0]?.ok === 1, ts: new Date().toISOString(), build });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message, ts: new Date().toISOString() });
   }
