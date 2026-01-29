@@ -1646,6 +1646,8 @@
                     const valveVal = isOn ? 1 : (isOff ? 0 : null);
                     const store = loadStore();
                     ingestSample(store, nowMs, hum, valveVal === 1);
+                    // Importante: si SSE está caído, esto mantiene las gráficas vivas.
+                    scheduleChartsRebuild();
                 } catch {}
 
                 // Estado online/offline del dispositivo basado en “último dato”
