@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgroSense · Admin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #0b1220; color: #e9eef7; padding: 16px; min-height: 100vh; }
+    :root { --logo-w: clamp(240px, 50vw, 520px); }
+    .container { width: 100%; max-width: 1100px; margin: 0 auto; }
+    .brand-header { display:flex; align-items:center; justify-content:center; margin: 6px 0 10px; }
+    .brand-header img { width: var(--logo-w); max-width: 100%; height: auto; object-fit: contain; display:block; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55)); }
+
+    .section { background: rgba(22,33,62,0.92); padding: 18px; border-radius: 12px; margin: 14px 0; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 18px 40px rgba(0,0,0,0.30); }
+    .section h2 { color: #4CAF50; font-size: 16px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.10); padding-bottom: 10px; }
+
+    .topbar { display:flex; justify-content:space-between; gap: 10px; flex-wrap: wrap; align-items:center; }
+    .pill { display:inline-flex; gap: 8px; align-items:center; padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.10); background: rgba(0,0,0,0.10); font-size: 12px; color:#c9d1d9; }
+    .dot { width: 10px; height: 10px; border-radius: 999px; background: #6b7280; box-shadow: 0 0 0 2px rgba(255,255,255,0.08) inset; }
+    .dot.ok { background: #22c55e; }
+    .dot.bad { background: #ef4444; }
+
+    .mini-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); color: #ddd; padding: 10px 12px; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 700; }
+    .mini-btn:hover { background: rgba(255,255,255,0.12); }
+    .mini-btn.primary { border-color: rgba(76,175,80,0.35); color: #b8f5c1; }
+    .mini-btn.danger { border-color: rgba(255,77,77,0.35); color: #ffb3b3; }
+
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+    .row { display:flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .row label { flex: 0 0 120px; color:#ffffff; font-size: 13px; }
+    .row input, .row textarea { flex: 1 1 260px; padding: 10px; border: none; border-radius: 10px; background: #0f3460; color: #fff; font-size: 14px; }
+    .row textarea { min-height: 80px; resize: vertical; }
+
+    table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 12px; }
+    th, td { padding: 10px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 13px; text-align:left; vertical-align: top; }
+    th { color: #8fa3bf; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; font-size: 11px; background: rgba(15,52,96,0.35); }
+    tr:hover td { background: rgba(15,52,96,0.20); }
+
+    .kpi { display:flex; gap: 10px; flex-wrap: wrap; }
+    .kpi .card { background: rgba(15,52,96,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px; min-width: 180px; }
+    .kpi .k { color:#8fa3bf; font-size: 11px; text-transform: uppercase; }
+    .kpi .v { color:#e9eef7; font-size: 22px; font-weight: 800; margin-top: 4px; }
+
+    .status { margin-top: 10px; font-size: 12px; color: #c9d1d9; }
+    .status.ok { color: #4CAF50; }
+    .status.bad { color: #ff3333; }
+
+    .tag { display:inline-flex; align-items:center; gap: 6px; padding: 4px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.12); font-size: 12px; }
+    .tag.green { border-color: rgba(34,197,94,0.35); color: #b8f5c1; }
+    .tag.red { border-color: rgba(239,68,68,0.35); color: #ffb3b3; }
+
+    .muted { color: #8fa3bf; font-size: 12px; }
+    .right { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; justify-content:flex-end; }
+
+    @media (max-width: 640px) {
+      body { padding: 10px; }
+      .section { padding: 14px; }
+      .row label { flex: 0 0 100%; }
+      .row input, .row textarea { flex: 1 1 100%; }
+      th, td { padding: 10px 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="brand-header">
+      <img
+        src="/logo-wide.png?v=20260129a"
+        srcset="/logo-wide.png?v=20260129a 1x, /logo-wide@2x.png?v=20260129a 2x"
+        alt="AgroSense"
+        onerror="this.style.display='none'"
+      />
+    </div>
+
+    <div class="section">
+      <div class="topbar">
+        <div class="pill" title="Estado admin">
+          <span class="dot" id="connDot"></span>
+          <span id="connText">Conectando...</span>
+        </div>
+        <div class="right">
+          <button class="mini-btn" id="btnReload" type="button">Recargar</button>
+          <button class="mini-btn danger" id="btnLogout" type="button">Salir</button>
+        </div>
+      </div>
+      <div style="height: 12px"></div>
+      <div class="kpi" id="kpi"></div>
+      <div class="status" id="status">—</div>
+    </div>
+
+    <div class="grid">
+      <div class="section">
+        <h2>CLIENTES</h2>
+        <div class="row"><label>Nombre</label><input id="cName" placeholder="Nombre cliente" /></div>
+        <div style="height: 8px"></div>
+        <div class="row"><label>Email</label><input id="cEmail" placeholder="email@cliente.com" /></div>
+        <div style="height: 8px"></div>
+        <div class="row"><label>Teléfono</label><input id="cPhone" placeholder="+34 ..." /></div>
+        <div style="height: 8px"></div>
+        <div class="row"><label>Dirección</label><input id="cAddress" placeholder="Dirección" /></div>
+        <div style="height: 8px"></div>
+        <div class="row"><label>Notas</label><textarea id="cNotes" placeholder="Notas internas"></textarea></div>
+        <div style="height: 10px"></div>
+        <div class="right">
+          <button class="mini-btn primary" id="btnCreateCustomer" type="button">Crear cliente</button>
+        </div>
+        <div class="status" id="customerStatus">—</div>
+        <div style="height: 12px"></div>
+        <div class="muted">Lista (clic para ver detalle y asignar dispositivos).</div>
+        <div style="height: 10px"></div>
+        <div style="overflow:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Contacto</th>
+                <th>Dispositivos</th>
+              </tr>
+            </thead>
+            <tbody id="customersTbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>DISPOSITIVOS</h2>
+        <div class="row"><label>Asignar a</label><input id="assignDeviceCode" placeholder="RIEGO_001" /></div>
+        <div style="height: 8px"></div>
+        <div class="row"><label>Cliente ID</label><input id="assignCustomerId" placeholder="(clic en un cliente para autollenar)" /></div>
+        <div style="height: 10px"></div>
+        <div class="right">
+          <button class="mini-btn primary" id="btnAssign" type="button">Asignar</button>
+          <button class="mini-btn" id="btnUnassign" type="button">Desasignar</button>
+        </div>
+        <div class="status" id="assignStatus">—</div>
+        <div style="height: 12px"></div>
+        <div style="overflow:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Device</th>
+                <th>Cliente</th>
+                <th>Última lectura</th>
+              </tr>
+            </thead>
+            <tbody id="devicesTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const KEY_STORAGE = 'agrosense_admin_key';
+
+    const connDot = document.getElementById('connDot');
+    const connText = document.getElementById('connText');
+    const statusEl = document.getElementById('status');
+    const kpiEl = document.getElementById('kpi');
+
+    const customersTbody = document.getElementById('customersTbody');
+    const devicesTbody = document.getElementById('devicesTbody');
+
+    const cName = document.getElementById('cName');
+    const cEmail = document.getElementById('cEmail');
+    const cPhone = document.getElementById('cPhone');
+    const cAddress = document.getElementById('cAddress');
+    const cNotes = document.getElementById('cNotes');
+    const customerStatus = document.getElementById('customerStatus');
+
+    const assignDeviceCode = document.getElementById('assignDeviceCode');
+    const assignCustomerId = document.getElementById('assignCustomerId');
+    const assignStatus = document.getElementById('assignStatus');
+
+    const btnReload = document.getElementById('btnReload');
+    const btnLogout = document.getElementById('btnLogout');
+    const btnCreateCustomer = document.getElementById('btnCreateCustomer');
+    const btnAssign = document.getElementById('btnAssign');
+    const btnUnassign = document.getElementById('btnUnassign');
+
+    function setConn(ok, msg) {
+      connDot.className = 'dot ' + (ok ? 'ok' : 'bad');
+      connText.textContent = msg;
+    }
+
+    function setStatus(el, msg, kind) {
+      el.textContent = msg;
+      el.className = 'status' + (kind ? ' ' + kind : '');
+    }
+
+    function adminKey() {
+      return String(localStorage.getItem(KEY_STORAGE) || '').trim();
+    }
+
+    async function api(path, opts = {}) {
+      const key = adminKey();
+      if (!key) throw new Error('Falta ADMIN_KEY. Vuelve a /admin');
+      const headers = Object.assign({}, opts.headers || {}, { 'x-admin-key': key });
+      if (opts.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+      const r = await fetch(path, Object.assign({}, opts, { headers }));
+      const text = await r.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+      if (!r.ok) {
+        const msg = data && data.error ? data.error : ('HTTP ' + r.status);
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    function fmt(ts) {
+      if (!ts) return '—';
+      return String(ts);
+    }
+
+    function renderKpis(summary) {
+      const items = [
+        { k: 'Dispositivos', v: summary.devices },
+        { k: 'Usuarios', v: summary.users },
+        { k: 'Clientes', v: summary.customers }
+      ];
+      kpiEl.innerHTML = items.map(i => `<div class="card"><div class="k">${i.k}</div><div class="v">${i.v}</div></div>`).join('');
+    }
+
+    function renderCustomers(customers) {
+      customersTbody.innerHTML = '';
+      for (const c of customers) {
+        const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        tr.innerHTML = `
+          <td>
+            <div style="font-weight:800">${escapeHtml(c.name)}</div>
+            <div class="muted">${escapeHtml(c.id)}</div>
+          </td>
+          <td>
+            <div>${escapeHtml(c.email || '—')}</div>
+            <div class="muted">${escapeHtml(c.phone || '')}</div>
+          </td>
+          <td><span class="tag green">${Number(c.devices_count || 0)}</span></td>
+        `;
+        tr.addEventListener('click', () => {
+          assignCustomerId.value = c.id;
+          setStatus(customerStatus, `Seleccionado: ${c.name}`, 'ok');
+        });
+        customersTbody.appendChild(tr);
+      }
+    }
+
+    function renderDevices(devices) {
+      devicesTbody.innerHTML = '';
+      for (const d of devices) {
+        const tr = document.createElement('tr');
+        const customer = d.customer_name ? `<span class="tag green">${escapeHtml(d.customer_name)}</span>` : `<span class="tag red">Sin cliente</span>`;
+        tr.innerHTML = `
+          <td>
+            <div style="font-weight:800">${escapeHtml(d.device_code)}</div>
+            <div class="muted">${escapeHtml(d.name || '')}</div>
+          </td>
+          <td>${customer}</td>
+          <td>${escapeHtml(fmt(d.last_seen || d.last_seen_madrid || d.last_seen_madrid_label || '—'))}</td>
+        `;
+        devicesTbody.appendChild(tr);
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>\"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+    }
+
+    async function reloadAll() {
+      setStatus(statusEl, 'Cargando...', '');
+      try {
+        const [summary, customers, devices] = await Promise.all([
+          api('/api/admin/summary'),
+          api('/api/admin/customers'),
+          api('/api/admin/devices')
+        ]);
+        setConn(true, 'Admin OK');
+        renderKpis(summary);
+        renderCustomers(customers.customers || []);
+        renderDevices(devices.devices || []);
+        setStatus(statusEl, 'Listo.', 'ok');
+      } catch (e) {
+        setConn(false, 'Error');
+        setStatus(statusEl, e.message || 'Error', 'bad');
+      }
+    }
+
+    btnReload.addEventListener('click', reloadAll);
+
+    btnLogout.addEventListener('click', () => {
+      localStorage.removeItem(KEY_STORAGE);
+      window.location.href = '/admin';
+    });
+
+    btnCreateCustomer.addEventListener('click', async () => {
+      setStatus(customerStatus, 'Creando...', '');
+      try {
+        const payload = {
+          name: String(cName.value || '').trim(),
+          email: String(cEmail.value || '').trim() || null,
+          phone: String(cPhone.value || '').trim() || null,
+          address: String(cAddress.value || '').trim() || null,
+          notes: String(cNotes.value || '').trim() || null
+        };
+        if (!payload.name) return setStatus(customerStatus, 'Falta nombre.', 'bad');
+        await api('/api/admin/customers', { method: 'POST', body: JSON.stringify(payload) });
+        setStatus(customerStatus, 'Cliente creado.', 'ok');
+        cName.value = ''; cEmail.value = ''; cPhone.value = ''; cAddress.value = ''; cNotes.value='';
+        await reloadAll();
+      } catch (e) {
+        setStatus(customerStatus, e.message || 'Error', 'bad');
+      }
+    });
+
+    btnAssign.addEventListener('click', async () => {
+      setStatus(assignStatus, 'Asignando...', '');
+      try {
+        const cid = String(assignCustomerId.value || '').trim();
+        const dc = String(assignDeviceCode.value || '').trim();
+        if (!cid) return setStatus(assignStatus, 'Falta Cliente ID (clic en un cliente).', 'bad');
+        if (!dc) return setStatus(assignStatus, 'Falta device_code.', 'bad');
+        await api(`/api/admin/customers/${encodeURIComponent(cid)}/assign-device`, { method: 'POST', body: JSON.stringify({ device_code: dc }) });
+        setStatus(assignStatus, 'Asignado.', 'ok');
+        await reloadAll();
+      } catch (e) {
+        setStatus(assignStatus, e.message || 'Error', 'bad');
+      }
+    });
+
+    btnUnassign.addEventListener('click', async () => {
+      setStatus(assignStatus, 'Desasignando...', '');
+      try {
+        const cid = String(assignCustomerId.value || '').trim();
+        const dc = String(assignDeviceCode.value || '').trim();
+        if (!cid) return setStatus(assignStatus, 'Falta Cliente ID.', 'bad');
+        if (!dc) return setStatus(assignStatus, 'Falta device_code.', 'bad');
+        await api(`/api/admin/customers/${encodeURIComponent(cid)}/unassign-device`, { method: 'POST', body: JSON.stringify({ device_code: dc }) });
+        setStatus(assignStatus, 'Desasignado.', 'ok');
+        await reloadAll();
+      } catch (e) {
+        setStatus(assignStatus, e.message || 'Error', 'bad');
+      }
+    });
+
+    (function init() {
+      const key = adminKey();
+      if (!key) {
+        window.location.href = '/admin';
+        return;
+      }
+      reloadAll();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgroSense · Admin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #0b1220; color: #e9eef7; padding: 16px; min-height: 100vh; }
+    :root { --logo-w: clamp(240px, 50vw, 520px); }
+    .container { width: 100%; max-width: 980px; margin: 0 auto; }
+    .brand-header { display:flex; align-items:center; justify-content:center; margin: 6px 0 10px; }
+    .brand-header img { width: var(--logo-w); max-width: 100%; height: auto; object-fit: contain; display:block; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55)); }
+
+    .section { background: rgba(22,33,62,0.92); padding: 18px; border-radius: 12px; margin: 14px 0; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 18px 40px rgba(0,0,0,0.30); }
+    .section h2 { color: #4CAF50; font-size: 16px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.10); padding-bottom: 10px; }
+    .muted { color: #8fa3bf; font-size: 12px; line-height: 1.35; }
+
+    .row { display:flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .row label { flex: 0 0 140px; color:#ffffff; font-size: 13px; }
+    .row input { flex: 1 1 300px; padding: 10px; border: none; border-radius: 10px; background: #0f3460; color: #fff; font-size: 14px; }
+
+    .mini-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); color: #ddd; padding: 10px 12px; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 700; }
+    .mini-btn:hover { background: rgba(255,255,255,0.12); }
+    .mini-btn.primary { border-color: rgba(76,175,80,0.35); color: #b8f5c1; }
+    .mini-btn.danger { border-color: rgba(255,77,77,0.35); color: #ffb3b3; }
+
+    .status { margin-top: 10px; font-size: 12px; color: #c9d1d9; }
+    .status.ok { color: #4CAF50; }
+    .status.bad { color: #ff3333; }
+
+    .actions { display:flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+
+    @media (max-width: 640px) {
+      body { padding: 10px; }
+      .section { padding: 14px; }
+      .row label { flex: 0 0 100%; }
+      .row input { flex: 1 1 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="brand-header">
+      <img
+        src="/logo-wide.png?v=20260129a"
+        srcset="/logo-wide.png?v=20260129a 1x, /logo-wide@2x.png?v=20260129a 2x"
+        alt="AgroSense"
+        onerror="this.style.display='none'"
+      />
+    </div>
+
+    <div class="section">
+      <h2>ADMIN</h2>
+      <p class="muted">
+        Acceso privado (solo tú). La clave se envía como cabecera <b>X-Admin-Key</b> en cada llamada.
+      </p>
+      <div style="height: 12px"></div>
+      <div class="row">
+        <label for="adminKey">ADMIN_KEY</label>
+        <input id="adminKey" type="password" autocomplete="off" placeholder="Pega aquí tu ADMIN_KEY" />
+      </div>
+      <div class="actions">
+        <button class="mini-btn primary" id="btnEnter" type="button">Entrar</button>
+        <button class="mini-btn danger" id="btnClear" type="button">Borrar clave</button>
+      </div>
+      <div class="status" id="status">—</div>
+    </div>
+  </div>
+
+  <script>
+    const KEY_STORAGE = 'agrosense_admin_key';
+
+    const adminKeyInput = document.getElementById('adminKey');
+    const statusEl = document.getElementById('status');
+    const btnEnter = document.getElementById('btnEnter');
+    const btnClear = document.getElementById('btnClear');
+
+    function setStatus(msg, kind) {
+      statusEl.textContent = msg;
+      statusEl.className = 'status' + (kind ? ' ' + kind : '');
+    }
+
+    async function ping(key) {
+      const r = await fetch('/api/admin/summary', { headers: { 'x-admin-key': key } });
+      if (!r.ok) throw new Error('Clave inválida o ADMIN_KEY no configurada');
+      return r.json();
+    }
+
+    (function init() {
+      const saved = localStorage.getItem(KEY_STORAGE);
+      if (saved) adminKeyInput.value = saved;
+      setStatus('Introduce la clave y pulsa Entrar.', '');
+    })();
+
+    btnClear.addEventListener('click', () => {
+      localStorage.removeItem(KEY_STORAGE);
+      adminKeyInput.value = '';
+      setStatus('Clave borrada.', '');
+    });
+
+    btnEnter.addEventListener('click', async () => {
+      const key = String(adminKeyInput.value || '').trim();
+      if (!key) return setStatus('Falta ADMIN_KEY.', 'bad');
+      setStatus('Verificando...', '');
+      try {
+        await ping(key);
+        localStorage.setItem(KEY_STORAGE, key);
+        setStatus('OK. Entrando...', 'ok');
+        window.location.href = '/admin/app';
+      } catch (e) {
+        setStatus(e.message || 'Error', 'bad');
+      }
+    });
+  </script>
+</body>
+</html>

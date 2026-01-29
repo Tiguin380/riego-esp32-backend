@@ -441,6 +441,19 @@ function hasValidAdminKey(req) {
   return req.get('x-admin-key') === adminKey;
 }
 
+function requireAdminKey(req, res) {
+  const adminKey = process.env.ADMIN_KEY;
+  if (!adminKey) {
+    res.status(403).json({ error: 'ADMIN_KEY no configurada' });
+    return false;
+  }
+  if (req.get('x-admin-key') !== adminKey) {
+    res.status(401).json({ error: 'x-admin-key inválida' });
+    return false;
+  }
+  return true;
+}
+
 async function enforceDeviceTokenIfRequired(req, res, device_code) {
   if (!REQUIRE_DEVICE_TOKEN) return true;
   if (hasValidAdminKey(req)) return true;
@@ -701,6 +714,19 @@ const DeviceConfigSchema = z
   })
   .passthrough();
 
+// --- Admin/CRM ---
+const AdminCustomerCreateSchema = z
+  .object({
+    name: z.string().min(1).max(120),
+    email: z.string().email().max(255).optional().nullable(),
+    phone: z.string().min(3).max(60).optional().nullable(),
+    address: z.string().min(1).max(255).optional().nullable(),
+    notes: z.string().max(4000).optional().nullable()
+  })
+  .passthrough();
+
+const AdminCustomerUpdateSchema = AdminCustomerCreateSchema.partial();
+
 // Inicialización automática de tablas en arranque (útil en despliegues en Railway u otros hosts)
 async function initDB() {
   try {
@@ -860,6 +886,33 @@ async function initDB() {
 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sensor_device_time ON sensor_data(device_id, created_at DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_alert_events_device_time ON alert_events(device_id, created_at DESC)`);
+
+    // CRM (admin): clientes y vínculo con dispositivos
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS customers (
+        id UUID PRIMARY KEY,
+        name VARCHAR(120) NOT NULL,
+        email VARCHAR(255),
+        phone VARCHAR(60),
+        address VARCHAR(255),
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS customer_devices (
+        customer_id UUID REFERENCES customers(id) ON DELETE CASCADE,
+        device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (customer_id, device_id)
+      )
+    `);
+
+    // Un dispositivo sólo puede pertenecer a un cliente (CRM)
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS ux_customer_devices_device ON customer_devices(device_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_customer_devices_customer ON customer_devices(customer_id)`);
 
     // Auth extra: verificación email + reset password
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`);
@@ -2892,9 +2945,7 @@ app.get('/panel/:device_code', (req, res) => {
 // Admin: obtener/rotar claim_token (para provisioning)
 app.get('/api/admin/device-claim/:device_code', async (req, res) => {
   try {
-    const adminKey = process.env.ADMIN_KEY;
-    if (!adminKey) return res.status(403).json({ error: 'ADMIN_KEY no configurada' });
-    if (req.get('x-admin-key') !== adminKey) return res.status(401).json({ error: 'x-admin-key inválida' });
+    if (!requireAdminKey(req, res)) return;
 
     const { device_code } = req.params;
     const dev = await getDeviceByCode(device_code);
@@ -2911,6 +2962,231 @@ app.get('/api/admin/device-claim/:device_code', async (req, res) => {
     console.error(error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// --- Admin (CRM) ---
+app.get('/api/admin/summary', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+    const [d, u, c] = await Promise.all([
+      pool.query('SELECT COUNT(*)::int AS n FROM devices'),
+      pool.query('SELECT COUNT(*)::int AS n FROM users'),
+      pool.query('SELECT COUNT(*)::int AS n FROM customers')
+    ]);
+    res.json({
+      devices: d.rows[0]?.n ?? 0,
+      users: u.rows[0]?.n ?? 0,
+      customers: c.rows[0]?.n ?? 0,
+      ts: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/devices', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+    const r = await pool.query(
+      `SELECT
+         d.id,
+         d.device_code,
+         d.name,
+         d.location,
+         d.created_at,
+         d.updated_at,
+         ls.last_seen,
+         c.id AS customer_id,
+         c.name AS customer_name
+       FROM devices d
+       LEFT JOIN (
+         SELECT device_id, MAX(created_at) AS last_seen
+         FROM sensor_data
+         GROUP BY device_id
+       ) ls ON ls.device_id = d.id
+       LEFT JOIN customer_devices cd ON cd.device_id = d.id
+       LEFT JOIN customers c ON c.id = cd.customer_id
+       ORDER BY d.created_at DESC`
+    );
+    res.json({ devices: r.rows.map(enrichRowWithMadridTs) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/customers', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+    const r = await pool.query(
+      `SELECT
+         c.*,
+         COALESCE(cd.cnt, 0)::int AS devices_count
+       FROM customers c
+       LEFT JOIN (
+         SELECT customer_id, COUNT(*) AS cnt
+         FROM customer_devices
+         GROUP BY customer_id
+       ) cd ON cd.customer_id = c.id
+       ORDER BY c.created_at DESC`
+    );
+    res.json({ customers: r.rows.map(enrichRowWithMadridTs) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/customers/:id', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+    const id = String(req.params.id || '').trim();
+    const c = await pool.query('SELECT * FROM customers WHERE id = $1', [id]);
+    if (!c.rows.length) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+    const devs = await pool.query(
+      `SELECT d.id, d.device_code, d.name, d.location, d.created_at, d.updated_at
+       FROM customer_devices cd
+       JOIN devices d ON d.id = cd.device_id
+       WHERE cd.customer_id = $1
+       ORDER BY d.created_at DESC`,
+      [id]
+    );
+
+    res.json({
+      customer: enrichRowWithMadridTs(c.rows[0]),
+      devices: devs.rows.map(enrichRowWithMadridTs)
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/customers', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+    const parsed = AdminCustomerCreateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Datos inválidos', details: parsed.error.flatten() });
+
+    const id = uuidv4();
+    const v = parsed.data;
+    const r = await pool.query(
+      `INSERT INTO customers (id, name, email, phone, address, notes)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [id, v.name, v.email ?? null, v.phone ?? null, v.address ?? null, v.notes ?? null]
+    );
+    res.status(201).json({ customer: enrichRowWithMadridTs(r.rows[0]) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/admin/customers/:id', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+    const id = String(req.params.id || '').trim();
+    const parsed = AdminCustomerUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Datos inválidos', details: parsed.error.flatten() });
+
+    const existing = await pool.query('SELECT * FROM customers WHERE id = $1', [id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+    const merged = { ...existing.rows[0], ...parsed.data };
+    const r = await pool.query(
+      `UPDATE customers
+       SET name = $1, email = $2, phone = $3, address = $4, notes = $5, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $6
+       RETURNING *`,
+      [
+        merged.name,
+        merged.email ?? null,
+        merged.phone ?? null,
+        merged.address ?? null,
+        merged.notes ?? null,
+        id
+      ]
+    );
+    res.json({ customer: enrichRowWithMadridTs(r.rows[0]) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/admin/customers/:id', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+    const id = String(req.params.id || '').trim();
+    const r = await pool.query('DELETE FROM customers WHERE id = $1 RETURNING id', [id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Cliente no encontrado' });
+    res.json({ ok: true, id });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/customers/:id/assign-device', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+    const customerId = String(req.params.id || '').trim();
+    const deviceCode = String(req.body?.device_code || '').trim();
+    if (!deviceCode) return res.status(400).json({ error: 'device_code requerido' });
+
+    const c = await pool.query('SELECT 1 FROM customers WHERE id = $1', [customerId]);
+    if (!c.rows.length) return res.status(404).json({ error: 'Cliente no encontrado' });
+    const d = await pool.query('SELECT id, device_code FROM devices WHERE device_code = $1', [deviceCode]);
+    if (!d.rows.length) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+
+    const deviceId = d.rows[0].id;
+
+    // Si ya estaba asignado a otro cliente, lo movemos.
+    await pool.query('DELETE FROM customer_devices WHERE device_id = $1', [deviceId]);
+    await pool.query('INSERT INTO customer_devices (customer_id, device_id) VALUES ($1, $2)', [customerId, deviceId]);
+
+    res.json({ ok: true, customer_id: customerId, device_code: deviceCode });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/customers/:id/unassign-device', async (req, res) => {
+  try {
+    if (!requireAdminKey(req, res)) return;
+    const customerId = String(req.params.id || '').trim();
+    const deviceCode = String(req.body?.device_code || '').trim();
+    if (!deviceCode) return res.status(400).json({ error: 'device_code requerido' });
+
+    const d = await pool.query('SELECT id FROM devices WHERE device_code = $1', [deviceCode]);
+    if (!d.rows.length) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+    const deviceId = d.rows[0].id;
+
+    await pool.query('DELETE FROM customer_devices WHERE customer_id = $1 AND device_id = $2', [customerId, deviceId]);
+    res.json({ ok: true, customer_id: customerId, device_code: deviceCode });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// UI Admin (la seguridad real se aplica en /api/admin/* con ADMIN_KEY)
+app.get('/admin', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.sendFile(__dirname + '/public/admin-login.html');
+});
+
+app.get('/admin/app', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.sendFile(__dirname + '/public/admin.html');
 });
 
 app.use(express.static('public'));

@@ -27,6 +27,34 @@ El backend soporta registro/login y separación de dispositivos por usuario.
 - `JWT_SECRET` (recomendado): secreto para firmar la cookie de sesión.
 - `ADMIN_KEY` (recomendado): habilita endpoints admin (rotar tokens, obtener claim_token, etc.).
 
+## Portal Admin (solo tú) 🧰
+
+Además del panel de control por usuario, el backend incluye un portal **Admin** para gestión interna:
+
+- Ver dispositivos (incluye última lectura y cliente asignado)
+- Crear/editar clientes (fichas CRM)
+- Asignar/desasignar dispositivos a clientes
+
+### Requisito
+
+- Configura `ADMIN_KEY` en Railway (Variables) o en tu `.env` local.
+
+### Acceso
+
+1. Abre `https://<tu-app>.railway.app/admin`
+2. Pega tu `ADMIN_KEY`
+3. Entrar → te lleva a `/admin/app`
+
+El portal usa `X-Admin-Key` en cada llamada a `/api/admin/*`.
+
+Endpoints principales:
+
+- `GET /api/admin/summary`
+- `GET /api/admin/devices`
+- `GET /api/admin/customers`
+- `POST /api/admin/customers`
+- `POST /api/admin/customers/:id/assign-device`
+
 ### Emails (confirmación y reset) ✉️
 
 El backend puede enviar:
