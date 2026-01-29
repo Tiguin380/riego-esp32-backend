@@ -31,6 +31,12 @@ app.use((req, res, next) => {
   // Solo redirigir navegación (evita afectar POSTs u otros métodos)
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
 
+  // Solo redirigir peticiones que parecen navegación de navegador (HTML).
+  // Muchos healthchecks usan Accept: */* y fallan si reciben 3xx.
+  const accept = String(req.get('accept') || '').toLowerCase();
+  const wantsHtml = accept.includes('text/html');
+  if (!wantsHtml) return next();
+
   const cookieSecure = envBool('COOKIE_SECURE', process.env.NODE_ENV === 'production') || COOKIE_SAMESITE === 'none';
   if (!cookieSecure) return next();
 
