@@ -1354,6 +1354,8 @@ app.post('/api/sensor/data', async (req, res) => {
 
       const chArr = Array.isArray(channels) ? channels : [];
       if (chArr.length > 0) {
+        let sawSoil = false;
+        let sawValve = false;
         for (const c of chArr) {
           const kind = c?.kind;
           const idx = Number(c?.index);
@@ -1363,6 +1365,7 @@ app.post('/api/sensor/data', async (req, res) => {
           if (!channelId) continue;
 
           if (kind === 'soil_sensor') {
+            sawSoil = true;
             const v = c?.value;
             const num = typeof v === 'number' ? v : Number(v);
             if (!Number.isFinite(num)) continue;
@@ -1371,12 +1374,27 @@ app.post('/api/sensor/data', async (req, res) => {
               [channelId, now, num]
             );
           } else {
+            sawValve = true;
             const s = c?.state;
             const st = typeof s === 'number' ? s : Number(s);
             if (!Number.isFinite(st)) continue;
             await pool.query(
               `INSERT INTO channel_samples (channel_id, ts, state) VALUES ($1, $2, $3)`,
               [channelId, now, st >= 1 ? 1 : 0]
+            );
+          }
+        }
+
+        // Si el payload trae solo humedad (muy típico), aseguro al menos un punto para válvula 1.
+        // Esto evita que el histórico de válvula se quede “clavado” en una fecha antigua.
+        if (!sawValve) {
+          const ch = await getChannelId(device_id, 'valve', 1);
+          if (ch) {
+            const vs = String(resolved_valve_state || 'OFF').toUpperCase();
+            const state = (vs === 'ON' || vs === '1' || vs === 'TRUE') ? 1 : 0;
+            await pool.query(
+              `INSERT INTO channel_samples (channel_id, ts, state) VALUES ($1, $2, $3)`,
+              [ch, now, state]
             );
           }
         }
@@ -1391,16 +1409,15 @@ app.post('/api/sensor/data', async (req, res) => {
             );
           }
         }
-        if (resolved_valve_state) {
-          const ch = await getChannelId(device_id, 'valve', 1);
-          if (ch) {
-            const vs = String(resolved_valve_state).toUpperCase();
-            const state = vs === 'ON' || vs === '1' || vs === 'TRUE' ? 1 : 0;
-            await pool.query(
-              `INSERT INTO channel_samples (channel_id, ts, state) VALUES ($1, $2, $3)`,
-              [ch, now, state]
-            );
-          }
+        // Registrar SIEMPRE el canal de válvula 1 (si no viene estado, asumimos OFF).
+        const ch = await getChannelId(device_id, 'valve', 1);
+        if (ch) {
+          const vs = String(resolved_valve_state || 'OFF').toUpperCase();
+          const state = vs === 'ON' || vs === '1' || vs === 'TRUE' ? 1 : 0;
+          await pool.query(
+            `INSERT INTO channel_samples (channel_id, ts, state) VALUES ($1, $2, $3)`,
+            [ch, now, state]
+          );
         }
       }
     } catch (e) {
