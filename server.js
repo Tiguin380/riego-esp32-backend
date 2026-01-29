@@ -21,6 +21,13 @@ const app = express();
 // Railway/Proxies: necesario para que rate-limit y req.ip funcionen bien
 app.set('trust proxy', 1);
 
+function requestWantsHtml(req) {
+  const accept = String(req.get('accept') || '').toLowerCase();
+  // Si no hay Accept, lo tratamos como no-navegación.
+  if (!accept) return false;
+  return accept.includes('text/html');
+}
+
 // En producción, la cookie de sesión es Secure. Si el usuario entra por HTTP,
 // el navegador rechazará la cookie y parecerá que “no inicia sesión”.
 // Forzamos HTTPS para evitar ese bucle.
@@ -28,13 +35,14 @@ app.use((req, res, next) => {
   // Nunca forzar HTTPS en la API: healthchecks/ingest internos pueden ir por HTTP
   // y algunos checkers consideran 3xx como fallo.
   if (req.path && String(req.path).startsWith('/api/')) return next();
+  // Rutas explícitas de healthcheck (algunas plataformas exigen 200 y no siguen redirects)
+  if (req.path === '/healthz') return next();
   // Solo redirigir navegación (evita afectar POSTs u otros métodos)
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
 
   // Solo redirigir peticiones que parecen navegación de navegador (HTML).
   // Muchos healthchecks usan Accept: */* y fallan si reciben 3xx.
-  const accept = String(req.get('accept') || '').toLowerCase();
-  const wantsHtml = accept.includes('text/html');
+  const wantsHtml = requestWantsHtml(req);
   if (!wantsHtml) return next();
 
   const cookieSecure = envBool('COOKIE_SECURE', process.env.NODE_ENV === 'production') || COOKIE_SAMESITE === 'none';
@@ -1263,6 +1271,23 @@ app.get('/api/health', async (req, res) => {
     res.json({ ok: true, db: db.rows[0]?.ok === 1, ts: new Date().toISOString(), build });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message, ts: new Date().toISOString() });
+  }
+});
+
+// Healthcheck NO-API (por si Railway u otro proveedor comprueba "/" o una ruta pública)
+app.get('/healthz', async (_req, res) => {
+  try {
+    const db = await pool.query('SELECT 1 AS ok');
+    const build =
+      process.env.RAILWAY_GIT_COMMIT_SHA ||
+      process.env.RAILWAY_GIT_COMMIT ||
+      process.env.GIT_COMMIT ||
+      process.env.BUILD_ID ||
+      null;
+    res.set('Cache-Control', 'no-store');
+    res.status(200).type('text/plain').send(`ok db=${db.rows[0]?.ok === 1} build=${build || 'null'}`);
+  } catch (e) {
+    res.status(200).type('text/plain').send('ok db=false');
   }
 });
 
@@ -2758,6 +2783,19 @@ app.post('/api/config/:device_code', async (req, res) => {
 
 // Redirigir raíz al panel del dispositivo
 app.get('/', (req, res) => {
+  // Importante: algunos healthchecks no aceptan 3xx.
+  // Si no parece navegación HTML, devolvemos 200 OK simple.
+  if (!requestWantsHtml(req)) {
+    const build =
+      process.env.RAILWAY_GIT_COMMIT_SHA ||
+      process.env.RAILWAY_GIT_COMMIT ||
+      process.env.GIT_COMMIT ||
+      process.env.BUILD_ID ||
+      null;
+    res.set('Cache-Control', 'no-store');
+    return res.status(200).json({ ok: true, ts: new Date().toISOString(), build });
+  }
+
   if (REQUIRE_USER_LOGIN && !hasValidAdminKey(req)) {
     if (!req.user?.id) return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl || '/')}`);
     return res.redirect('/app');
@@ -2875,6 +2913,23 @@ app.get('/api/admin/device-claim/:device_code', async (req, res) => {
 app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Servidor escuchando en puerto ${PORT}`);
 });
+
+function shutdown(signal) {
+  console.log(`${signal} recibido: cerrando servidor...`);
+  try {
+    server.close(() => {
+      console.log('HTTP server cerrado');
+      pool.end().catch(() => {}).finally(() => process.exit(0));
+    });
+    // Fallback: si no cierra en 10s, salir.
+    setTimeout(() => process.exit(0), 10_000).unref();
+  } catch {
+    process.exit(0);
+  }
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
