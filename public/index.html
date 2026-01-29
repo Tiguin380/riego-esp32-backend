@@ -16,9 +16,13 @@
         .brand-header img { width: var(--logo-w); max-width: 100%; height: auto; object-fit: contain; display:block; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55)); }
         .brand-title { display:none; }
         .section { background: #16213e; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
-        /* Header fijo (sticky) */
-        #deviceSection { position: sticky; top: 10px; z-index: 50; backdrop-filter: blur(8px); background: rgba(22,33,62,0.92); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 18px 40px rgba(0,0,0,0.30); }
+        /* DISPOSITIVO: no sticky (molesta al hacer scroll) */
+        #deviceSection { position: relative; z-index: 1; backdrop-filter: blur(8px); background: rgba(22,33,62,0.92); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 18px 40px rgba(0,0,0,0.30); }
         #deviceSection h2 { margin-bottom: 10px; }
+        #deviceSection select { width: 100%; max-width: 100%; min-width: 0; }
+        #deviceSection .control-row { flex-wrap: wrap; }
+        #deviceSection .control-row label { flex: 0 0 100%; }
+        #deviceSection .control-row select { flex: 1 1 100%; }
         .topbar-mini { display:flex; justify-content:space-between; gap: 10px; flex-wrap: wrap; align-items:center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
         .topbar-mini .mini-k { font-size: 11px; color:#8fa3bf; text-transform: uppercase; letter-spacing: .02em; margin-right: 6px; }
         .topbar-mini .mini-v { font-weight: 700; color:#e9eef7; }
@@ -118,7 +122,7 @@
         @media (max-width: 640px) {
             body { padding: 10px; }
             .section { padding: 14px; margin-bottom: 14px; }
-            #deviceSection { top: 8px; }
+            #deviceSection { top: auto; }
             .sensor-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
             .sensor-card { padding: 12px; }
             .btn-grid { grid-template-columns: repeat(2, 1fr); }
