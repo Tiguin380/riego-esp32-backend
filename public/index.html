@@ -521,7 +521,7 @@
               onerror="this.style.display='none'"
             />
         </div>
-        <div class="status" style="margin-bottom: 12px;">UI vRt1548D</div>
+        <div class="status" style="margin-bottom: 12px;">UI vRt1548E</div>
 
         <div class="top-nav">
             <button class="mini-btn active" id="navDevices" type="button">Dispositivos</button>
@@ -3770,8 +3770,8 @@
                             e.chart.options.scales.x.min = 0;
                             e.chart.options.scales.x.max = 1439;
                             e.chart.options.scales.x.ticks.autoSkip = false;
-                            e.chart.options.scales.x.ticks.stepSize = 30;
-                            e.chart.options.scales.x.ticks.maxTicksLimit = 49;
+                            e.chart.options.scales.x.ticks.stepSize = 120;
+                            e.chart.options.scales.x.ticks.maxTicksLimit = 13;
                             e.chart.options.scales.x.ticks.includeBounds = true;
                             e.chart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
                         } else {
@@ -3849,8 +3849,8 @@
                             ticks: {
                                 color: '#fff',
                                 callback: yTickCb,
-                                stepSize: yTickStep
-                            },
+                                stepSize: mode === 'day' ? 120 : undefined,
+                                maxTicksLimit: mode === 'day' ? 13 : 8,
                             grid: { color: 'rgba(255,255,255,0.06)' }
                         },
                         x: {
