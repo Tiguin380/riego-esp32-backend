@@ -3936,6 +3936,9 @@
 
             if (mode === 'day') {
                 const pNow = getMadridParts(nowAdjusted());
+                try {
+                    entry.dayKey = `${pNow?.y ?? ''}-${pNow?.mo ?? ''}-${pNow?.d ?? ''}`;
+                } catch {}
                 const sArr = new Array(1440);
                 const tArr = new Array(1440).fill(null);
                 for (let i = 0; i < 1440; i++) sArr[i] = { x: i, y: null };
@@ -4153,6 +4156,16 @@
 
             // Escribir el dato en su minuto del día (00:00..23:59)
             const pNow = getMadridParts(nowAdjusted());
+            // Si ha cambiado el día en Madrid, reiniciar para evitar puntos “fantasma” de ayer
+            try {
+                const curKey = `${pNow?.y ?? ''}-${pNow?.mo ?? ''}-${pNow?.d ?? ''}`;
+                if (entry.dayKey && curKey && entry.dayKey !== curKey) {
+                    initMiniChartDayAxis(entry, pNow);
+                    entry.lastTsMs = null;
+                    entry.meta = { sum: 0, count: 0, valveOnMs: 0, lastDateMs: null, lastLabel: '' };
+                }
+                entry.dayKey = curKey;
+            } catch {}
             let idx = madridMinuteIndexForTs(tsMs, pNow);
             if (idx == null) {
                 // Si el timestamp viene en una TZ rara o hay desfase, al menos dibujamos “ahora”
