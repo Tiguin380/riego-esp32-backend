@@ -150,6 +150,8 @@
         .zone-off { opacity: 0.62; }
         .sensor-card.card-off { opacity: 0.55; filter: saturate(0.7); }
         .zone-subtitle { color:#8fa3bf; font-size: 12px; margin-top: -6px; margin-bottom: 8px; overflow-wrap: anywhere; word-break: break-word; }
+        .zone-mode-row { display:flex; justify-content:flex-end; gap: 10px; flex-wrap: wrap; margin: 6px 0 10px; }
+        .zone-mode-row .mini-btn { padding: 8px 10px; font-size: 11px; border-radius: 10px; }
         .zone-row { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
         .zone-row .control-row { margin-bottom: 0; flex: 1 1 320px; }
         .zone-mini { font-size: 11px; color:#8fa3bf; }
@@ -1150,6 +1152,7 @@
                 }
             }
 
+            try { destroyZoneMiniCharts(); } catch {}
             container.innerHTML = '';
 
             for (let i = 0; i < 8; i++) {
@@ -1168,6 +1171,41 @@
                 subtitle.id = `zoneSubtitle${zoneNum}`;
                 subtitle.textContent = '—';
                 sec.appendChild(subtitle);
+
+                // Botones de modo por planta (independientes)
+                {
+                    const modeRow = document.createElement('div');
+                    modeRow.className = 'zone-mode-row';
+
+                    const bDay = document.createElement('button');
+                    bDay.type = 'button';
+                    bDay.className = 'mini-btn';
+                    bDay.id = `zoneBtnDia${zoneNum}`;
+                    bDay.textContent = 'DÍA';
+
+                    const bMonth = document.createElement('button');
+                    bMonth.type = 'button';
+                    bMonth.className = 'mini-btn';
+                    bMonth.id = `zoneBtnMes${zoneNum}`;
+                    bMonth.textContent = 'MES';
+
+                    const bYear = document.createElement('button');
+                    bYear.type = 'button';
+                    bYear.className = 'mini-btn';
+                    bYear.id = `zoneBtnAno${zoneNum}`;
+                    bYear.textContent = 'AÑO';
+
+                    bDay.addEventListener('click', () => setZoneViewMode(zoneNum, 'day'));
+                    bMonth.addEventListener('click', () => setZoneViewMode(zoneNum, 'month'));
+                    bYear.addEventListener('click', () => setZoneViewMode(zoneNum, 'year'));
+
+                    modeRow.appendChild(bDay);
+                    modeRow.appendChild(bMonth);
+                    modeRow.appendChild(bYear);
+                    sec.appendChild(modeRow);
+
+                    setActiveZoneModeButtons(zoneNum, getZoneViewMode(zoneNum));
+                }
 
                 const zoneRow = document.createElement('div');
                 zoneRow.className = 'zone-row';
@@ -1547,14 +1585,16 @@
                 const phLatest = phIdx == null ? null : byKey.get(`ph_soil:${phIdx}`);
                 const ecLatest = ecIdx == null ? null : byKey.get(`ec_soil:${ecIdx}`);
 
-                // Mini gráficas: ingerir puntos en tiempo real si existen
-                if (soilIdx != null && soilLatest) ingestMiniChartPoint(`zoneHumChart${zoneNum}`, soilLatest, { kind: 'value' });
-                if (tSoilIdx != null && tSoilLatest) ingestMiniChartPoint(`zoneTSoilChart${zoneNum}`, tSoilLatest, { kind: 'value' });
-                if (tAirIdx != null && tAirLatest) ingestMiniChartPoint(`zoneTAirChart${zoneNum}`, tAirLatest, { kind: 'value' });
-                if (hAirIdx != null && hAirLatest) ingestMiniChartPoint(`zoneHAirChart${zoneNum}`, hAirLatest, { kind: 'value' });
-                if (phIdx != null && phLatest) ingestMiniChartPoint(`zonePHChart${zoneNum}`, phLatest, { kind: 'value' });
-                if (ecIdx != null && ecLatest) ingestMiniChartPoint(`zoneECChart${zoneNum}`, ecLatest, { kind: 'value' });
-                if (valveIdx != null && valveLatest) ingestMiniChartPoint(`zoneValveChart${zoneNum}`, valveLatest, { kind: 'valve' });
+                // Mini gráficas: tiempo real solo en DÍA (en MES/AÑO se muestran agregados)
+                if (getZoneViewMode(zoneNum) === 'day') {
+                    if (soilIdx != null && soilLatest) ingestMiniChartPoint(`zoneHumChart${zoneNum}`, soilLatest, { kind: 'value' });
+                    if (tSoilIdx != null && tSoilLatest) ingestMiniChartPoint(`zoneTSoilChart${zoneNum}`, tSoilLatest, { kind: 'value' });
+                    if (tAirIdx != null && tAirLatest) ingestMiniChartPoint(`zoneTAirChart${zoneNum}`, tAirLatest, { kind: 'value' });
+                    if (hAirIdx != null && hAirLatest) ingestMiniChartPoint(`zoneHAirChart${zoneNum}`, hAirLatest, { kind: 'value' });
+                    if (phIdx != null && phLatest) ingestMiniChartPoint(`zonePHChart${zoneNum}`, phLatest, { kind: 'value' });
+                    if (ecIdx != null && ecLatest) ingestMiniChartPoint(`zoneECChart${zoneNum}`, ecLatest, { kind: 'value' });
+                    if (valveIdx != null && valveLatest) ingestMiniChartPoint(`zoneValveChart${zoneNum}`, valveLatest, { kind: 'valve' });
+                }
 
                 const humEl = document.getElementById(`zoneHum${zoneNum}`);
                 const tAirEl = document.getElementById(`zoneTAir${zoneNum}`);
@@ -2021,12 +2061,19 @@
 
         // --- Mini gráficas por planta (una por tarjeta) ---
         let zoneChartsRebuildTimer = null;
-        function scheduleZoneChartsRebuild() {
+        const pendingZoneRebuilds = new Set();
+        function scheduleZoneChartsRebuild(zoneNum) {
+            if (Number.isFinite(Number(zoneNum))) pendingZoneRebuilds.add(Number(zoneNum));
+            else pendingZoneRebuilds.add('all');
+
             if (zoneChartsRebuildTimer) return;
             zoneChartsRebuildTimer = setTimeout(() => {
                 zoneChartsRebuildTimer = null;
-                rebuildZoneMiniCharts();
-            }, 900);
+                const doAll = pendingZoneRebuilds.has('all');
+                const zones = doAll ? null : Array.from(pendingZoneRebuilds).filter(x => Number.isFinite(x));
+                pendingZoneRebuilds.clear();
+                rebuildZoneMiniCharts(zones);
+            }, 700);
         }
 
         const DEFAULT_DEVICE = 'RIEGO_001';
@@ -2743,8 +2790,33 @@
             }
         });
 
-        // --- Mini charts por planta (RAW 24h, tiempo real) ---
+        // --- Mini charts por planta (por tarjeta) ---
         const zoneMiniCharts = new Map();
+
+        // Modo de visualización por planta (independiente)
+        const zoneViewMode = new Map();
+        function getZoneViewMode(zoneNum) {
+            const m = zoneViewMode.get(Number(zoneNum));
+            return (m === 'day' || m === 'month' || m === 'year') ? m : 'day';
+        }
+        function setActiveZoneModeButtons(zoneNum, mode) {
+            const z = Number(zoneNum);
+            const bD = document.getElementById(`zoneBtnDia${z}`);
+            const bM = document.getElementById(`zoneBtnMes${z}`);
+            const bY = document.getElementById(`zoneBtnAno${z}`);
+            if (bD) bD.classList.toggle('active', mode === 'day');
+            if (bM) bM.classList.toggle('active', mode === 'month');
+            if (bY) bY.classList.toggle('active', mode === 'year');
+        }
+        function setZoneViewMode(zoneNum, mode) {
+            const z = Number(zoneNum);
+            if (!Number.isFinite(z) || z < 1 || z > 8) return;
+            if (mode !== 'day' && mode !== 'month' && mode !== 'year') return;
+            zoneViewMode.set(z, mode);
+            setActiveZoneModeButtons(z, mode);
+            scheduleZoneChartsRebuild(z);
+            try { updateZoneSummary(z); } catch {}
+        }
 
         function destroyZoneMiniCharts() {
             for (const v of zoneMiniCharts.values()) {
@@ -2760,15 +2832,30 @@
             return c ? c.id : null;
         }
 
-        function miniLabelForDate(d) {
+        function miniLabelForDate(d, mode) {
             const p = getMadridPartsFull(d);
+            if (mode === 'day') return `${p.h}:${p.mi}:${p.s}`;
             return `${p.h}:${p.mi}`;
         }
 
-        function ensureMiniChart(canvasId, { stepped = false, yMin = undefined, yMax = undefined, yTickCb = undefined, yTickStep = undefined } = {}) {
+        function ensureMiniChart(canvasId, { stepped = false, yMin = undefined, yMax = undefined, yTickCb = undefined, yTickStep = undefined, mode = 'day' } = {}) {
             const canvas = document.getElementById(canvasId);
             if (!canvas) return null;
-            if (zoneMiniCharts.has(canvasId)) return zoneMiniCharts.get(canvasId);
+            if (zoneMiniCharts.has(canvasId)) {
+                const e = zoneMiniCharts.get(canvasId);
+                try {
+                    if (e?.chart) {
+                        e.chart.data.datasets[0].stepped = !!stepped;
+                        e.chart.data.datasets[0].tension = stepped ? 0 : 0.25;
+                        e.chart.options.scales.y.min = yMin;
+                        e.chart.options.scales.y.max = yMax;
+                        e.chart.options.scales.y.ticks.callback = yTickCb;
+                        e.chart.options.scales.y.ticks.stepSize = yTickStep;
+                        e.mode = mode;
+                    }
+                } catch {}
+                return e;
+            }
 
             const card = canvas.closest('.sensor-card');
             const cs = card ? getComputedStyle(card) : null;
@@ -2818,15 +2905,28 @@
                 }
             });
 
-            const entry = { chart, labels, series, ts, lastTsMs: null };
+            const entry = {
+                chart,
+                labels,
+                series,
+                ts,
+                lastTsMs: null,
+                mode,
+                meta: { sum: 0, count: 0, valveOnMs: 0, lastDateMs: null, lastLabel: '' }
+            };
             zoneMiniCharts.set(canvasId, entry);
             return entry;
         }
 
-        async function loadMiniChartHistory(canvasId, channelId, { kind } = {}) {
+        async function loadMiniChartHistory(canvasId, channelId, { kind, mode = 'day' } = {}) {
             if (!channelId) return;
-            // RAW: el backend ya limita a últimas 24h por defecto
-            const url = `/api/channel/history/${encodeURIComponent(deviceCode)}/${encodeURIComponent(channelId)}?step=raw&limit=600`;
+
+            let step = 'raw';
+            let limit = 900;
+            if (mode === 'day') { step = 'raw'; limit = 1200; }
+            else { step = '1h'; limit = 2500; }
+
+            const url = `/api/channel/history/${encodeURIComponent(deviceCode)}/${encodeURIComponent(channelId)}?step=${encodeURIComponent(step)}&limit=${limit}`;
             const r = await fetch(url, { credentials: 'include' });
             if (!r.ok) return;
             const payload = await r.json().catch(() => null);
@@ -2840,20 +2940,125 @@
             const tsArr = [];
             let lastTsMs = null;
 
-            for (const row of rows) {
-                const d = parseTsToDate(row?.ts);
-                if (!d) continue;
-                const tsMs = d.getTime();
-                lastTsMs = tsMs;
-                tsArr.push(tsMs);
-                labels.push(row?.ts_madrid_label || miniLabelForDate(d));
-                if (kind === 'valve') {
-                    const s = row?.state == null ? null : Number(row.state);
-                    series.push(Number.isFinite(s) ? (s >= 1 ? 1 : 0) : null);
-                } else {
-                    const v = row?.value == null ? null : Number(row.value);
-                    series.push(Number.isFinite(v) ? v : null);
+            // Meta para resumen
+            let totalSum = 0;
+            let totalCount = 0;
+            let totalValveOnMs = 0;
+
+            if (mode === 'day') {
+                let prevT = null;
+                let prevOn = false;
+
+                for (const row of rows) {
+                    const d = parseTsToDate(row?.ts);
+                    if (!d) continue;
+                    const tsMs = d.getTime();
+                    lastTsMs = tsMs;
+                    tsArr.push(tsMs);
+                    labels.push(row?.ts_madrid_label || miniLabelForDate(d, 'day'));
+
+                    if (kind === 'valve') {
+                        const onNow = Number(row?.state || 0) >= 1;
+                        series.push(onNow ? 1 : 0);
+
+                        if (prevT != null) {
+                            const dt = Math.max(0, tsMs - prevT);
+                            if (prevOn) totalValveOnMs += dt;
+                        }
+                        prevT = tsMs;
+                        prevOn = onNow;
+                    } else {
+                        const v = row?.value == null ? null : Number(row.value);
+                        if (Number.isFinite(v)) { totalSum += v; totalCount += 1; }
+                        series.push(Number.isFinite(v) ? v : null);
+                    }
                 }
+            } else if (mode === 'month') {
+                // Agrupar por día
+                if (kind === 'valve') {
+                    const byDay = {};
+                    for (const row of rows) {
+                        const k = row?.ts_madrid_day_key || dayKeyForTs(row?.ts);
+                        const b = byDay[k] || (byDay[k] = { on: 0, cnt: 0 });
+                        const on = Number(row?.state || 0) >= 1 ? 1 : 0;
+                        b.on += on;
+                        b.cnt += 1;
+                    }
+                    const keys = Object.keys(byDay).sort();
+                    for (const k of keys) {
+                        labels.push(k.slice(8, 10));
+                        const b = byDay[k];
+                        const onHours = b && b.cnt ? (b.on / b.cnt) * 24 : 0;
+                        series.push(Number(onHours.toFixed(2)));
+                        totalValveOnMs += onHours * 3600000;
+                    }
+                } else {
+                    const byDay = {};
+                    for (const row of rows) {
+                        const k = row?.ts_madrid_day_key || dayKeyForTs(row?.ts);
+                        const b = byDay[k] || (byDay[k] = { sum: 0, cnt: 0 });
+                        const v = row?.value == null ? null : Number(row.value);
+                        if (!Number.isFinite(v)) continue;
+                        b.sum += v;
+                        b.cnt += 1;
+                        totalSum += v;
+                        totalCount += 1;
+                    }
+                    const keys = Object.keys(byDay).sort();
+                    for (const k of keys) {
+                        labels.push(k.slice(8, 10));
+                        const b = byDay[k];
+                        const avg = b && b.cnt ? (b.sum / b.cnt) : null;
+                        series.push(avg == null ? null : Number(avg.toFixed(2)));
+                    }
+                }
+
+                const lastRow = rows.length ? rows[rows.length - 1] : null;
+                const dLast = lastRow ? parseTsToDate(lastRow.ts) : null;
+                lastTsMs = dLast ? dLast.getTime() : null;
+            } else {
+                // year: agrupar por mes
+                if (kind === 'valve') {
+                    const byMonth = {};
+                    for (const row of rows) {
+                        const k = row?.ts_madrid_month_key || monthKeyForTs(row?.ts);
+                        const b = byMonth[k] || (byMonth[k] = { on: 0, cnt: 0 });
+                        const on = Number(row?.state || 0) >= 1 ? 1 : 0;
+                        b.on += on;
+                        b.cnt += 1;
+                    }
+                    const keys = Object.keys(byMonth).sort();
+                    for (const k of keys) {
+                        labels.push(k.slice(5, 7));
+                        const b = byMonth[k];
+                        const onHours = b && b.cnt ? (b.on / b.cnt) * (30 * 24) : 0;
+                        series.push(Number(onHours.toFixed(1)));
+                        totalValveOnMs += onHours * 3600000;
+                    }
+                } else {
+                    const byMonth = {};
+                    for (const row of rows) {
+                        const k = row?.ts_madrid_month_key || monthKeyForTs(row?.ts);
+                        const b = byMonth[k] || (byMonth[k] = { sum: 0, cnt: 0 });
+                        const v = row?.value == null ? null : Number(row.value);
+                        if (!Number.isFinite(v)) continue;
+                        b.sum += v;
+                        b.cnt += 1;
+                        totalSum += v;
+                        totalCount += 1;
+                    }
+                    const keys = Object.keys(byMonth).sort();
+                    for (const k of keys) {
+                        labels.push(k.slice(5, 7));
+                        const b = byMonth[k];
+                        const avg = b && b.cnt ? (b.sum / b.cnt) : null;
+                        series.push(avg == null ? null : Number(avg.toFixed(2)));
+                    }
+                }
+
+                const lastRow = rows.length ? rows[rows.length - 1] : null;
+                const dLast = lastRow ? parseTsToDate(lastRow.ts) : null;
+                lastTsMs = dLast ? dLast.getTime() : null;
             }
 
             entry.labels.length = 0;
@@ -2863,6 +3068,15 @@
             for (const y of series) entry.series.push(y);
             for (const t of tsArr) entry.ts.push(t);
             entry.lastTsMs = lastTsMs;
+            entry.mode = mode;
+
+            entry.meta = entry.meta || { sum: 0, count: 0, valveOnMs: 0, lastDateMs: null, lastLabel: '' };
+            entry.meta.sum = totalSum;
+            entry.meta.count = totalCount;
+            entry.meta.valveOnMs = totalValveOnMs;
+            entry.meta.lastDateMs = lastTsMs;
+            entry.meta.lastLabel = labels.length ? String(labels[labels.length - 1]) : '';
+
             entry.chart.update('none');
 
             try {
@@ -2874,6 +3088,7 @@
         function ingestMiniChartPoint(canvasId, latest, { kind } = {}) {
             const entry = zoneMiniCharts.get(canvasId);
             if (!entry) return;
+            if (entry.mode && entry.mode !== 'day') return;
             const d = parseTsToDate(latest?.ts || latest?.ts_raw || latest?.ts_madrid);
             if (!d) return;
             const tsMs = d.getTime();
@@ -2883,10 +3098,29 @@
                 ? (latest?.state == null ? null : (Number(latest.state) >= 1 ? 1 : 0))
                 : (latest?.value == null ? null : Number(latest.value));
 
-            entry.labels.push(miniLabelForDate(d));
+            entry.meta = entry.meta || { sum: 0, count: 0, valveOnMs: 0, lastDateMs: null, lastLabel: '' };
+            if (kind === 'valve') {
+                const prevIdx = entry.ts.length - 1;
+                if (prevIdx >= 0) {
+                    const prevT = Number(entry.ts[prevIdx]);
+                    const prevOn = Number(entry.series[prevIdx]) >= 0.5;
+                    const dt = Math.max(0, tsMs - prevT);
+                    if (prevOn) entry.meta.valveOnMs = (Number(entry.meta.valveOnMs) || 0) + dt;
+                }
+            } else {
+                const n = Number(val);
+                if (Number.isFinite(n)) {
+                    entry.meta.sum = (Number(entry.meta.sum) || 0) + n;
+                    entry.meta.count = (Number(entry.meta.count) || 0) + 1;
+                }
+            }
+
+            entry.labels.push(miniLabelForDate(d, 'day'));
             entry.series.push((val == null || !Number.isFinite(val)) ? null : val);
             entry.ts.push(tsMs);
             entry.lastTsMs = tsMs;
+            entry.meta.lastDateMs = tsMs;
+            entry.meta.lastLabel = entry.labels.length ? String(entry.labels[entry.labels.length - 1]) : '';
 
             const MAX_POINTS = 600;
             if (entry.labels.length > MAX_POINTS) {
@@ -2903,9 +3137,7 @@
             } catch {}
         }
 
-        async function rebuildZoneMiniCharts() {
-            // Nota: renderZonesUI reconstruye el DOM, así que destruimos y recreamos.
-            destroyZoneMiniCharts();
+        async function rebuildZoneMiniCharts(zonesToRebuild) {
             if (!deviceCode) return;
             if (!Array.isArray(zonesState) || zonesState.length === 0) return;
 
@@ -2916,26 +3148,66 @@
                 { kind: 'humidity_air', prop: 'humidity_air_channel_index', canvas: (z) => `zoneHAirChart${z}`, yMin: 0, yMax: 100, yTickStep: 5, yTickCb: (v) => `${v}%` },
                 { kind: 'ph_soil', prop: 'ph_soil_channel_index', canvas: (z) => `zonePHChart${z}`, yMin: 0, yMax: 14 },
                 { kind: 'ec_soil', prop: 'ec_soil_channel_index', canvas: (z) => `zoneECChart${z}` },
-                { kind: 'valve', prop: 'valve_channel_index', canvas: (z) => `zoneValveChart${z}`, stepped: true, yMin: 0, yMax: 1, yTickStep: 1, yTickCb: (v) => (Number(v) >= 0.5 ? 'ON' : 'OFF') }
+                { kind: 'valve', prop: 'valve_channel_index', canvas: (z) => `zoneValveChart${z}`, stepped: true }
             ];
 
-            for (let i = 0; i < 8; i++) {
-                const zoneNum = i + 1;
+            const wantedZones = Array.isArray(zonesToRebuild) && zonesToRebuild.length
+                ? zonesToRebuild
+                : [1, 2, 3, 4, 5, 6, 7, 8];
+
+            for (const zoneNumRaw of wantedZones) {
+                const zoneNum = Number(zoneNumRaw);
+                if (!Number.isFinite(zoneNum) || zoneNum < 1 || zoneNum > 8) continue;
+                const i = zoneNum - 1;
+
                 const sec = document.getElementById(`zoneSec${zoneNum}`);
                 if (sec && sec.classList.contains('collapsed')) continue;
+
                 const z = zonesState[i];
                 if (!z) continue;
 
+                const mode = getZoneViewMode(zoneNum);
+                setActiveZoneModeButtons(zoneNum, mode);
+
                 for (const def of defs) {
+                    const canvasId = def.canvas(zoneNum);
                     const idx = z[def.prop];
-                    if (idx == null) continue;
+                    if (idx == null) {
+                        const existing = zoneMiniCharts.get(canvasId);
+                        if (existing) {
+                            try { existing.chart?.destroy(); } catch {}
+                            zoneMiniCharts.delete(canvasId);
+                        }
+                        continue;
+                    }
+
                     const channelId = getChannelIdByKindIndex(def.kind, idx);
                     if (!channelId) continue;
 
-                    const canvasId = def.canvas(zoneNum);
-                    ensureMiniChart(canvasId, { stepped: def.stepped, yMin: def.yMin, yMax: def.yMax, yTickCb: def.yTickCb, yTickStep: def.yTickStep });
-                    await loadMiniChartHistory(canvasId, channelId, { kind: def.kind === 'valve' ? 'valve' : 'value' });
+                    let yMin = def.yMin;
+                    let yMax = def.yMax;
+                    let yTickCb = def.yTickCb;
+                    let yTickStep = def.yTickStep;
+
+                    if (def.kind === 'valve') {
+                        if (mode === 'day') {
+                            yMin = 0;
+                            yMax = 1;
+                            yTickCb = (v) => (Number(v) >= 0.5 ? 'ON' : 'OFF');
+                            yTickStep = 1;
+                        } else {
+                            yMin = 0;
+                            yMax = undefined;
+                            yTickCb = undefined;
+                            yTickStep = undefined;
+                        }
+                    }
+
+                    ensureMiniChart(canvasId, { stepped: def.stepped, yMin, yMax, yTickCb, yTickStep, mode });
+                    await loadMiniChartHistory(canvasId, channelId, { kind: def.kind === 'valve' ? 'valve' : 'value', mode });
                 }
+
+                try { updateZoneSummary(zoneNum); } catch {}
             }
         }
 
@@ -2962,41 +3234,44 @@
             const humEntry = zoneMiniCharts.get(`zoneHumChart${zoneNum}`) || null;
             const valveEntry = zoneMiniCharts.get(`zoneValveChart${zoneNum}`) || null;
 
+            const mode = getZoneViewMode(zoneNum);
+
             // Humedad media
             if (avgEl) {
-                let sum = 0;
-                let cnt = 0;
-                const arr = humEntry?.series || [];
-                for (const v of arr) {
-                    const n = Number(v);
-                    if (!Number.isFinite(n)) continue;
-                    sum += n;
-                    cnt += 1;
-                }
-                avgEl.textContent = cnt ? `${(sum / cnt).toFixed(1)}%` : '--';
+                const sum = humEntry?.meta && Number.isFinite(Number(humEntry.meta.sum)) ? Number(humEntry.meta.sum) : null;
+                const cnt = humEntry?.meta && Number.isFinite(Number(humEntry.meta.count)) ? Number(humEntry.meta.count) : null;
+                if (sum != null && cnt != null && cnt > 0) avgEl.textContent = `${(sum / cnt).toFixed(1)}%`;
+                else avgEl.textContent = '--';
             }
 
             // Tiempo válvula ON (basado en deltas entre puntos)
             if (onEl) {
-                let onMs = 0;
-                const s = valveEntry?.series || [];
-                const t = valveEntry?.ts || [];
-                for (let i = 1; i < Math.min(s.length, t.length); i++) {
-                    const dt = Math.max(0, Number(t[i]) - Number(t[i - 1]));
-                    const prevOn = Number(s[i - 1]) >= 0.5;
-                    if (prevOn) onMs += dt;
-                }
-                onEl.textContent = onMs ? formatDuration(onMs) : '--';
+                const ms = valveEntry?.meta && Number.isFinite(Number(valveEntry.meta.valveOnMs)) ? Number(valveEntry.meta.valveOnMs) : null;
+                onEl.textContent = ms ? formatDuration(ms) : '--';
             }
 
             // Último punto: el más reciente entre humedad y válvula
             if (lastEl) {
-                const humLast = humEntry?.lastTsMs != null ? Number(humEntry.lastTsMs) : null;
-                const valveLast = valveEntry?.lastTsMs != null ? Number(valveEntry.lastTsMs) : null;
+                const humLast = humEntry?.meta && Number.isFinite(Number(humEntry.meta.lastDateMs))
+                    ? Number(humEntry.meta.lastDateMs)
+                    : (humEntry?.lastTsMs != null ? Number(humEntry.lastTsMs) : null);
+                const valveLast = valveEntry?.meta && Number.isFinite(Number(valveEntry.meta.lastDateMs))
+                    ? Number(valveEntry.meta.lastDateMs)
+                    : (valveEntry?.lastTsMs != null ? Number(valveEntry.lastTsMs) : null);
                 const lastMs = (humLast != null && valveLast != null)
                     ? Math.max(humLast, valveLast)
                     : (humLast != null ? humLast : (valveLast != null ? valveLast : null));
-                lastEl.textContent = lastMs != null ? formatLastPointText('day', new Date(lastMs)) : '--';
+
+                const fallbackLabel = (() => {
+                    if (humLast != null && valveLast != null) {
+                        return (humLast >= valveLast) ? (humEntry?.meta?.lastLabel || '') : (valveEntry?.meta?.lastLabel || '');
+                    }
+                    if (humLast != null) return humEntry?.meta?.lastLabel || '';
+                    if (valveLast != null) return valveEntry?.meta?.lastLabel || '';
+                    return '';
+                })();
+
+                lastEl.textContent = lastMs != null ? formatLastPointText(mode, new Date(lastMs), fallbackLabel) : '--';
             }
         }
 
