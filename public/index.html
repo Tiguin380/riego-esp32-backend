@@ -311,18 +311,22 @@
         .status.offline { color: #ff3333; }
         .current-color { text-align: center; padding: 10px; background: #0f3460; border-radius: 8px; margin: 10px 0; }
         .current-color span { font-weight: bold; color: #4CAF50; }
-        /* Gráficas sin scroll: se ajustan al espacio disponible */
+        /* Gráficas: en escritorio sin scroll; en móvil/tablet habilitamos scroll horizontal en modo DÍA */
         .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         @media (max-width: 900px) {
             .charts-grid { grid-template-columns: 1fr; }
         }
         .chart-box { text-align: left; min-width: 0; }
-        .chart-wrap { position: relative; width: 100%; height: clamp(160px, 24vh, 260px); }
+        .chart-wrap { position: relative; width: 100%; height: clamp(160px, 24vh, 260px); overflow: hidden; }
+        .chart-inner { width: 100%; height: 100%; }
         .chart-wrap canvas { width: 100% !important; height: 100% !important; display: block; }
+        .chart-inner canvas { width: 100% !important; height: 100% !important; display: block; }
+        .chart-wrap.scroll-x { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+        .chart-wrap.scroll-x { scrollbar-color: rgba(255,255,255,0.35) rgba(255,255,255,0.08); }
         /* Las gráficas de tarjetas usan el mismo tamaño que las principales */
         .mini-chart-wrap { height: clamp(160px, 24vh, 260px); margin-top: 10px; }
 
-        /* Mini-gráficas por planta: sin scroll (debe caber en la tarjeta). */
+        /* Mini-gráficas por planta: en móvil/tablet modo DÍA pueden hacer scroll horizontal. */
         .sensor-card.card-off .chart-wrap { opacity: 0.25; }
         .sensor-card.card-off .sensor-value { opacity: 0.75; }
         .btn.active { outline: 2px solid rgba(255,255,255,0.35); opacity: 0.95; }
@@ -3095,6 +3099,10 @@
             for (const y of newSeries) series.push(y);
         }
 
+        // Preparar wrappers de scroll (móvil/tablet modo DÍA)
+        applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
+        applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
+
         const humChart = new Chart(document.getElementById('humChart'), {
             type: 'line',
             data: {
@@ -3217,6 +3225,7 @@
         function createCompareChart(canvasId, labels, series, { border, fill } = {}) {
             const canvas = document.getElementById(canvasId);
             if (!canvas) return null;
+            applyTimelineScrollForCanvas(canvas, viewMode);
             return new Chart(canvas, {
                 type: 'line',
                 data: {
@@ -3359,6 +3368,82 @@
             } catch {
                 return '';
             }
+        }
+
+        // --- Scroll horizontal en móvil/tablet (modo DÍA) ---
+        function isSmallViewport() {
+            try { return window.matchMedia && window.matchMedia('(max-width: 900px)').matches; } catch { return false; }
+        }
+
+        function ensureChartScrollDomForCanvas(canvas) {
+            if (!canvas) return null;
+            const wrap = canvas.closest('.chart-wrap');
+            if (!wrap) return null;
+
+            let inner = null;
+            try { inner = wrap.querySelector(':scope > .chart-inner'); } catch { inner = wrap.querySelector('.chart-inner'); }
+            if (!inner) {
+                inner = document.createElement('div');
+                inner.className = 'chart-inner';
+                wrap.appendChild(inner);
+            }
+
+            if (canvas.parentElement !== inner) inner.appendChild(canvas);
+
+            // Auto-seguimiento: si el usuario scrollea y se queda lejos del final, dejamos de “seguir”.
+            if (wrap.dataset.scrollFollowInit !== '1') {
+                wrap.dataset.scrollFollowInit = '1';
+                wrap.dataset.follow = '1';
+                wrap.addEventListener('scroll', () => {
+                    try {
+                        wrap.dataset.lastUserScroll = String(Date.now());
+                        const max = Math.max(0, wrap.scrollWidth - wrap.clientWidth);
+                        const nearEnd = (max - wrap.scrollLeft) <= 24;
+                        wrap.dataset.follow = nearEnd ? '1' : '0';
+                    } catch {}
+                }, { passive: true });
+            }
+
+            return { wrap, inner };
+        }
+
+        function applyTimelineScrollForCanvas(canvas, mode) {
+            const s = ensureChartScrollDomForCanvas(canvas);
+            if (!s) return;
+
+            const enable = isSmallViewport() && mode === 'day';
+            s.wrap.classList.toggle('scroll-x', !!enable);
+
+            if (enable) {
+                const base = 1440; // px aprox como referencia visual
+                const w = Math.max(base, Math.round((s.wrap.clientWidth || 0) * 1.8));
+                s.inner.style.width = `${w}px`;
+            } else {
+                s.inner.style.width = '100%';
+                try { s.wrap.scrollLeft = 0; } catch {}
+                try { s.wrap.dataset.follow = '1'; } catch {}
+            }
+        }
+
+        function scrollCanvasToNowIfFollowing(canvas, mode) {
+            if (!(isSmallViewport() && mode === 'day')) return;
+            const s = ensureChartScrollDomForCanvas(canvas);
+            if (!s) return;
+            if (s.wrap.dataset.follow === '0') return;
+            const lastUser = Number(s.wrap.dataset.lastUserScroll || 0);
+            if (Number.isFinite(lastUser) && lastUser > 0 && (Date.now() - lastUser) < 5000) return;
+
+            try {
+                const p = getMadridParts(nowAdjusted());
+                const minute = (Number(p?.h) * 60 + Number(p?.mi));
+                if (!Number.isFinite(minute)) return;
+
+                const ratio = Math.max(0, Math.min(1, minute / 1439));
+                const max = Math.max(0, s.wrap.scrollWidth - s.wrap.clientWidth);
+                const xNow = ratio * (s.wrap.scrollWidth || 0);
+                const target = Math.max(0, Math.min(max, Math.round(xNow - s.wrap.clientWidth + 24)));
+                s.wrap.scrollLeft = target;
+            } catch {}
         }
 
         function buildMadridDayAxisLabels(pNow) {
@@ -3741,11 +3826,9 @@
             const canvas = document.getElementById(canvasId);
             if (!canvas) return null;
 
-            // Ajuste de anchura para evitar “amontonado” en el eje X en modo DÍA
-            try {
-                const inner = canvas.closest('.mini-chart-inner');
-                if (inner) inner.style.width = (mode === 'day') ? '1120px' : '100%';
-            } catch {}
+            // Scroll horizontal en móvil/tablet (modo DÍA)
+            applyTimelineScrollForCanvas(canvas, mode);
+            scrollCanvasToNowIfFollowing(canvas, mode);
 
             if (zoneMiniCharts.has(canvasId)) {
                 const e = zoneMiniCharts.get(canvasId);
@@ -3774,8 +3857,8 @@
                             e.chart.options.scales.x.min = 0;
                             e.chart.options.scales.x.max = 1439;
                             e.chart.options.scales.x.ticks.autoSkip = false;
-                            e.chart.options.scales.x.ticks.stepSize = 120;
-                            e.chart.options.scales.x.ticks.maxTicksLimit = 13;
+                            e.chart.options.scales.x.ticks.stepSize = (isSmallViewport() ? 60 : 120);
+                            e.chart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
                             e.chart.options.scales.x.ticks.includeBounds = true;
                             e.chart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
                         } else {
@@ -3879,6 +3962,10 @@
                     }
                 }
             });
+
+            // Reaplicar scroll (por si el canvas se reparentó en el DOM)
+            applyTimelineScrollForCanvas(canvas, mode);
+            scrollCanvasToNowIfFollowing(canvas, mode);
 
             const entry = {
                 chart,
@@ -4500,6 +4587,12 @@
             setSeries(valveLabels, valveSeries, labels, valve);
             humChart.update('none');
             valveChart.update('none');
+            try {
+                applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
+                applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
+                scrollCanvasToNowIfFollowing(document.getElementById('humChart'), viewMode);
+                scrollCanvasToNowIfFollowing(document.getElementById('valveChart'), viewMode);
+            } catch {}
 
             const valveDotChart = document.getElementById('valveDotChart');
             const valveTextChart = document.getElementById('valveTextChart');
@@ -4716,6 +4809,10 @@
 
             setSeries(labelsArr, seriesArr, labels, series);
             chart.update('none');
+            try {
+                applyTimelineScrollForCanvas(chart?.canvas, viewMode);
+                scrollCanvasToNowIfFollowing(chart?.canvas, viewMode);
+            } catch {}
         }
 
         function rebuildCompareExtraCharts() {
@@ -4958,6 +5055,12 @@
                 } catch {}
                 humChart.update('none');
                 valveChart.update('none');
+                try {
+                    applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
+                    applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
+                    scrollCanvasToNowIfFollowing(document.getElementById('humChart'), viewMode);
+                    scrollCanvasToNowIfFollowing(document.getElementById('valveChart'), viewMode);
+                } catch {}
             }
 
             const [humRes, valveRes] = await Promise.all([
@@ -5171,9 +5274,23 @@
             } catch {}
             humChart.update('none');
             valveChart.update('none');
+            try {
+                applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
+                applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
+                scrollCanvasToNowIfFollowing(document.getElementById('humChart'), viewMode);
+                scrollCanvasToNowIfFollowing(document.getElementById('valveChart'), viewMode);
+            } catch {}
         }
 
         function rebuildCharts(storeOpt) {
+            try {
+                applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
+                applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
+                for (const slot of CMP_SLOTS) applyTimelineScrollForCanvas(document.getElementById(`cmpChart${slot}`), viewMode);
+                scrollCanvasToNowIfFollowing(document.getElementById('humChart'), viewMode);
+                scrollCanvasToNowIfFollowing(document.getElementById('valveChart'), viewMode);
+                for (const slot of CMP_SLOTS) scrollCanvasToNowIfFollowing(document.getElementById(`cmpChart${slot}`), viewMode);
+            } catch {}
             if (storeOpt) {
                 rebuildChartsFromStore(storeOpt);
                 rebuildCompareExtraCharts().catch(() => {});
@@ -5192,6 +5309,46 @@
         }
         tickClock();
         setInterval(tickClock, 1000);
+
+        function tickChartAutoScroll() {
+            try {
+                // Principales
+                scrollCanvasToNowIfFollowing(document.getElementById('humChart'), viewMode);
+                scrollCanvasToNowIfFollowing(document.getElementById('valveChart'), viewMode);
+
+                // Comparador
+                for (const slot of CMP_SLOTS) {
+                    scrollCanvasToNowIfFollowing(document.getElementById(`cmpChart${slot}`), viewMode);
+                }
+
+                // Mini-gráficas (solo las que estén en modo DÍA)
+                for (const [canvasId, entry] of zoneMiniCharts.entries()) {
+                    if (!entry || entry.mode !== 'day') continue;
+                    scrollCanvasToNowIfFollowing(document.getElementById(canvasId), 'day');
+                }
+            } catch {}
+        }
+        tickChartAutoScroll();
+        setInterval(tickChartAutoScroll, 30000);
+
+        let _scrollResizeTimer = null;
+        window.addEventListener('resize', () => {
+            try {
+                if (_scrollResizeTimer) clearTimeout(_scrollResizeTimer);
+                _scrollResizeTimer = setTimeout(() => {
+                    try {
+                        applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
+                        applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
+                        for (const slot of CMP_SLOTS) applyTimelineScrollForCanvas(document.getElementById(`cmpChart${slot}`), viewMode);
+                        for (const [canvasId, entry] of zoneMiniCharts.entries()) {
+                            if (!entry) continue;
+                            applyTimelineScrollForCanvas(document.getElementById(canvasId), entry.mode || 'day');
+                        }
+                        tickChartAutoScroll();
+                    } catch {}
+                }, 160);
+            } catch {}
+        }, { passive: true });
 
         async function cargarConfig() {
             try {
