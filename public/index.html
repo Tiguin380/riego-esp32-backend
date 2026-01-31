@@ -150,6 +150,17 @@
         .zone-off { opacity: 0.62; }
         .sensor-card.card-off { opacity: 0.55; filter: saturate(0.7); }
         .zone-subtitle { color:#8fa3bf; font-size: 12px; margin-top: -6px; margin-bottom: 8px; overflow-wrap: anywhere; word-break: break-word; }
+        .zones-global-row { display:flex; justify-content:flex-end; align-items:center; gap: 10px; flex-wrap: wrap; margin: 4px 0 10px; }
+        .zones-global-btn { background: linear-gradient(180deg, rgba(163,255,18,0.22), rgba(15,23,42,0.70)); border-color: rgba(163,255,18,0.28); color: rgba(232,255,200,0.95); box-shadow: 0 14px 30px rgba(0,0,0,0.22); }
+        .zones-global-btn:hover { filter: brightness(1.06); }
+        .zones-global-btn:focus-visible { outline: 2px solid rgba(163,255,18,0.35); outline-offset: 2px; }
+
+        .zone-topbar { display:flex; align-items:center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 6px 0 10px; }
+        .zone-controls-btn { background: linear-gradient(180deg, rgba(163,255,18,0.18), rgba(255,255,255,0.06)); border-color: rgba(163,255,18,0.22); color: rgba(232,255,200,0.95); }
+        .zone-controls-btn.active { filter: brightness(1.10); }
+        .zone-controls { display:none; margin: 0 0 12px; }
+        .zone-controls.open { display:block; }
+
         .zone-mode-row { display:flex; justify-content:flex-end; gap: 10px; flex-wrap: wrap; margin: 6px 0 10px; }
         .zone-mode-row .mini-btn { padding: 8px 10px; font-size: 11px; border-radius: 10px; }
         .zone-mode-btn { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: rgba(233,238,247,0.92); box-shadow: 0 12px 22px rgba(0,0,0,0.20); }
@@ -161,9 +172,9 @@
 
         .sensor-meta { margin-top: 6px; margin-bottom: 8px; display:flex; flex-direction: column; gap: 4px; }
         .sensor-meta-top { display:flex; align-items: center; justify-content: space-between; gap: 8px; }
-        .sensor-meta-name { font-size: 11px; color: rgba(233,238,247,0.86); font-weight: 900; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .sensor-meta-avg { font-size: 11px; color: rgba(148,163,184,0.95); font-weight: 900; white-space: nowrap; }
-        .sensor-meta-last { font-size: 11px; color: rgba(148,163,184,0.85); font-weight: 800; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sensor-meta-name { font-size: 11px; color: rgba(232,255,200,0.92); font-weight: 900; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 0 14px rgba(163,255,18,0.14); }
+        .sensor-meta-avg { font-size: 11px; color: rgba(232,255,200,0.92); font-weight: 900; white-space: nowrap; text-shadow: 0 0 14px rgba(163,255,18,0.14); }
+        .sensor-meta-last { font-size: 11px; color: rgba(163,255,18,0.98); font-weight: 900; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 0 16px rgba(163,255,18,0.22); }
 
         .sensor-card .chart-wrap { position: relative; }
         .sensor-card.card-off .chart-wrap::after {
@@ -1183,6 +1194,24 @@
             try { destroyZoneMiniCharts(); } catch {}
             container.innerHTML = '';
 
+            // Botón global: mostrar/ocultar todas las plantas
+            {
+                const row = document.createElement('div');
+                row.className = 'zones-global-row';
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'mini-btn zones-global-btn';
+                btn.id = 'zonesToggleAllBtn';
+                btn.textContent = 'Ocultar todas las plantas';
+                btn.addEventListener('click', () => {
+                    const allCollapsed = areAllZoneSectionsCollapsed();
+                    setAllZoneSectionsCollapsed(!allCollapsed);
+                    updateZonesToggleAllBtn();
+                });
+                row.appendChild(btn);
+                container.appendChild(row);
+            }
+
             for (let i = 0; i < 8; i++) {
                 const zoneNum = i + 1;
 
@@ -1202,6 +1231,15 @@
 
                 // Botones de modo por planta (independientes)
                 {
+                    const topBar = document.createElement('div');
+                    topBar.className = 'zone-topbar';
+
+                    const controlsBtn = document.createElement('button');
+                    controlsBtn.type = 'button';
+                    controlsBtn.className = 'mini-btn zone-controls-btn tiny';
+                    controlsBtn.id = `zoneControlsBtn${zoneNum}`;
+                    controlsBtn.textContent = 'Mostrar controles';
+
                     const modeRow = document.createElement('div');
                     modeRow.className = 'zone-mode-row';
 
@@ -1230,10 +1268,25 @@
                     modeRow.appendChild(bDay);
                     modeRow.appendChild(bMonth);
                     modeRow.appendChild(bYear);
-                    sec.appendChild(modeRow);
+
+                    topBar.appendChild(controlsBtn);
+                    topBar.appendChild(modeRow);
+                    sec.appendChild(topBar);
 
                     setActiveZoneModeButtons(zoneNum, getZoneViewMode(zoneNum));
+
+                    // Controles ocultos por defecto
+                    const open = getZoneControlsOpen(zoneNum);
+                    setZoneControlsOpen(zoneNum, open);
+                    controlsBtn.addEventListener('click', () => {
+                        const next = !getZoneControlsOpen(zoneNum);
+                        setZoneControlsOpen(zoneNum, next);
+                    });
                 }
+
+                const controlsWrap = document.createElement('div');
+                controlsWrap.className = 'zone-controls';
+                controlsWrap.id = `zoneControls${zoneNum}`;
 
                 const zoneRow = document.createElement('div');
                 zoneRow.className = 'zone-row';
@@ -1395,45 +1448,63 @@
                     });
                 }
 
-                // Umbral por planta
+                controlsWrap.appendChild(zoneRow);
+
+                // Tarjeta Umbral (dentro de controles)
                 {
+                    const thrCard = document.createElement('div');
+                    thrCard.className = 'sensor-card metric-neutral accent accent-green';
+
+                    const label = document.createElement('div');
+                    label.className = 'sensor-label';
+                    label.textContent = 'Umbral riego automático';
+
+                    const meta = document.createElement('div');
+                    meta.className = 'sensor-meta';
+                    const metaLine = document.createElement('div');
+                    metaLine.className = 'sensor-meta-last';
+                    metaLine.textContent = 'Se guarda solo en esta planta';
+                    meta.appendChild(metaLine);
+
                     const row = document.createElement('div');
                     row.className = 'control-row';
-                    const label = document.createElement('label');
-                    label.textContent = 'Umbral riego automático:';
-                    const wrap = document.createElement('div');
-                    wrap.style.display = 'flex';
-                    wrap.style.gap = '10px';
-                    wrap.style.alignItems = 'center';
-                    wrap.style.flex = '2';
+                    row.style.marginBottom = '0';
+
                     const rng = document.createElement('input');
                     rng.type = 'range';
                     rng.min = '1';
                     rng.max = '100';
                     rng.id = `zoneThr${zoneNum}`;
                     rng.title = 'Umbral de humedad baja (zona)';
-                    const val = document.createElement('span');
+                    rng.style.flex = '1';
+
+                    const val = document.createElement('div');
                     val.id = `zoneThrVal${zoneNum}`;
-                    val.style.width = '50px';
+                    val.className = 'sensor-value small';
+                    val.style.flex = '0 0 auto';
+                    val.style.minWidth = '70px';
                     val.style.textAlign = 'right';
+                    val.textContent = '--%';
 
                     const btn = document.createElement('button');
                     btn.type = 'button';
-                    btn.className = 'mini-btn primary tiny';
+                    btn.className = 'mini-btn zone-controls-btn tiny';
                     btn.textContent = 'Guardar';
                     btn.title = 'Guardar umbral (y asignación) solo de esta planta';
 
-                    wrap.appendChild(rng);
-                    wrap.appendChild(val);
-                    wrap.appendChild(btn);
-                    row.appendChild(label);
-                    row.appendChild(wrap);
-                    zoneRow.appendChild(row);
+                    row.appendChild(rng);
+                    row.appendChild(val);
+                    row.appendChild(btn);
+
+                    thrCard.appendChild(label);
+                    thrCard.appendChild(meta);
+                    thrCard.appendChild(row);
+                    controlsWrap.appendChild(thrCard);
 
                     rng.addEventListener('input', () => {
                         const n = Number(rng.value);
                         zonesState[i].humidity_low_threshold = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : zonesState[i].humidity_low_threshold;
-                        val.textContent = `${zonesState[i].humidity_low_threshold}%`;
+                        val.textContent = `${Math.round(Number(zonesState[i].humidity_low_threshold ?? 25))}%`;
                         updateZoneSubtitles();
                     });
 
@@ -1442,38 +1513,40 @@
                     });
                 }
 
-                sec.appendChild(zoneRow);
+                sec.appendChild(controlsWrap);
+                // Aplicar estado real (ahora que existe el contenedor)
+                try { setZoneControlsOpen(zoneNum, getZoneControlsOpen(zoneNum)); } catch {}
 
                 const grid = document.createElement('div');
                 grid.className = 'sensor-grid';
 
                 const humCard = document.createElement('div');
                 humCard.className = 'sensor-card metric-neutral accent accent-green';
-                humCard.innerHTML = `<div class="sensor-label">Humedad (zona)</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneHumName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneHumAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneHumLast${zoneNum}">Último: --</div></div><div class="sensor-value" id="zoneHum${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap"><canvas id="zoneHumChart${zoneNum}"></canvas></div>`;
+                humCard.innerHTML = `<div class="sensor-label">Humedad (zona)</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneHumName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneHumAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneHumLast${zoneNum}">Actualizado: --</div></div><div class="sensor-value" id="zoneHum${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap"><canvas id="zoneHumChart${zoneNum}"></canvas></div>`;
 
                 const tSoilCard = document.createElement('div');
                 tSoilCard.className = 'sensor-card metric-neutral accent accent-purple';
-                tSoilCard.innerHTML = `<div class="sensor-label">Temp. tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneTSoilName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneTSoilAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneTSoilLast${zoneNum}">Último: --</div></div><div class="sensor-value" id="zoneTSoil${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap"><canvas id="zoneTSoilChart${zoneNum}"></canvas></div>`;
+                tSoilCard.innerHTML = `<div class="sensor-label">Temp. tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneTSoilName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneTSoilAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneTSoilLast${zoneNum}">Actualizado: --</div></div><div class="sensor-value" id="zoneTSoil${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap"><canvas id="zoneTSoilChart${zoneNum}"></canvas></div>`;
 
                 const tAirCard = document.createElement('div');
                 tAirCard.className = 'sensor-card metric-neutral accent accent-blue';
-                tAirCard.innerHTML = `<div class="sensor-label">Temp. aire</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneTAirName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneTAirAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneTAirLast${zoneNum}">Último: --</div></div><div class="sensor-value" id="zoneTAir${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap"><canvas id="zoneTAirChart${zoneNum}"></canvas></div>`;
+                tAirCard.innerHTML = `<div class="sensor-label">Temp. aire</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneTAirName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneTAirAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneTAirLast${zoneNum}">Actualizado: --</div></div><div class="sensor-value" id="zoneTAir${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap"><canvas id="zoneTAirChart${zoneNum}"></canvas></div>`;
 
                 const hAirCard = document.createElement('div');
                 hAirCard.className = 'sensor-card metric-neutral accent accent-indigo';
-                hAirCard.innerHTML = `<div class="sensor-label">Humedad aire</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneHAirName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneHAirAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneHAirLast${zoneNum}">Último: --</div></div><div class="sensor-value" id="zoneHAir${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap"><canvas id="zoneHAirChart${zoneNum}"></canvas></div>`;
+                hAirCard.innerHTML = `<div class="sensor-label">Humedad aire</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneHAirName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneHAirAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneHAirLast${zoneNum}">Actualizado: --</div></div><div class="sensor-value" id="zoneHAir${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap"><canvas id="zoneHAirChart${zoneNum}"></canvas></div>`;
 
                 const phCard = document.createElement('div');
                 phCard.className = 'sensor-card metric-neutral accent accent-amber';
-                phCard.innerHTML = `<div class="sensor-label">pH tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zonePHName${zoneNum}">—</div><div class="sensor-meta-avg" id="zonePHAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zonePHLast${zoneNum}">Último: --</div></div><div class="sensor-value" id="zonePH${zoneNum}">--</div><div class="sensor-unit">pH</div><div class="chart-wrap"><canvas id="zonePHChart${zoneNum}"></canvas></div>`;
+                phCard.innerHTML = `<div class="sensor-label">pH tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zonePHName${zoneNum}">—</div><div class="sensor-meta-avg" id="zonePHAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zonePHLast${zoneNum}">Actualizado: --</div></div><div class="sensor-value" id="zonePH${zoneNum}">--</div><div class="sensor-unit">pH</div><div class="chart-wrap"><canvas id="zonePHChart${zoneNum}"></canvas></div>`;
 
                 const ecCard = document.createElement('div');
                 ecCard.className = 'sensor-card metric-neutral accent accent-cyan';
-                ecCard.innerHTML = `<div class="sensor-label">EC tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneECName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneECAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneECLast${zoneNum}">Último: --</div></div><div class="sensor-value" id="zoneEC${zoneNum}">--</div><div class="sensor-unit">mS/cm</div><div class="chart-wrap"><canvas id="zoneECChart${zoneNum}"></canvas></div>`;
+                ecCard.innerHTML = `<div class="sensor-label">EC tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneECName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneECAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneECLast${zoneNum}">Actualizado: --</div></div><div class="sensor-value" id="zoneEC${zoneNum}">--</div><div class="sensor-unit">mS/cm</div><div class="chart-wrap"><canvas id="zoneECChart${zoneNum}"></canvas></div>`;
 
                 const valveCard = document.createElement('div');
                 valveCard.className = 'sensor-card metric-neutral accent accent-red';
-                valveCard.innerHTML = `<div class="sensor-label">Válvula (zona)</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneValveName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneValveAvg${zoneNum}">ON: --</div></div><div class="sensor-meta-last" id="zoneValveLast${zoneNum}">Último: --</div></div><div class="sensor-value" id="zoneValve${zoneNum}">--</div><div class="valve-indicator"><div class="valve-dot" id="zoneValveDot${zoneNum}"></div><div class="valve-text" id="zoneValveText${zoneNum}">--</div></div><div class="chart-wrap"><canvas id="zoneValveChart${zoneNum}"></canvas></div>`;
+                valveCard.innerHTML = `<div class="sensor-label">Válvula (zona)</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneValveName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneValveAvg${zoneNum}">ON: --</div></div><div class="sensor-meta-last" id="zoneValveLast${zoneNum}">Actualizado: --</div></div><div class="sensor-value" id="zoneValve${zoneNum}">--</div><div class="valve-indicator"><div class="valve-dot" id="zoneValveDot${zoneNum}"></div><div class="valve-text" id="zoneValveText${zoneNum}">--</div></div><div class="chart-wrap"><canvas id="zoneValveChart${zoneNum}"></canvas></div>`;
 
                 const statusCard = document.createElement('div');
                 statusCard.className = 'sensor-card metric-neutral accent accent-cyan';
@@ -1518,6 +1591,8 @@
             initCollapsibles();
             updateZoneSubtitles();
             scheduleZoneChartsRebuild();
+
+            try { updateZonesToggleAllBtn(); } catch {}
 
             // Marcar OFF las zonas sin asignar desde el primer render
             for (let i = 0; i < 8; i++) {
@@ -2888,6 +2963,79 @@
             el.textContent = text;
         }
 
+        function sectionStorageKey(sec) {
+            try {
+                const h2 = sec ? sec.querySelector('h2') : null;
+                const title = (h2 && h2.textContent ? String(h2.textContent) : '').trim() || 'section';
+                return `ui:collapsed:${title}`;
+            } catch {
+                return null;
+            }
+        }
+
+        function setSectionCollapsed(sec, collapsed) {
+            if (!sec) return;
+            sec.classList.toggle('collapsed', !!collapsed);
+            const btn = sec.querySelector('.collapse-btn');
+            if (btn) btn.textContent = collapsed ? 'Mostrar' : 'Ocultar';
+            const key = sectionStorageKey(sec);
+            if (key) {
+                try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch {}
+            }
+        }
+
+        function areAllZoneSectionsCollapsed() {
+            for (let z = 1; z <= 8; z++) {
+                const sec = document.getElementById(`zoneSec${z}`);
+                if (!sec) continue;
+                if (!sec.classList.contains('collapsed')) return false;
+            }
+            return true;
+        }
+
+        function setAllZoneSectionsCollapsed(collapsed) {
+            for (let z = 1; z <= 8; z++) {
+                const sec = document.getElementById(`zoneSec${z}`);
+                if (!sec) continue;
+                setSectionCollapsed(sec, collapsed);
+            }
+            try { scheduleZoneChartsRebuild(); } catch {}
+        }
+
+        function updateZonesToggleAllBtn() {
+            const btn = document.getElementById('zonesToggleAllBtn');
+            if (!btn) return;
+            const allCollapsed = areAllZoneSectionsCollapsed();
+            btn.textContent = allCollapsed ? 'Mostrar todas las plantas' : 'Ocultar todas las plantas';
+        }
+
+        function getZoneControlsOpen(zoneNum) {
+            const z = Number(zoneNum);
+            if (!Number.isFinite(z)) return false;
+            const key = `ui:zoneControls:${z}`;
+            try {
+                const v = localStorage.getItem(key);
+                // Por defecto: oculto
+                return v === '1';
+            } catch {
+                return false;
+            }
+        }
+
+        function setZoneControlsOpen(zoneNum, open) {
+            const z = Number(zoneNum);
+            if (!Number.isFinite(z)) return;
+            const wrap = document.getElementById(`zoneControls${z}`);
+            if (wrap) wrap.classList.toggle('open', !!open);
+            const btn = document.getElementById(`zoneControlsBtn${z}`);
+            if (btn) {
+                btn.classList.toggle('active', !!open);
+                btn.textContent = open ? 'Ocultar controles' : 'Mostrar controles';
+            }
+            const key = `ui:zoneControls:${z}`;
+            try { localStorage.setItem(key, open ? '1' : '0'); } catch {}
+        }
+
         function updateZoneCardMeta(zoneNum) {
             const z = Number(zoneNum);
             if (!Number.isFinite(z) || z < 1 || z > 8) return;
@@ -2914,7 +3062,7 @@
                 if (d.idx == null) {
                     setText(nameElId, 'Sin asignar');
                     setText(avgElId, d.isValve ? 'ON: --' : 'Media: --');
-                    setText(lastElId, 'Último: --');
+                    setText(lastElId, 'Actualizado: --');
                     continue;
                 }
 
@@ -2924,7 +3072,7 @@
                 const entry = zoneMiniCharts.get(canvasId);
                 if (!entry || !entry.meta) {
                     setText(avgElId, d.isValve ? 'ON: --' : 'Media: --');
-                    setText(lastElId, 'Último: --');
+                    setText(lastElId, 'Actualizado: --');
                     continue;
                 }
 
@@ -2948,9 +3096,9 @@
                 if (Number.isFinite(lastMs) && lastMs > 0) {
                     // Siempre mostrar hora en tarjetas para verificar que el sensor “se mueve”
                     const txt = formatLastPointText('day', new Date(lastMs), entry.meta.lastLabel || '');
-                    setText(lastElId, `Último: ${txt}`);
+                    setText(lastElId, `Actualizado: ${txt}`);
                 } else {
-                    setText(lastElId, 'Último: --');
+                    setText(lastElId, 'Actualizado: --');
                 }
             }
         }
