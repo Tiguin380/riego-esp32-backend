@@ -3720,9 +3720,11 @@
 
                 const lastMs = Number(entry.meta.lastDateMs);
                 if (Number.isFinite(lastMs) && lastMs > 0) {
-                    // Siempre mostrar hora en tarjetas para verificar que el sensor “se mueve”
-                    const txt = formatLastPointText('day', new Date(lastMs), entry.meta.lastLabel || '');
-                    setMetaValue(lastElId, txt);
+                    const base = formatLastPointText('day', new Date(lastMs), entry.meta.lastLabel || '');
+                    const ageMin = Math.max(0, Math.round((nowAdjusted().getTime() - lastMs) / 60000));
+                    const stale = Number.isFinite(ageMin) && ageMin > 10;
+                    const txt = `${base}${Number.isFinite(ageMin) ? ` (hace ${ageMin} min)` : ''}${stale ? ' · DATOS ANTIGUOS' : ''}`;
+                    setMetaValue(lastElId, txt, { muted: stale });
                 } else {
                     setMetaValue(lastElId, '--', { muted: true });
                 }
@@ -4342,7 +4344,14 @@
                     return '';
                 })();
 
-                lastEl.textContent = lastMs != null ? formatLastPointText(mode, new Date(lastMs), fallbackLabel) : '--';
+                if (lastMs == null) {
+                    lastEl.textContent = '--';
+                } else {
+                    const base = formatLastPointText(mode, new Date(lastMs), fallbackLabel);
+                    const ageMin = Math.max(0, Math.round((nowAdjusted().getTime() - lastMs) / 60000));
+                    const stale = Number.isFinite(ageMin) && ageMin > 10;
+                    lastEl.textContent = `${base}${Number.isFinite(ageMin) ? ` (hace ${ageMin} min)` : ''}${stale ? ' · DATOS ANTIGUOS' : ''}`;
+                }
             }
         }
 
