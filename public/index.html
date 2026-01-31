@@ -4731,10 +4731,12 @@
 
                     humChart.options.scales.x.ticks.autoSkip = false;
                     valveChart.options.scales.x.ticks.autoSkip = false;
-                    humChart.options.scales.x.ticks.stepSize = (isSmallViewport() ? 60 : 120);
-                    valveChart.options.scales.x.ticks.stepSize = (isSmallViewport() ? 60 : 120);
-                    humChart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
-                    valveChart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
+                    // En móvil, en principales mostramos menos etiquetas para que no se amontonen.
+                    // (Mini-gráficas mantienen su propio stepSize.)
+                    humChart.options.scales.x.ticks.stepSize = 120;
+                    valveChart.options.scales.x.ticks.stepSize = 120;
+                    humChart.options.scales.x.ticks.maxTicksLimit = 13;
+                    valveChart.options.scales.x.ticks.maxTicksLimit = 13;
                     humChart.options.scales.x.ticks.includeBounds = true;
                     valveChart.options.scales.x.ticks.includeBounds = true;
                     humChart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
@@ -5518,10 +5520,11 @@
 
                     humChart.options.scales.x.ticks.autoSkip = false;
                     valveChart.options.scales.x.ticks.autoSkip = false;
-                    humChart.options.scales.x.ticks.stepSize = (isSmallViewport() ? 60 : 120);
-                    valveChart.options.scales.x.ticks.stepSize = (isSmallViewport() ? 60 : 120);
-                    humChart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
-                    valveChart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
+                    // En móvil, en principales mostramos menos etiquetas para que no se amontonen.
+                    humChart.options.scales.x.ticks.stepSize = 120;
+                    valveChart.options.scales.x.ticks.stepSize = 120;
+                    humChart.options.scales.x.ticks.maxTicksLimit = 13;
+                    valveChart.options.scales.x.ticks.maxTicksLimit = 13;
                     humChart.options.scales.x.ticks.includeBounds = true;
                     valveChart.options.scales.x.ticks.includeBounds = true;
                     humChart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
