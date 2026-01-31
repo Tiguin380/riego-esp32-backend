@@ -747,6 +747,10 @@
                         <button class="mini-btn tiny danger" id="cmpRemove3" type="button">Quitar</button>
                     </div>
                     <div class="control-row" style="margin: 10px 0 6px;">
+                        <label style="flex: 0 0 auto; min-width: 58px;">Planta:</label>
+                        <select id="cmpZoneSelect3" title="Filtrar por planta"></select>
+                    </div>
+                    <div class="control-row" style="margin: 6px 0 6px;">
                         <label style="flex: 0 0 auto; min-width: 58px;">Sensor:</label>
                         <select id="cmpChannelSelect3" title="Seleccionar canal para comparar"></select>
                     </div>
@@ -761,6 +765,10 @@
                         <button class="mini-btn tiny danger" id="cmpRemove4" type="button">Quitar</button>
                     </div>
                     <div class="control-row" style="margin: 10px 0 6px;">
+                        <label style="flex: 0 0 auto; min-width: 58px;">Planta:</label>
+                        <select id="cmpZoneSelect4" title="Filtrar por planta"></select>
+                    </div>
+                    <div class="control-row" style="margin: 6px 0 6px;">
                         <label style="flex: 0 0 auto; min-width: 58px;">Sensor:</label>
                         <select id="cmpChannelSelect4" title="Seleccionar canal para comparar"></select>
                     </div>
@@ -2338,6 +2346,8 @@
 
                 const humSel = document.getElementById('humChannelSelect');
                 const valveSel = document.getElementById('valveChannelSelect');
+                const cmpZoneSel3 = document.getElementById('cmpZoneSelect3');
+                const cmpZoneSel4 = document.getElementById('cmpZoneSelect4');
                 const cmpSel3 = document.getElementById('cmpChannelSelect3');
                 const cmpSel4 = document.getElementById('cmpChannelSelect4');
                 humSel.innerHTML = '';
@@ -2365,14 +2375,45 @@
                 humSel.onchange = () => { humChannelId = humSel.value || null; scheduleChartsRebuild(); };
                 valveSel.onchange = () => { valveChannelId = valveSel.value || null; scheduleChartsRebuild(); };
 
-                // Comparador (máx 4): poblar y restaurar selección
-                populateCompareSelect(cmpSel3);
-                populateCompareSelect(cmpSel4);
+                // Comparador (máx 4): poblar y restaurar selección + filtro por Planta
+                populateCompareZoneSelect(cmpZoneSel3);
+                populateCompareZoneSelect(cmpZoneSel4);
+
+                cmpZone3 = getSavedCmpZone(3);
+                cmpZone4 = getSavedCmpZone(4);
+                if (cmpZoneSel3) cmpZoneSel3.value = cmpZone3 == null ? '' : String(cmpZone3);
+                if (cmpZoneSel4) cmpZoneSel4.value = cmpZone4 == null ? '' : String(cmpZone4);
+
+                populateCompareSelect(cmpSel3, cmpZone3);
+                populateCompareSelect(cmpSel4, cmpZone4);
 
                 cmpChannelId3 = getSavedCmpChannel(3) || null;
                 cmpChannelId4 = getSavedCmpChannel(4) || null;
+
+                if (cmpSel3 && cmpChannelId3 && !Array.from(cmpSel3.options).some(o => o.value === cmpChannelId3)) cmpChannelId3 = null;
+                if (cmpSel4 && cmpChannelId4 && !Array.from(cmpSel4.options).some(o => o.value === cmpChannelId4)) cmpChannelId4 = null;
+
                 if (cmpSel3) cmpSel3.value = cmpChannelId3 || '';
                 if (cmpSel4) cmpSel4.value = cmpChannelId4 || '';
+
+                if (cmpZoneSel3) cmpZoneSel3.onchange = () => {
+                    const z = Number(cmpZoneSel3.value);
+                    cmpZone3 = Number.isFinite(z) && z >= 1 && z <= 8 ? z : null;
+                    saveCmpZone(3, cmpZone3);
+                    populateCompareSelect(cmpSel3, cmpZone3);
+                    cmpChannelId3 = (cmpSel3 && cmpSel3.value) ? cmpSel3.value : null;
+                    saveCmpChannel(3, cmpChannelId3 || '');
+                    scheduleChartsRebuild();
+                };
+                if (cmpZoneSel4) cmpZoneSel4.onchange = () => {
+                    const z = Number(cmpZoneSel4.value);
+                    cmpZone4 = Number.isFinite(z) && z >= 1 && z <= 8 ? z : null;
+                    saveCmpZone(4, cmpZone4);
+                    populateCompareSelect(cmpSel4, cmpZone4);
+                    cmpChannelId4 = (cmpSel4 && cmpSel4.value) ? cmpSel4.value : null;
+                    saveCmpChannel(4, cmpChannelId4 || '');
+                    scheduleChartsRebuild();
+                };
 
                 if (cmpSel3) cmpSel3.onchange = () => { cmpChannelId3 = cmpSel3.value || null; saveCmpChannel(3, cmpChannelId3 || ''); scheduleChartsRebuild(); };
                 if (cmpSel4) cmpSel4.onchange = () => { cmpChannelId4 = cmpSel4.value || null; saveCmpChannel(4, cmpChannelId4 || ''); scheduleChartsRebuild(); };
@@ -2971,6 +3012,8 @@
         // --- Comparador (2 gráficas extra opcionales: 3 y 4) ---
         let cmpChannelId3 = null;
         let cmpChannelId4 = null;
+        let cmpZone3 = null;
+        let cmpZone4 = null;
 
         const cmp3Labels = [];
         const cmp3Series = [];
@@ -3124,6 +3167,7 @@
         }
 
         function cmpStorageKey(slot) { return `ui:cmp:${deviceCode}:${slot}`; }
+        function cmpZoneKey(slot) { return `ui:cmpZone:${deviceCode}:${slot}`; }
         function cmpVisibleKey(slot) { return `ui:cmpVisible:${deviceCode}:${slot}`; }
         function getCmpVisible(slot) {
             try { return localStorage.getItem(cmpVisibleKey(slot)) === '1'; } catch { return false; }
@@ -3137,6 +3181,18 @@
         function saveCmpChannel(slot, id) {
             try { localStorage.setItem(cmpStorageKey(slot), id || ''); } catch {}
         }
+        function getSavedCmpZone(slot) {
+            try {
+                const s = localStorage.getItem(cmpZoneKey(slot)) || '';
+                const z = Number(s);
+                return Number.isFinite(z) && z >= 1 && z <= 8 ? z : null;
+            } catch {
+                return null;
+            }
+        }
+        function saveCmpZone(slot, zoneNum) {
+            try { localStorage.setItem(cmpZoneKey(slot), zoneNum == null ? '' : String(zoneNum)); } catch {}
+        }
 
         function showCmpBox(slot, show) {
             const box = document.getElementById(`cmpBox${slot}`);
@@ -3148,15 +3204,72 @@
             } catch {}
         }
 
-        function populateCompareSelect(sel) {
+        function populateCompareZoneSelect(sel) {
+            if (!sel) return;
+            sel.innerHTML = '';
+            const all = document.createElement('option');
+            all.value = '';
+            all.textContent = 'Todas';
+            sel.appendChild(all);
+            for (let z = 1; z <= 8; z++) {
+                const opt = document.createElement('option');
+                opt.value = String(z);
+                opt.textContent = `Planta ${z}`;
+                sel.appendChild(opt);
+            }
+        }
+
+        function getZoneAssignedChannelIds(zoneNum) {
+            const z = Number(zoneNum);
+            if (!Number.isFinite(z) || z < 1 || z > 8) return null;
+            if (!Array.isArray(zonesState) || !zonesState[z - 1]) return null;
+
+            const zone = zonesState[z - 1];
+            const defs = [
+                { kind: 'soil_sensor', prop: 'soil_channel_index' },
+                { kind: 'valve', prop: 'valve_channel_index' },
+                { kind: 'humidity_air', prop: 'humidity_air_channel_index' },
+                { kind: 'temperature_air', prop: 'temperature_air_channel_index' },
+                { kind: 'temperature_soil', prop: 'temperature_soil_channel_index' },
+                { kind: 'ph_soil', prop: 'ph_soil_channel_index' },
+                { kind: 'ec_soil', prop: 'ec_soil_channel_index' }
+            ];
+
+            const ids = [];
+            for (const d of defs) {
+                const idx = zone?.[d.prop];
+                const id = getChannelIdByKindIndex(d.kind, idx);
+                if (id && !ids.includes(id)) ids.push(id);
+            }
+            return ids;
+        }
+
+        function populateCompareSelect(sel, zoneNum = null) {
             if (!sel) return;
             const allowed = new Set(['soil_sensor', 'valve', 'humidity_air', 'temperature_air', 'temperature_soil', 'ph_soil', 'ec_soil']);
-            const list = (channels || []).filter(c => c && allowed.has(String(c.kind || '').toLowerCase()));
+            let list = (channels || []).filter(c => c && allowed.has(String(c.kind || '').toLowerCase()));
+
+            const zoneIds = getZoneAssignedChannelIds(zoneNum);
+            if (Array.isArray(zoneIds)) {
+                if (zoneIds.length === 0) list = [];
+                else list = list.filter(c => zoneIds.includes(c.id));
+            }
+
             sel.innerHTML = '';
             const empty = document.createElement('option');
             empty.value = '';
             empty.textContent = '—';
             sel.appendChild(empty);
+
+            if (!list.length && Array.isArray(zoneIds)) {
+                const none = document.createElement('option');
+                none.value = '';
+                none.textContent = 'Sin sensores asignados a esta planta';
+                none.disabled = true;
+                sel.appendChild(none);
+                return;
+            }
+
             for (const c of list) {
                 const opt = document.createElement('option');
                 opt.value = c.id;
