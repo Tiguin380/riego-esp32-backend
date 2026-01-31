@@ -57,7 +57,17 @@
         .metric-neutral { border-color: rgba(255,255,255,0.08); }
 
         /* Colores por tarjeta (accent): aplica a tarjetas sin “color” propio */
-        .sensor-card.accent { position: relative; border-color: rgba(255,255,255,0.10); box-shadow: 0 12px 28px rgba(0,0,0,0.25), inset 0 0 0 1px var(--accent-soft); }
+        .sensor-card.accent { position: relative; overflow: hidden; border-color: rgba(255,255,255,0.10); box-shadow: 0 12px 28px rgba(0,0,0,0.25), inset 0 0 0 1px var(--accent-soft); }
+        .sensor-card.accent::before {
+            content: "";
+            position: absolute;
+            inset: -140px -180px auto auto;
+            width: 280px;
+            height: 280px;
+            background: radial-gradient(circle, var(--accent-soft), transparent 62%);
+            transform: rotate(18deg);
+            pointer-events: none;
+        }
         .sensor-card.accent::after {
             content: "";
             position: absolute;
@@ -84,16 +94,25 @@
             margin-top: 10px;
             padding: 10px 12px;
             border-radius: 10px;
-            border: 1px solid rgba(34,197,94,0.22);
-            background: radial-gradient(120% 140% at 10% 0%, rgba(34,197,94,0.10), rgba(0,0,0,0.18));
+            border: 1px solid rgba(255,255,255,0.12);
+            background: radial-gradient(120% 140% at 10% 0%, var(--accent-soft), rgba(0,0,0,0.18));
             box-shadow: 0 14px 30px rgba(0,0,0,0.20), inset 0 0 0 1px rgba(255,255,255,0.04);
-            color: rgba(187,247,208,0.95);
+            color: rgba(233,238,247,0.92);
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
             font-size: 12px;
             line-height: 1.35;
             white-space: pre-wrap;
             word-break: break-word;
         }
+
+        .oled-panel .oled-k { color: rgba(148,163,184,0.98); font-weight: 900; }
+        .oled-panel .oled-v { color: rgba(233,238,247,0.92); font-weight: 900; }
+        .oled-panel .oled-v-hum { color: #22c55e; text-shadow: 0 0 12px rgba(34,197,94,0.18); }
+        .oled-panel .oled-v-thr { color: #fbbf24; text-shadow: 0 0 12px rgba(251,191,36,0.18); }
+        .oled-panel .oled-v-valve { color: #fb7185; text-shadow: 0 0 12px rgba(251,113,133,0.18); }
+        .oled-panel .oled-v-v { color: #a78bfa; text-shadow: 0 0 12px rgba(167,139,250,0.18); }
+        .oled-panel .oled-v-wifi { color: #22d3ee; text-shadow: 0 0 12px rgba(34,211,238,0.18); }
+        .oled-panel .oled-v-ip { color: #60a5fa; text-shadow: 0 0 12px rgba(96,165,250,0.18); }
 
         /* Chips (para que las tarjetas se vean más “llenas”) */
         .chips { display:flex; flex-wrap:wrap; gap: 8px; margin-top: 10px; justify-content:center; }
@@ -122,6 +141,9 @@
         #connectedSection .sensor-value { font-size: clamp(22px, 5vw, 34px); }
         #connectedSection .sensor-value.small { font-size: 16px; }
         #connectedSection #uptime { white-space: pre-line; line-height: 1.25; }
+
+        /* Neon más marcado en valores pequeños del bloque conectado (IP / sensores-válvulas) */
+        #connectedSection .sensor-card.accent .sensor-value.small { color: var(--accent); text-shadow: 0 0 16px var(--accent-soft); }
 
         /* Zonas / Plantas */
         .zone-off { opacity: 0.62; }
@@ -205,6 +227,10 @@
         .summary .k { color: #33cc33; font-size: 11px; text-transform: uppercase; }
         .summary .v { color: #ddd; font-weight: bold; }
 
+        /* En tarjetas con acento, que los KPIs hereden el color */
+        .sensor-card.accent .summary .k { color: var(--accent); }
+        .sensor-card.accent .summary .v { color: #e9eef7; }
+
         .hidden { display: none; }
 
         /* Navegación Cuenta/Dispositivos */
@@ -233,7 +259,31 @@
         /* Selector de canales (más moderno) */
         .channel-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0 6px; }
         @media (max-width: 900px) { .channel-cards { grid-template-columns: 1fr; } }
-        .channel-card { background: rgba(15,52,96,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px; min-width: 0; }
+        .channel-card { --accent: #60a5fa; --accent-soft: rgba(96,165,250,0.18); background: rgba(15,52,96,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px; min-width: 0; }
+        .channel-card.accent { position: relative; overflow: hidden; border-color: rgba(255,255,255,0.10); box-shadow: 0 12px 28px rgba(0,0,0,0.22), inset 0 0 0 1px var(--accent-soft); }
+        .channel-card.accent::before {
+            content: "";
+            position: absolute;
+            inset: -120px -160px auto auto;
+            width: 260px;
+            height: 260px;
+            background: radial-gradient(circle, var(--accent-soft), transparent 62%);
+            transform: rotate(18deg);
+            pointer-events: none;
+        }
+        .channel-card.accent::after {
+            content: "";
+            position: absolute;
+            left: 12px;
+            right: 12px;
+            top: 10px;
+            height: 3px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0.60;
+            pointer-events: none;
+        }
+        .channel-card.accent .sensor-label { opacity: 0.96; }
         .channel-title { display:flex; align-items:center; justify-content:space-between; gap: 10px; margin-bottom: 8px; }
         .channel-title .sensor-label { margin-bottom: 0; }
         .channel-actions { display:flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
@@ -499,7 +549,7 @@
             </div>
 
             <div class="channel-cards">
-                <div class="channel-card">
+                <div class="channel-card accent accent-green">
                     <div class="channel-title">
                         <div class="sensor-label">Sensor de humedad (gráfica)</div>
                     </div>
@@ -509,7 +559,7 @@
                         <button class="mini-btn danger" id="btnDeleteHum" type="button" title="Eliminar sensores añadidos">Eliminar</button>
                     </div>
                 </div>
-                <div class="channel-card">
+                <div class="channel-card accent accent-red">
                     <div class="channel-title">
                         <div class="sensor-label">Válvula (gráfica)</div>
                     </div>
@@ -540,13 +590,13 @@
                 </div>
             </div>
             <div class="charts-grid">
-                <div class="sensor-card chart-box">
+                <div class="sensor-card chart-box accent accent-green">
                     <div class="sensor-label">Humedad del suelo (%)</div>
                     <div class="chart-wrap">
                         <canvas id="humChart"></canvas>
                     </div>
                 </div>
-                <div class="sensor-card chart-box">
+                <div class="sensor-card chart-box accent accent-red">
                     <div class="sensor-label">Válvula (ON/OFF) + tiempo activa</div>
                     <div style="display:flex; justify-content:space-between; align-items:center; gap: 10px; margin: 8px 0 6px;">
                         <div class="valve-indicator" style="margin-top: 0; justify-content:flex-start;">
@@ -993,15 +1043,15 @@
                 grid.className = 'sensor-grid';
 
                 const humCard = document.createElement('div');
-                humCard.className = 'sensor-card metric-neutral';
+                humCard.className = 'sensor-card metric-neutral accent accent-green';
                 humCard.innerHTML = `<div class="sensor-label">Humedad (zona)</div><div class="sensor-value" id="zoneHum${zoneNum}">--</div><div class="sensor-unit">%</div>`;
 
                 const valveCard = document.createElement('div');
-                valveCard.className = 'sensor-card metric-neutral';
+                valveCard.className = 'sensor-card metric-neutral accent accent-red';
                 valveCard.innerHTML = `<div class="sensor-label">Válvula (zona)</div><div class="sensor-value" id="zoneValve${zoneNum}">--</div><div class="valve-indicator"><div class="valve-dot" id="zoneValveDot${zoneNum}"></div><div class="valve-text" id="zoneValveText${zoneNum}">--</div></div>`;
 
                 const statusCard = document.createElement('div');
-                statusCard.className = 'sensor-card metric-neutral';
+                statusCard.className = 'sensor-card metric-neutral accent accent-cyan';
                 statusCard.innerHTML = `<div class="sensor-label">Estado</div><div class="sensor-value" id="zoneState${zoneNum}">--</div><div class="sensor-unit zone-mini" id="zoneAge${zoneNum}"></div>`;
 
                 grid.appendChild(humCard);
@@ -2031,11 +2081,13 @@
                     const timeTxt = `${p.h}:${p.mi}:${p.s}`;
                     const ip = (data && data.ip != null) ? String(data.ip).trim() : '';
 
-                    panel.textContent =
-                        `OLED ${timeTxt}\n` +
-                        `PL1 HUM ${humTxt}  UMBRAL ${thrTxt}\n` +
-                        `VAL ${valveTxt}   V ${vTxt}\n` +
-                        `WiFi ${rssiTxt}${ssid ? ` ${ssid.slice(0, 10)}` : ''}${ip ? `  IP ${ip}` : ''}`;
+                    const ssidShort = ssid ? ssid.slice(0, 10) : '';
+                    const ipShort = ip ? ip : '';
+                    panel.innerHTML =
+                        `<span class="oled-k">OLED</span> <span class="oled-v">${escapeHtml(timeTxt)}</span><br>` +
+                        `<span class="oled-k">PL1</span> <span class="oled-k">HUM</span> <span class="oled-v oled-v-hum">${escapeHtml(humTxt)}</span>  <span class="oled-k">UMBRAL</span> <span class="oled-v oled-v-thr">${escapeHtml(thrTxt)}</span><br>` +
+                        `<span class="oled-k">VAL</span> <span class="oled-v oled-v-valve">${escapeHtml(valveTxt)}</span>   <span class="oled-k">V</span> <span class="oled-v oled-v-v">${escapeHtml(vTxt)}</span><br>` +
+                        `<span class="oled-k">WiFi</span> <span class="oled-v oled-v-wifi">${escapeHtml(rssiTxt)}${ssidShort ? ` ${escapeHtml(ssidShort)}` : ''}</span>${ipShort ? `  <span class="oled-k">IP</span> <span class="oled-v oled-v-ip">${escapeHtml(ipShort)}</span>` : ''}`;
                 }
             } catch {
                 const panel = document.getElementById('oledPanel');
@@ -2150,8 +2202,8 @@
                 datasets: [{
                     label: 'Humedad (%)',
                     data: humSeries,
-                    borderColor: '#4CAF50',
-                    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.15)',
                     fill: true,
                     tension: 0.25,
                     pointRadius: 0
@@ -2176,8 +2228,8 @@
                 datasets: [{
                     label: 'Válvula (0/1)',
                     data: valveSeries,
-                    borderColor: '#33cc33',
-                    backgroundColor: 'rgba(51, 204, 51, 0.12)',
+                    borderColor: '#fb7185',
+                    backgroundColor: 'rgba(251, 113, 133, 0.12)',
                     fill: true,
                     stepped: true,
                     tension: 0,
