@@ -87,6 +87,9 @@
         .accent-indigo { --accent:#818cf8; --accent-soft: rgba(129,140,248,0.18); }
         .accent-purple { --accent:#a78bfa; --accent-soft: rgba(167,139,250,0.18); }
         .accent-amber { --accent:#fbbf24; --accent-soft: rgba(251,191,36,0.18); }
+        .accent-yellow { --accent:#fbbf24; --accent-soft: rgba(251,191,36,0.18); }
+        .accent-orange { --accent:#fb923c; --accent-soft: rgba(251,146,60,0.18); }
+        .accent-pink { --accent:#f472b6; --accent-soft: rgba(244,114,182,0.18); }
         .accent-red { --accent:#fb7185; --accent-soft: rgba(251,113,133,0.18); }
 
         /* Mini “pantalla OLED” dentro de tarjeta */
@@ -215,6 +218,43 @@
         .control-row input:focus, .control-row select:focus, .control-row textarea:focus { outline: 2px solid rgba(76,175,80,0.35); outline-offset: 2px; }
         .control-row.textarea-row { align-items: flex-start; }
         .control-row.textarea-row label { padding-top: 10px; }
+
+        .cmp-controls {
+            margin: 10px 0 8px;
+            padding: 10px 12px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: linear-gradient(180deg, rgba(15,52,96,0.72), rgba(12,35,70,0.55));
+            box-shadow: 0 14px 30px rgba(0,0,0,0.20), inset 0 0 0 1px rgba(255,255,255,0.04);
+        }
+        .cmp-controls .control-row { margin-bottom: 0; }
+        .cmp-controls label { color: rgba(233,238,247,0.95); font-weight: 900; letter-spacing: .02em; }
+        .cmp-controls .cmp-select {
+            flex: 1;
+            width: 100%;
+            padding: 12px 44px 12px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: linear-gradient(180deg, rgba(2,12,27,0.25), rgba(15,52,96,0.65));
+            color: rgba(255,255,255,0.96);
+            font-weight: 800;
+            letter-spacing: .01em;
+            box-shadow: 0 12px 26px rgba(0,0,0,0.22);
+            -webkit-appearance: none;
+            appearance: none;
+            background-image:
+                linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.80) 50%),
+                linear-gradient(135deg, rgba(255,255,255,0.80) 50%, transparent 50%),
+                linear-gradient(to right, rgba(255,255,255,0.10), rgba(255,255,255,0.10));
+            background-position:
+                calc(100% - 18px) calc(50% - 4px),
+                calc(100% - 12px) calc(50% - 4px),
+                calc(100% - 36px) 50%;
+            background-size: 6px 6px, 6px 6px, 1px 18px;
+            background-repeat: no-repeat;
+        }
+        .cmp-controls .cmp-select:hover { filter: brightness(1.05); }
+        .cmp-controls .cmp-select:focus { outline: 2px solid rgba(56,189,248,0.40); outline-offset: 2px; }
         .control-row input[type="range"] { -webkit-appearance: none; appearance: none; height: 8px; width: 100%; background: transparent; }
         .control-row input[type="range"]:focus { outline: none; }
         .control-row input[type="range"]::-webkit-slider-runnable-track { height: 8px; border-radius: 999px; background: linear-gradient(90deg, rgba(51,204,51,0.65), rgba(51,204,51,0.20)); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10); }
@@ -662,7 +702,7 @@
         </div>
 
         <div class="section">
-            <h2> GRÁFICAS EN TIEMPO REAL</h2>
+            <h2> COMPARADOR DE GRÁFICAS</h2>
             <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; flex-wrap: wrap; margin: 4px 0 8px;">
                 <div>
                     <div class="sensor-label">FECHA / HORA </div>
@@ -701,40 +741,41 @@
                     </div>
                 </div>
             </div>
-            <div class="summary">
-                <div>
-                    <div class="k">Humedad Media</div>
-                    <div class="v" id="avgHumidity">--</div>
-                </div>
-                <div>
-                    <div class="k">Último punto</div>
-                    <div class="v" id="lastPoint">--</div>
-                </div>
-                <div>
-                    <div class="k">Tiempo Válvula ON</div>
-                    <div class="v" id="totalValveOn">--</div>
-                </div>
-                <!-- Mantener estos IDs para que el JS pueda actualizar el periodo, pero sin mostrarlo en la UI -->
-                <div class="hidden">
-                    <div class="k" id="periodLabel">Periodo</div>
-                    <div class="v" id="periodValue">--</div>
-                </div>
+            <!-- Mantener estos IDs para que el JS pueda actualizar el periodo, pero sin mostrarlo en la UI -->
+            <div class="hidden">
+                <div class="k" id="periodLabel">Periodo</div>
+                <div class="v" id="periodValue">--</div>
             </div>
             <div class="charts-grid">
                 <div class="sensor-card chart-box accent accent-green">
                     <div class="sensor-label">Humedad del suelo (%)</div>
+                    <div class="sensor-meta">
+                        <div class="sensor-meta-top">
+                            <div class="sensor-meta-avg" id="avgHumidity"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div>
+                            <div class="sensor-meta-last" id="lastPoint"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div>
+                        </div>
+                    </div>
                     <div class="chart-wrap">
                         <canvas id="humChart"></canvas>
                     </div>
                 </div>
                 <div class="sensor-card chart-box accent accent-red">
                     <div class="sensor-label">Válvula (ON/OFF) + tiempo activa</div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; gap: 10px; margin: 8px 0 6px;">
+                    <div class="sensor-meta" style="margin-top: 6px;">
+                        <div class="sensor-meta-top">
+                            <div class="valve-indicator" style="margin-top: 0; justify-content:flex-start;">
+                                <div class="valve-dot" id="valveDotChart"></div>
+                                <div class="valve-text" id="valveTextChart">--</div>
+                            </div>
+                            <div class="sensor-meta-avg" id="valveOnTime"><span class="meta-label">Tiempo ON:</span> <span class="meta-value" data-role="value">--</span></div>
+                        </div>
+                    </div>
+                    <div style="display:none; justify-content:space-between; align-items:center; gap: 10px; margin: 8px 0 6px;">
                         <div class="valve-indicator" style="margin-top: 0; justify-content:flex-start;">
                             <div class="valve-dot" id="valveDotChart"></div>
                             <div class="valve-text" id="valveTextChart">--</div>
                         </div>
-                        <div class="sensor-unit" id="valveOnTime">Tiempo ON: --</div>
+                        <div class="sensor-unit">Tiempo ON: --</div>
                     </div>
                     <div class="chart-wrap">
                         <canvas id="valveChart"></canvas>
@@ -746,13 +787,15 @@
                         <div class="sensor-label" id="cmpTitle3">Comparación 3</div>
                         <button class="mini-btn tiny danger" id="cmpRemove3" type="button">Quitar</button>
                     </div>
-                    <div class="control-row" style="margin: 10px 0 6px;">
-                        <label style="flex: 0 0 auto; min-width: 58px;">Planta:</label>
-                        <select id="cmpZoneSelect3" title="Filtrar por planta"></select>
-                    </div>
-                    <div class="control-row" style="margin: 6px 0 6px;">
-                        <label style="flex: 0 0 auto; min-width: 58px;">Sensor:</label>
-                        <select id="cmpChannelSelect3" title="Seleccionar canal para comparar"></select>
+                    <div class="cmp-controls">
+                        <div class="control-row" style="margin: 0 0 8px;">
+                            <label style="flex: 0 0 auto; min-width: 64px;">Planta:</label>
+                            <select class="cmp-select" id="cmpZoneSelect3" title="Filtrar por planta"></select>
+                        </div>
+                        <div class="control-row" style="margin: 0;">
+                            <label style="flex: 0 0 auto; min-width: 64px;">Sensor:</label>
+                            <select class="cmp-select" id="cmpChannelSelect3" title="Seleccionar canal para comparar"></select>
+                        </div>
                     </div>
                     <div class="chart-wrap">
                         <canvas id="cmpChart3"></canvas>
@@ -764,22 +807,104 @@
                         <div class="sensor-label" id="cmpTitle4">Comparación 4</div>
                         <button class="mini-btn tiny danger" id="cmpRemove4" type="button">Quitar</button>
                     </div>
-                    <div class="control-row" style="margin: 10px 0 6px;">
-                        <label style="flex: 0 0 auto; min-width: 58px;">Planta:</label>
-                        <select id="cmpZoneSelect4" title="Filtrar por planta"></select>
-                    </div>
-                    <div class="control-row" style="margin: 6px 0 6px;">
-                        <label style="flex: 0 0 auto; min-width: 58px;">Sensor:</label>
-                        <select id="cmpChannelSelect4" title="Seleccionar canal para comparar"></select>
+                    <div class="cmp-controls">
+                        <div class="control-row" style="margin: 0 0 8px;">
+                            <label style="flex: 0 0 auto; min-width: 64px;">Planta:</label>
+                            <select class="cmp-select" id="cmpZoneSelect4" title="Filtrar por planta"></select>
+                        </div>
+                        <div class="control-row" style="margin: 0;">
+                            <label style="flex: 0 0 auto; min-width: 64px;">Sensor:</label>
+                            <select class="cmp-select" id="cmpChannelSelect4" title="Seleccionar canal para comparar"></select>
+                        </div>
                     </div>
                     <div class="chart-wrap">
                         <canvas id="cmpChart4"></canvas>
                     </div>
                 </div>
+
+                <div class="sensor-card chart-box accent accent-cyan" id="cmpBox5" style="display:none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap: 10px;">
+                        <div class="sensor-label" id="cmpTitle5">Comparación 5</div>
+                        <button class="mini-btn tiny danger" id="cmpRemove5" type="button">Quitar</button>
+                    </div>
+                    <div class="cmp-controls">
+                        <div class="control-row" style="margin: 0 0 8px;">
+                            <label style="flex: 0 0 auto; min-width: 64px;">Planta:</label>
+                            <select class="cmp-select" id="cmpZoneSelect5" title="Filtrar por planta"></select>
+                        </div>
+                        <div class="control-row" style="margin: 0;">
+                            <label style="flex: 0 0 auto; min-width: 64px;">Sensor:</label>
+                            <select class="cmp-select" id="cmpChannelSelect5" title="Seleccionar canal para comparar"></select>
+                        </div>
+                    </div>
+                    <div class="chart-wrap">
+                        <canvas id="cmpChart5"></canvas>
+                    </div>
+                </div>
+
+                <div class="sensor-card chart-box accent accent-yellow" id="cmpBox6" style="display:none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap: 10px;">
+                        <div class="sensor-label" id="cmpTitle6">Comparación 6</div>
+                        <button class="mini-btn tiny danger" id="cmpRemove6" type="button">Quitar</button>
+                    </div>
+                    <div class="cmp-controls">
+                        <div class="control-row" style="margin: 0 0 8px;">
+                            <label style="flex: 0 0 auto; min-width: 64px;">Planta:</label>
+                            <select class="cmp-select" id="cmpZoneSelect6" title="Filtrar por planta"></select>
+                        </div>
+                        <div class="control-row" style="margin: 0;">
+                            <label style="flex: 0 0 auto; min-width: 64px;">Sensor:</label>
+                            <select class="cmp-select" id="cmpChannelSelect6" title="Seleccionar canal para comparar"></select>
+                        </div>
+                    </div>
+                    <div class="chart-wrap">
+                        <canvas id="cmpChart6"></canvas>
+                    </div>
+                </div>
+
+                <div class="sensor-card chart-box accent accent-pink" id="cmpBox7" style="display:none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap: 10px;">
+                        <div class="sensor-label" id="cmpTitle7">Comparación 7</div>
+                        <button class="mini-btn tiny danger" id="cmpRemove7" type="button">Quitar</button>
+                    </div>
+                    <div class="cmp-controls">
+                        <div class="control-row" style="margin: 0 0 8px;">
+                            <label style="flex: 0 0 auto; min-width: 64px;">Planta:</label>
+                            <select class="cmp-select" id="cmpZoneSelect7" title="Filtrar por planta"></select>
+                        </div>
+                        <div class="control-row" style="margin: 0;">
+                            <label style="flex: 0 0 auto; min-width: 64px;">Sensor:</label>
+                            <select class="cmp-select" id="cmpChannelSelect7" title="Seleccionar canal para comparar"></select>
+                        </div>
+                    </div>
+                    <div class="chart-wrap">
+                        <canvas id="cmpChart7"></canvas>
+                    </div>
+                </div>
+
+                <div class="sensor-card chart-box accent accent-orange" id="cmpBox8" style="display:none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap: 10px;">
+                        <div class="sensor-label" id="cmpTitle8">Comparación 8</div>
+                        <button class="mini-btn tiny danger" id="cmpRemove8" type="button">Quitar</button>
+                    </div>
+                    <div class="cmp-controls">
+                        <div class="control-row" style="margin: 0 0 8px;">
+                            <label style="flex: 0 0 auto; min-width: 64px;">Planta:</label>
+                            <select class="cmp-select" id="cmpZoneSelect8" title="Filtrar por planta"></select>
+                        </div>
+                        <div class="control-row" style="margin: 0;">
+                            <label style="flex: 0 0 auto; min-width: 64px;">Sensor:</label>
+                            <select class="cmp-select" id="cmpChannelSelect8" title="Seleccionar canal para comparar"></select>
+                        </div>
+                    </div>
+                    <div class="chart-wrap">
+                        <canvas id="cmpChart8"></canvas>
+                    </div>
+                </div>
             </div>
 
             <div style="display:flex; justify-content:flex-end; margin-top: 10px;">
-                <button class="mini-btn zones-global-btn" id="cmpAddBtn" type="button">Añadir gráfica (máx 4)</button>
+                <button class="mini-btn zones-global-btn" id="cmpAddBtn" type="button">Añadir gráfica (máx 8)</button>
             </div>
         </div>
 
@@ -2346,10 +2471,6 @@
 
                 const humSel = document.getElementById('humChannelSelect');
                 const valveSel = document.getElementById('valveChannelSelect');
-                const cmpZoneSel3 = document.getElementById('cmpZoneSelect3');
-                const cmpZoneSel4 = document.getElementById('cmpZoneSelect4');
-                const cmpSel3 = document.getElementById('cmpChannelSelect3');
-                const cmpSel4 = document.getElementById('cmpChannelSelect4');
                 humSel.innerHTML = '';
                 valveSel.innerHTML = '';
 
@@ -2375,51 +2496,42 @@
                 humSel.onchange = () => { humChannelId = humSel.value || null; scheduleChartsRebuild(); };
                 valveSel.onchange = () => { valveChannelId = valveSel.value || null; scheduleChartsRebuild(); };
 
-                // Comparador (máx 4): poblar y restaurar selección + filtro por Planta
-                populateCompareZoneSelect(cmpZoneSel3);
-                populateCompareZoneSelect(cmpZoneSel4);
+                // Comparador (máx 8 en la sección): poblar y restaurar selección + filtro por Planta
+                for (const slot of CMP_SLOTS) {
+                    const zoneSel = document.getElementById(`cmpZoneSelect${slot}`);
+                    const chanSel = document.getElementById(`cmpChannelSelect${slot}`);
 
-                cmpZone3 = getSavedCmpZone(3);
-                cmpZone4 = getSavedCmpZone(4);
-                if (cmpZoneSel3) cmpZoneSel3.value = cmpZone3 == null ? '' : String(cmpZone3);
-                if (cmpZoneSel4) cmpZoneSel4.value = cmpZone4 == null ? '' : String(cmpZone4);
+                    populateCompareZoneSelect(zoneSel);
 
-                populateCompareSelect(cmpSel3, cmpZone3);
-                populateCompareSelect(cmpSel4, cmpZone4);
+                    const savedZone = getSavedCmpZone(slot);
+                    cmpZoneBySlot[slot] = savedZone;
+                    if (zoneSel) zoneSel.value = savedZone == null ? '' : String(savedZone);
 
-                cmpChannelId3 = getSavedCmpChannel(3) || null;
-                cmpChannelId4 = getSavedCmpChannel(4) || null;
+                    populateCompareSelect(chanSel, savedZone);
 
-                if (cmpSel3 && cmpChannelId3 && !Array.from(cmpSel3.options).some(o => o.value === cmpChannelId3)) cmpChannelId3 = null;
-                if (cmpSel4 && cmpChannelId4 && !Array.from(cmpSel4.options).some(o => o.value === cmpChannelId4)) cmpChannelId4 = null;
+                    let savedChan = getSavedCmpChannel(slot) || null;
+                    if (chanSel && savedChan && !Array.from(chanSel.options).some(o => o.value === savedChan)) savedChan = null;
+                    cmpChannelIdBySlot[slot] = savedChan;
+                    if (chanSel) chanSel.value = savedChan || '';
 
-                if (cmpSel3) cmpSel3.value = cmpChannelId3 || '';
-                if (cmpSel4) cmpSel4.value = cmpChannelId4 || '';
+                    if (zoneSel) zoneSel.onchange = () => {
+                        const z = Number(zoneSel.value);
+                        const zoneNum = Number.isFinite(z) && z >= 1 && z <= 8 ? z : null;
+                        cmpZoneBySlot[slot] = zoneNum;
+                        saveCmpZone(slot, zoneNum);
+                        populateCompareSelect(chanSel, zoneNum);
+                        cmpChannelIdBySlot[slot] = (chanSel && chanSel.value) ? chanSel.value : null;
+                        saveCmpChannel(slot, cmpChannelIdBySlot[slot] || '');
+                        scheduleChartsRebuild();
+                    };
+                    if (chanSel) chanSel.onchange = () => {
+                        cmpChannelIdBySlot[slot] = chanSel.value || null;
+                        saveCmpChannel(slot, cmpChannelIdBySlot[slot] || '');
+                        scheduleChartsRebuild();
+                    };
 
-                if (cmpZoneSel3) cmpZoneSel3.onchange = () => {
-                    const z = Number(cmpZoneSel3.value);
-                    cmpZone3 = Number.isFinite(z) && z >= 1 && z <= 8 ? z : null;
-                    saveCmpZone(3, cmpZone3);
-                    populateCompareSelect(cmpSel3, cmpZone3);
-                    cmpChannelId3 = (cmpSel3 && cmpSel3.value) ? cmpSel3.value : null;
-                    saveCmpChannel(3, cmpChannelId3 || '');
-                    scheduleChartsRebuild();
-                };
-                if (cmpZoneSel4) cmpZoneSel4.onchange = () => {
-                    const z = Number(cmpZoneSel4.value);
-                    cmpZone4 = Number.isFinite(z) && z >= 1 && z <= 8 ? z : null;
-                    saveCmpZone(4, cmpZone4);
-                    populateCompareSelect(cmpSel4, cmpZone4);
-                    cmpChannelId4 = (cmpSel4 && cmpSel4.value) ? cmpSel4.value : null;
-                    saveCmpChannel(4, cmpChannelId4 || '');
-                    scheduleChartsRebuild();
-                };
-
-                if (cmpSel3) cmpSel3.onchange = () => { cmpChannelId3 = cmpSel3.value || null; saveCmpChannel(3, cmpChannelId3 || ''); scheduleChartsRebuild(); };
-                if (cmpSel4) cmpSel4.onchange = () => { cmpChannelId4 = cmpSel4.value || null; saveCmpChannel(4, cmpChannelId4 || ''); scheduleChartsRebuild(); };
-
-                showCmpBox(3, getCmpVisible(3) || !!cmpChannelId3);
-                showCmpBox(4, getCmpVisible(4) || !!cmpChannelId4);
+                    showCmpBox(slot, getCmpVisible(slot) || !!cmpChannelIdBySlot[slot]);
+                }
 
                 const renameHumBtn = document.getElementById('btnRenameHum');
                 const renameValveBtn = document.getElementById('btnRenameValve');
@@ -2968,7 +3080,19 @@
                         },
                         grid: { color: 'rgba(255,255,255,0.06)' }
                     },
-                    x: { ticks: { color: '#fff', maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' } }
+                    x: {
+                        ticks: {
+                            color: '#fff',
+                            autoSkip: true,
+                            callback: viewMode === 'day' ? tickEvery5Minutes : undefined,
+                            maxTicksLimit: viewMode === 'day' ? 16 : 10,
+                            maxRotation: 0,
+                            minRotation: 0,
+                            backdropColor: 'rgba(0,0,0,0)',
+                            showLabelBackdrop: false
+                        },
+                        grid: { color: 'rgba(255,255,255,0.04)' }
+                    }
                 }
             }
         });
@@ -3004,21 +3128,46 @@
                         },
                         grid: { color: 'rgba(255,255,255,0.06)' }
                     },
-                    x: { ticks: { color: '#fff', maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' } }
+                    x: {
+                        ticks: {
+                            color: '#fff',
+                            autoSkip: true,
+                            callback: viewMode === 'day' ? tickEvery5Minutes : undefined,
+                            maxTicksLimit: viewMode === 'day' ? 16 : 10,
+                            maxRotation: 0,
+                            minRotation: 0,
+                            backdropColor: 'rgba(0,0,0,0)',
+                            showLabelBackdrop: false
+                        },
+                        grid: { color: 'rgba(255,255,255,0.04)' }
+                    }
                 }
             }
         });
 
-        // --- Comparador (2 gráficas extra opcionales: 3 y 4) ---
-        let cmpChannelId3 = null;
-        let cmpChannelId4 = null;
-        let cmpZone3 = null;
-        let cmpZone4 = null;
+        // --- Comparador (máx 8 gráficas en la sección: 2 base + 6 extra) ---
+        const CMP_SLOTS = [3, 4, 5, 6, 7, 8];
+        const cmpChannelIdBySlot = {};
+        const cmpZoneBySlot = {};
+        const cmpLabelsBySlot = {};
+        const cmpSeriesBySlot = {};
+        const cmpChartsBySlot = {};
 
-        const cmp3Labels = [];
-        const cmp3Series = [];
-        const cmp4Labels = [];
-        const cmp4Series = [];
+        const CMP_PALETTE = {
+            3: { border: '#60a5fa', fill: 'rgba(96,165,250,0.14)' },
+            4: { border: '#a78bfa', fill: 'rgba(167,139,250,0.14)' },
+            5: { border: '#22d3ee', fill: 'rgba(34,211,238,0.14)' },
+            6: { border: '#fbbf24', fill: 'rgba(251,191,36,0.14)' },
+            7: { border: '#f472b6', fill: 'rgba(244,114,182,0.14)' },
+            8: { border: '#fb923c', fill: 'rgba(251,146,60,0.14)' }
+        };
+
+        for (const slot of CMP_SLOTS) {
+            cmpChannelIdBySlot[slot] = null;
+            cmpZoneBySlot[slot] = null;
+            cmpLabelsBySlot[slot] = [];
+            cmpSeriesBySlot[slot] = [];
+        }
 
         function createCompareChart(canvasId, labels, series, { border, fill } = {}) {
             const canvas = document.getElementById(canvasId);
@@ -3050,7 +3199,16 @@
                             grid: { color: 'rgba(255,255,255,0.06)' }
                         },
                         x: {
-                            ticks: { color: '#fff', maxTicksLimit: 12 },
+                            ticks: {
+                                color: '#fff',
+                                autoSkip: true,
+                                callback: viewMode === 'day' ? tickEvery5Minutes : undefined,
+                                maxTicksLimit: viewMode === 'day' ? 16 : 10,
+                                maxRotation: 0,
+                                minRotation: 0,
+                                backdropColor: 'rgba(0,0,0,0)',
+                                showLabelBackdrop: false
+                            },
                             grid: { color: 'rgba(255,255,255,0.04)' }
                         }
                     }
@@ -3058,8 +3216,10 @@
             });
         }
 
-        const cmpChart3 = createCompareChart('cmpChart3', cmp3Labels, cmp3Series, { border: '#60a5fa', fill: 'rgba(96,165,250,0.14)' });
-        const cmpChart4 = createCompareChart('cmpChart4', cmp4Labels, cmp4Series, { border: '#a78bfa', fill: 'rgba(167,139,250,0.14)' });
+        for (const slot of CMP_SLOTS) {
+            const pal = CMP_PALETTE[slot] || CMP_PALETTE[3];
+            cmpChartsBySlot[slot] = createCompareChart(`cmpChart${slot}`, cmpLabelsBySlot[slot], cmpSeriesBySlot[slot], pal);
+        }
 
         // --- Mini charts por planta (por tarjeta) ---
         const zoneMiniCharts = new Map();
@@ -3148,7 +3308,9 @@
                 if (!m) return label;
                 const min = Number(m[2]);
                 if (!Number.isFinite(min)) return label;
-                return (min % 5 === 0) ? label : '';
+                if (min % 5 !== 0) return '';
+                const hh = String(m[1]).padStart(2, '0');
+                return `${hh}:${m[2]}`;
             } catch {
                 return '';
             }
@@ -3199,8 +3361,7 @@
             if (box) box.style.display = show ? '' : 'none';
             setCmpVisible(slot, show);
             try {
-                if (show && slot === 3) cmpChart3?.resize();
-                if (show && slot === 4) cmpChart4?.resize();
+                if (show) cmpChartsBySlot?.[slot]?.resize();
             } catch {}
         }
 
@@ -3280,34 +3441,27 @@
 
         function initCompareButtons() {
             const addBtn = document.getElementById('cmpAddBtn');
-            const rm3 = document.getElementById('cmpRemove3');
-            const rm4 = document.getElementById('cmpRemove4');
 
-            if (rm3) rm3.addEventListener('click', () => {
-                cmpChannelId3 = null;
-                saveCmpChannel(3, '');
-                const sel = document.getElementById('cmpChannelSelect3');
-                if (sel) sel.value = '';
-                showCmpBox(3, false);
-                scheduleChartsRebuild();
-            });
-            if (rm4) rm4.addEventListener('click', () => {
-                cmpChannelId4 = null;
-                saveCmpChannel(4, '');
-                const sel = document.getElementById('cmpChannelSelect4');
-                if (sel) sel.value = '';
-                showCmpBox(4, false);
-                scheduleChartsRebuild();
-            });
+            for (const slot of CMP_SLOTS) {
+                const rm = document.getElementById(`cmpRemove${slot}`);
+                if (!rm) continue;
+                rm.addEventListener('click', () => {
+                    cmpChannelIdBySlot[slot] = null;
+                    saveCmpChannel(slot, '');
+                    const sel = document.getElementById(`cmpChannelSelect${slot}`);
+                    if (sel) sel.value = '';
+                    showCmpBox(slot, false);
+                    scheduleChartsRebuild();
+                });
+            }
 
             if (addBtn) addBtn.addEventListener('click', () => {
-                const box3 = document.getElementById('cmpBox3');
-                const box4 = document.getElementById('cmpBox4');
-                const v3 = !!box3 && box3.style.display !== 'none';
-                const v4 = !!box4 && box4.style.display !== 'none';
-                if (!v3) { showCmpBox(3, true); return; }
-                if (!v4) { showCmpBox(4, true); return; }
-                alert('Máximo 4 gráficas.');
+                for (const slot of CMP_SLOTS) {
+                    const box = document.getElementById(`cmpBox${slot}`);
+                    const visible = !!box && box.style.display !== 'none';
+                    if (!visible) { showCmpBox(slot, true); return; }
+                }
+                alert('Máximo 8 gráficas.');
             });
         }
 
@@ -3472,11 +3626,13 @@
                         e.chart.options.scales.y.ticks.stepSize = yTickStep;
                         e.chart.options.scales.y.ticks.color = '#fff';
                         e.chart.options.scales.x.ticks.color = '#fff';
-                        e.chart.options.scales.x.ticks.autoSkip = mode !== 'day';
+                        e.chart.options.scales.x.ticks.autoSkip = true;
                         e.chart.options.scales.x.ticks.callback = mode === 'day' ? tickEvery5Minutes : undefined;
-                        e.chart.options.scales.x.ticks.maxTicksLimit = mode === 'day' ? 24 : 6;
+                        e.chart.options.scales.x.ticks.maxTicksLimit = mode === 'day' ? 16 : 8;
                         e.chart.options.scales.x.ticks.maxRotation = 0;
                         e.chart.options.scales.x.ticks.minRotation = 0;
+                        e.chart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
+                        e.chart.options.scales.x.ticks.showLabelBackdrop = false;
                         e.mode = mode;
                     }
                 } catch {}
@@ -3526,11 +3682,13 @@
                         x: {
                             ticks: {
                                 color: '#fff',
-                                maxTicksLimit: mode === 'day' ? 24 : 6,
-                                autoSkip: mode !== 'day',
+                                maxTicksLimit: mode === 'day' ? 16 : 8,
+                                autoSkip: true,
                                 callback: mode === 'day' ? tickEvery5Minutes : undefined,
                                 maxRotation: 0,
-                                minRotation: 0
+                                minRotation: 0,
+                                backdropColor: 'rgba(0,0,0,0)',
+                                showLabelBackdrop: false
                             },
                             grid: { color: 'rgba(255,255,255,0.04)' }
                         }
@@ -4027,15 +4185,15 @@
             }
 
             const avgHum = totalHumCount ? (totalHumSum / totalHumCount) : null;
-            document.getElementById('avgHumidity').textContent = avgHum === null ? '--' : `${avgHum.toFixed(1)}%`;
-            document.getElementById('totalValveOn').textContent = totalValveOnMs ? formatDuration(totalValveOnMs) : '--';
-            document.getElementById('valveOnTime').textContent = `Tiempo ON (periodo): ${totalValveOnMs ? formatDuration(totalValveOnMs) : '--'}`;
+            setMetaValue('avgHumidity', avgHum === null ? '--' : `${avgHum.toFixed(1)}%`, { muted: avgHum === null });
+            setMetaValue('valveOnTime', totalValveOnMs ? formatDuration(totalValveOnMs) : '--', { muted: !totalValveOnMs });
 
             const lastPointEl = document.getElementById('lastPoint');
             if (lastPointEl) {
                 const lastDate = store.last && typeof store.last.t === 'number' ? new Date(store.last.t) : null;
                 const fallback = labels.length ? String(labels[labels.length - 1]) : '';
-                lastPointEl.textContent = formatLastPointText(viewMode, lastDate, fallback);
+                const txt = formatLastPointText(viewMode, lastDate, fallback);
+                setMetaValue('lastPoint', txt, { muted: txt === '--' });
             }
 
             setSeries(humLabels, humSeries, labels, hum);
@@ -4078,11 +4236,13 @@
             if (!chart || !chart.options || !chart.options.scales || !chart.options.scales.x) return;
             const t = chart.options.scales.x.ticks || (chart.options.scales.x.ticks = {});
             t.color = '#fff';
-            t.autoSkip = mode !== 'day';
+            t.autoSkip = true;
             t.callback = mode === 'day' ? tickEvery5Minutes : undefined;
             t.maxRotation = 0;
             t.minRotation = 0;
-            t.maxTicksLimit = mode === 'day' ? 24 : 12;
+            t.maxTicksLimit = mode === 'day' ? 16 : 10;
+            t.backdropColor = 'rgba(0,0,0,0)';
+            t.showLabelBackdrop = false;
         }
 
         function applyCompareYScale(chart, kind) {
@@ -4115,13 +4275,13 @@
             const box = document.getElementById(`cmpBox${slot}`);
             if (!box || box.style.display === 'none') return;
 
-            const channelId = (slot === 3) ? cmpChannelId3 : cmpChannelId4;
-            const chart = (slot === 3) ? cmpChart3 : cmpChart4;
-            const labelsArr = (slot === 3) ? cmp3Labels : cmp4Labels;
-            const seriesArr = (slot === 3) ? cmp3Series : cmp4Series;
+            const channelId = cmpChannelIdBySlot[slot] || null;
+            const chart = cmpChartsBySlot[slot] || null;
+            const labelsArr = cmpLabelsBySlot[slot] || null;
+            const seriesArr = cmpSeriesBySlot[slot] || null;
             const titleEl = document.getElementById(`cmpTitle${slot}`);
 
-            if (!chart) return;
+            if (!chart || !labelsArr || !seriesArr) return;
             if (!channelId) {
                 if (titleEl) titleEl.textContent = `Comparación ${slot}`;
                 setSeries(labelsArr, seriesArr, [], []);
@@ -4231,10 +4391,7 @@
         }
 
         function rebuildCompareExtraCharts() {
-            return Promise.all([
-                rebuildCompareSlot(3).catch(() => {}),
-                rebuildCompareSlot(4).catch(() => {})
-            ]);
+            return Promise.all(CMP_SLOTS.map(s => rebuildCompareSlot(s).catch(() => {})));
         }
 
         async function rebuildChartsFromServer() {
@@ -4414,9 +4571,8 @@
                 }
 
                 const avgHum = totalHumCount ? (totalHumSum / totalHumCount) : null;
-                document.getElementById('avgHumidity').textContent = avgHum === null ? '--' : `${avgHum.toFixed(1)}%`;
-                document.getElementById('totalValveOn').textContent = totalValveOnMs ? formatDuration(totalValveOnMs) : '--';
-                document.getElementById('valveOnTime').textContent = `Tiempo ON (periodo): ${totalValveOnMs ? formatDuration(totalValveOnMs) : '--'}`;
+                setMetaValue('avgHumidity', avgHum === null ? '--' : `${avgHum.toFixed(1)}%`, { muted: avgHum === null });
+                setMetaValue('valveOnTime', totalValveOnMs ? formatDuration(totalValveOnMs) : '--', { muted: !totalValveOnMs });
 
                 const lastPointEl = document.getElementById('lastPoint');
                 if (lastPointEl) {
@@ -4427,18 +4583,28 @@
                         const d = lastRow ? parseTsToDate(lastRow.ts) : null;
                         lastDate = d || null;
                     }
-                    lastPointEl.textContent = formatLastPointText(viewMode, lastDate, lastLabel);
+                    const txt = formatLastPointText(viewMode, lastDate, lastLabel);
+                    setMetaValue('lastPoint', txt, { muted: txt === '--' });
                 }
 
                 setSeries(humLabels, humSeries, labels, hum);
                 setSeries(valveLabels, valveSeries, labels, valve);
                 try {
-                    humChart.options.scales.x.ticks.autoSkip = viewMode !== 'day';
+                    humChart.options.scales.x.ticks.autoSkip = true;
                     humChart.options.scales.x.ticks.callback = viewMode === 'day' ? tickEvery5Minutes : undefined;
-                    humChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 24 : 12;
-                    valveChart.options.scales.x.ticks.autoSkip = viewMode !== 'day';
+                    humChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 16 : 10;
+                    humChart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
+                    humChart.options.scales.x.ticks.showLabelBackdrop = false;
+                    humChart.options.scales.x.ticks.maxRotation = 0;
+                    humChart.options.scales.x.ticks.minRotation = 0;
+
+                    valveChart.options.scales.x.ticks.autoSkip = true;
                     valveChart.options.scales.x.ticks.callback = viewMode === 'day' ? tickEvery5Minutes : undefined;
-                    valveChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 24 : 12;
+                    valveChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 16 : 10;
+                    valveChart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
+                    valveChart.options.scales.x.ticks.showLabelBackdrop = false;
+                    valveChart.options.scales.x.ticks.maxRotation = 0;
+                    valveChart.options.scales.x.ticks.minRotation = 0;
                 } catch {}
                 humChart.update('none');
                 valveChart.update('none');
@@ -4620,9 +4786,8 @@
             }
 
             const avgHum = totalHumCount ? (totalHumSum / totalHumCount) : null;
-            document.getElementById('avgHumidity').textContent = avgHum === null ? '--' : `${avgHum.toFixed(1)}%`;
-            document.getElementById('totalValveOn').textContent = totalValveOnMs ? formatDuration(totalValveOnMs) : '--';
-            document.getElementById('valveOnTime').textContent = `Tiempo ON (periodo): ${totalValveOnMs ? formatDuration(totalValveOnMs) : '--'}`;
+            setMetaValue('avgHumidity', avgHum === null ? '--' : `${avgHum.toFixed(1)}%`, { muted: avgHum === null });
+            setMetaValue('valveOnTime', totalValveOnMs ? formatDuration(totalValveOnMs) : '--', { muted: !totalValveOnMs });
 
             const lastPointEl = document.getElementById('lastPoint');
             if (lastPointEl) {
@@ -4632,18 +4797,28 @@
                     const lastRow = humRows.length ? humRows[humRows.length - 1] : (valveRows.length ? valveRows[valveRows.length - 1] : null);
                     lastDate = lastRow ? (parseTsToDate(lastRow.ts) || null) : null;
                 }
-                lastPointEl.textContent = formatLastPointText(viewMode, lastDate, lastLabel);
+                const txt = formatLastPointText(viewMode, lastDate, lastLabel);
+                setMetaValue('lastPoint', txt, { muted: txt === '--' });
             }
 
             setSeries(humLabels, humSeries, labels, hum);
             setSeries(valveLabels, valveSeries, labels, valve);
             try {
-                humChart.options.scales.x.ticks.autoSkip = viewMode !== 'day';
+                humChart.options.scales.x.ticks.autoSkip = true;
                 humChart.options.scales.x.ticks.callback = viewMode === 'day' ? tickEvery5Minutes : undefined;
-                humChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 24 : 12;
-                valveChart.options.scales.x.ticks.autoSkip = viewMode !== 'day';
+                humChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 16 : 10;
+                humChart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
+                humChart.options.scales.x.ticks.showLabelBackdrop = false;
+                humChart.options.scales.x.ticks.maxRotation = 0;
+                humChart.options.scales.x.ticks.minRotation = 0;
+
+                valveChart.options.scales.x.ticks.autoSkip = true;
                 valveChart.options.scales.x.ticks.callback = viewMode === 'day' ? tickEvery5Minutes : undefined;
-                valveChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 24 : 12;
+                valveChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 16 : 10;
+                valveChart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
+                valveChart.options.scales.x.ticks.showLabelBackdrop = false;
+                valveChart.options.scales.x.ticks.maxRotation = 0;
+                valveChart.options.scales.x.ticks.minRotation = 0;
             } catch {}
             humChart.update('none');
             valveChart.update('none');
