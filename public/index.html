@@ -3395,8 +3395,11 @@
 
         // IMPORTANTE: el scroll DOM horizontal oculta el eje Y izquierdo (canvas se desplaza).
         // Para garantizar que el lado izquierdo SIEMPRE sea visible, usamos “ventana móvil”
-        // (x.min/x.max) en modo DÍA + eje X invertido (lo más reciente a la izquierda).
-        const MOBILE_DAY_WINDOW_MINUTES = 12 * 60; // horas visibles en móvil/tablet (ajustable)
+        // (x.min/x.max) en modo DÍA (móvil/tablet). El “ahora” queda centrado para que:
+        // - se vea la línea de tiempo
+        // - no se cambie el orden natural de horas
+        // - el eje izquierdo permanezca visible
+        const MOBILE_DAY_WINDOW_MINUTES = 12 * 60; // minutos visibles en móvil/tablet (ajustable)
 
         function getNowMinuteIndexMadrid() {
             try {
@@ -3413,6 +3416,18 @@
 
         function isMobileDayWindow(mode) {
             return isSmallViewport() && mode === 'day';
+        }
+
+        function computeMobileDayWindow(nowIdx) {
+            const n = Number(nowIdx);
+            if (!Number.isFinite(n)) return null;
+            const size = Math.max(60, Math.min(1440, Math.trunc(Number(MOBILE_DAY_WINDOW_MINUTES) || 720)));
+            const half = Math.floor(size / 2);
+            let minIdx = Math.trunc(n - half);
+            let maxIdx = minIdx + size;
+            if (minIdx < 0) { minIdx = 0; maxIdx = size; }
+            if (maxIdx > 1439) { maxIdx = 1439; minIdx = Math.max(0, maxIdx - size); }
+            return { minIdx, maxIdx };
         }
 
         function applyMobileDayWindowToChart(chart, mode) {
@@ -3436,22 +3451,16 @@
 
             const nowIdx = getNowMinuteIndexMadrid();
             if (nowIdx == null) return;
-            const maxIdx = nowIdx;
-            const minIdx = Math.max(0, maxIdx - MOBILE_DAY_WINDOW_MINUTES);
 
-            // Último dato a la IZQUIERDA
-            x.reverse = true;
+            const win = computeMobileDayWindow(nowIdx);
+            if (!win) return;
 
-            // lineal (mini) usa índice numérico; category (principales/comparador) usa label
-            if (xType === 'linear') {
-                x.min = minIdx;
-                x.max = maxIdx;
-            } else {
-                const labels = chart.data && Array.isArray(chart.data.labels) ? chart.data.labels : null;
-                if (!labels || !labels.length) return;
-                x.min = labels[minIdx] ?? labels[0];
-                x.max = labels[maxIdx] ?? labels[labels.length - 1];
-            }
+            // Mantener horas en orden natural (izq -> der)
+            x.reverse = false;
+
+            // Para lineal: minutos (0..1439). Para category: índices de label (0..1439)
+            x.min = win.minIdx;
+            x.max = win.maxIdx;
         }
 
         function ensureChartScrollDomForCanvas(canvas) {
@@ -4001,17 +4010,23 @@
                         },
                         x: {
                             type: mode === 'day' ? 'linear' : 'category',
-                            reverse: (mode === 'day' && isMobileDayWindow('day')) ? true : false,
+                            reverse: false,
                             min: (() => {
                                 if (mode !== 'day') return undefined;
                                 const nowIdx = getNowMinuteIndexMadrid();
-                                if (isMobileDayWindow('day') && nowIdx != null) return Math.max(0, nowIdx - MOBILE_DAY_WINDOW_MINUTES);
+                                if (isMobileDayWindow('day') && nowIdx != null) {
+                                    const win = computeMobileDayWindow(nowIdx);
+                                    return win ? win.minIdx : 0;
+                                }
                                 return 0;
                             })(),
                             max: (() => {
                                 if (mode !== 'day') return undefined;
                                 const nowIdx = getNowMinuteIndexMadrid();
-                                if (isMobileDayWindow('day') && nowIdx != null) return nowIdx;
+                                if (isMobileDayWindow('day') && nowIdx != null) {
+                                    const win = computeMobileDayWindow(nowIdx);
+                                    return win ? win.maxIdx : 1439;
+                                }
                                 return 1439;
                             })(),
                             ticks: {
