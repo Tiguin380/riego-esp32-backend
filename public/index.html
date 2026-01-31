@@ -427,6 +427,11 @@
             .zone-row .control-row select { flex: 1 1 100%; width: 100%; }
         }
 
+        /* Zonas: en escritorio, 1 tarjeta por fila (full width) */
+        @media (min-width: 900px) {
+            #zonesContainer .sensor-grid { grid-template-columns: 1fr; }
+        }
+
         /* Acciones del bloque DISPOSITIVO: 2 por fila en móvil, 4 en desktop */
         .device-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
         @media (min-width: 900px) { .device-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
@@ -1449,8 +1454,11 @@
                 }
 
                 controlsWrap.appendChild(zoneRow);
+                sec.appendChild(controlsWrap);
+                // Aplicar estado real (ahora que existe el contenedor)
+                try { setZoneControlsOpen(zoneNum, getZoneControlsOpen(zoneNum)); } catch {}
 
-                // Tarjeta Umbral (dentro de controles)
+                // Tarjeta Umbral (siempre visible; arriba antes de las tarjetas)
                 {
                     const thrCard = document.createElement('div');
                     thrCard.className = 'sensor-card metric-neutral accent accent-green';
@@ -1499,7 +1507,7 @@
                     thrCard.appendChild(label);
                     thrCard.appendChild(meta);
                     thrCard.appendChild(row);
-                    controlsWrap.appendChild(thrCard);
+                    sec.appendChild(thrCard);
 
                     rng.addEventListener('input', () => {
                         const n = Number(rng.value);
@@ -1512,10 +1520,6 @@
                         await saveZoneConfig(zoneNum, btn);
                     });
                 }
-
-                sec.appendChild(controlsWrap);
-                // Aplicar estado real (ahora que existe el contenedor)
-                try { setZoneControlsOpen(zoneNum, getZoneControlsOpen(zoneNum)); } catch {}
 
                 const grid = document.createElement('div');
                 grid.className = 'sensor-grid';
@@ -2859,13 +2863,13 @@
                         min: 0,
                         max: 100,
                         ticks: {
-                            color: '#aaa',
+                            color: '#fff',
                             stepSize: 5,
                             callback: (v) => `${v}%`
                         },
                         grid: { color: 'rgba(255,255,255,0.06)' }
                     },
-                    x: { ticks: { color: '#888', maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' } }
+                    x: { ticks: { color: '#fff', maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' } }
                 }
             }
         });
@@ -2895,13 +2899,13 @@
                         min: 0,
                         max: 1,
                         ticks: {
-                            color: '#aaa',
+                            color: '#fff',
                             stepSize: 1,
                             callback: (v) => (v >= 0.5 ? 'ON' : 'OFF')
                         },
                         grid: { color: 'rgba(255,255,255,0.06)' }
                     },
-                    x: { ticks: { color: '#888', maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' } }
+                    x: { ticks: { color: '#fff', maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' } }
                 }
             }
         });
@@ -3122,6 +3126,8 @@
                         e.chart.options.scales.y.max = yMax;
                         e.chart.options.scales.y.ticks.callback = yTickCb;
                         e.chart.options.scales.y.ticks.stepSize = yTickStep;
+                        e.chart.options.scales.y.ticks.color = '#fff';
+                        e.chart.options.scales.x.ticks.color = '#fff';
                         e.mode = mode;
                     }
                 } catch {}
@@ -3162,14 +3168,14 @@
                             min: yMin,
                             max: yMax,
                             ticks: {
-                                color: '#aaa',
+                                color: '#fff',
                                 callback: yTickCb,
                                 stepSize: yTickStep
                             },
                             grid: { color: 'rgba(255,255,255,0.06)' }
                         },
                         x: {
-                            ticks: { color: '#888', maxTicksLimit: 4 },
+                            ticks: { color: '#fff', maxTicksLimit: 4 },
                             grid: { color: 'rgba(255,255,255,0.04)' }
                         }
                     }
@@ -3419,8 +3425,8 @@
 
             const defs = [
                 { base: 'zoneHum', kind: 'soil_sensor', prop: 'soil_channel_index', canvas: (z) => `zoneHumChart${z}`, yMin: 0, yMax: 100, yTickStep: 5, yTickCb: (v) => `${v}%` },
-                { base: 'zoneTSoil', kind: 'temperature_soil', prop: 'temperature_soil_channel_index', canvas: (z) => `zoneTSoilChart${z}` },
-                { base: 'zoneTAir', kind: 'temperature_air', prop: 'temperature_air_channel_index', canvas: (z) => `zoneTAirChart${z}` },
+                { base: 'zoneTSoil', kind: 'temperature_soil', prop: 'temperature_soil_channel_index', canvas: (z) => `zoneTSoilChart${z}`, yMin: 0, yMax: 60, yTickStep: 10 },
+                { base: 'zoneTAir', kind: 'temperature_air', prop: 'temperature_air_channel_index', canvas: (z) => `zoneTAirChart${z}`, yMin: 0, yMax: 60, yTickStep: 10 },
                 { base: 'zoneHAir', kind: 'humidity_air', prop: 'humidity_air_channel_index', canvas: (z) => `zoneHAirChart${z}`, yMin: 0, yMax: 100, yTickStep: 5, yTickCb: (v) => `${v}%` },
                 { base: 'zonePH', kind: 'ph_soil', prop: 'ph_soil_channel_index', canvas: (z) => `zonePHChart${z}`, yMin: 0, yMax: 14 },
                 { base: 'zoneEC', kind: 'ec_soil', prop: 'ec_soil_channel_index', canvas: (z) => `zoneECChart${z}` },
