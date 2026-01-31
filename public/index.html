@@ -345,9 +345,9 @@
             <h2> DISPOSITIVO CONECTADO</h2>
             <div class="sensor-grid">
                 <div class="sensor-card metric-neutral">
-                    <div class="sensor-label">Último dato</div>
-                    <div class="sensor-value small" id="lastSeen">--</div>
-                    <div class="sensor-unit" id="lastSeenAge">--</div>
+                    <div class="sensor-label">Intervalo de envío</div>
+                    <div class="sensor-value" id="sendInterval">--</div>
+                    <div class="sensor-unit" id="sendIntervalHint">--</div>
                 </div>
                 <div class="sensor-card metric-neutral">
                     <div class="sensor-label">Tiempo encendido</div>
@@ -1054,6 +1054,7 @@
         let valveChannelId = null;
 
         let lastRebootsBase = null;
+        let lastSampleMsForInterval = null;
 
         // --- Cuenta / navegación ---
         const navDevicesBtn = document.getElementById('navDevices');
@@ -1740,6 +1741,14 @@
             return `${ss}s`;
         }
 
+        function formatIntervalSeconds(sec) {
+            const n = Number(sec);
+            if (!Number.isFinite(n) || n <= 0) return '--';
+            // Mostrar compacto: segundos si < 90s, si no duración
+            if (n < 90) return `${Math.round(n)}s`;
+            return formatDuration(n * 1000);
+        }
+
         function setMetricStateById(valueId, state, title) {
             const valueEl = document.getElementById(valueId);
             const card = valueEl ? valueEl.closest('.sensor-card') : null;
@@ -1773,13 +1782,19 @@
                 ? String(data.created_at_madrid)
                 : (createdAt ? createdAt.toLocaleString('es-ES', { timeZone: TZ, hour12: false }) : '--');
 
-            const lastSeenEl = document.getElementById('lastSeen');
-            const lastSeenAgeEl = document.getElementById('lastSeenAge');
-            if (lastSeenEl) lastSeenEl.textContent = createdAtLabel;
-            if (lastSeenAgeEl) {
-                const ageMin = createdAt ? Math.max(0, Math.round((nowAdjusted().getTime() - createdAt.getTime()) / 60000)) : null;
-                lastSeenAgeEl.textContent = ageMin == null ? '--' : `hace ${ageMin} min`;
+            // Intervalo de envío (delta entre esta lectura y la anterior)
+            const sendIntervalEl = document.getElementById('sendInterval');
+            const sendIntervalHintEl = document.getElementById('sendIntervalHint');
+            const createdMs = createdAt ? createdAt.getTime() : null;
+            let deltaSec = null;
+            if (createdMs != null && lastSampleMsForInterval != null) {
+                const d = (createdMs - lastSampleMsForInterval) / 1000;
+                // Ignorar valores raros (p.ej. reloj cambiado / lecturas duplicadas)
+                if (Number.isFinite(d) && d > 0.5 && d < 3600) deltaSec = d;
             }
+            if (createdMs != null) lastSampleMsForInterval = createdMs;
+            if (sendIntervalEl) sendIntervalEl.textContent = deltaSec == null ? '--' : formatIntervalSeconds(deltaSec);
+            if (sendIntervalHintEl) sendIntervalHintEl.textContent = createdAtLabel === '--' ? '--' : `último: ${createdAtLabel}`;
 
             const uptimeEl = document.getElementById('uptime');
             if (uptimeEl) uptimeEl.textContent = formatUptimeSeconds(data?.uptime_s);
