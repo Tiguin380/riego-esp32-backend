@@ -3094,13 +3094,23 @@
         // --- Datos para Chart.js ---
         const humLabels = [];
         const humSeries = [];
+        const humDayPoints = [];
         const valveLabels = [];
         const valveSeries = [];
+        const valveDayPoints = [];
         function setSeries(labels, series, newLabels, newSeries) {
             labels.length = 0;
             series.length = 0;
             for (const x of newLabels) labels.push(x);
             for (const y of newSeries) series.push(y);
+        }
+
+        function setDayPoints(pointsArr, yArr) {
+            pointsArr.length = 0;
+            for (let i = 0; i < 1440; i++) {
+                const y = Array.isArray(yArr) ? yArr[i] : null;
+                pointsArr.push({ x: i, y: (y == null || Number.isNaN(y)) ? null : y });
+            }
         }
 
         // Preparar wrappers de scroll (móvil/tablet modo DÍA)
@@ -3138,11 +3148,33 @@
                         grid: { color: 'rgba(255,255,255,0.06)' }
                     },
                     x: {
+                        type: viewMode === 'day' ? 'linear' : 'category',
+                        reverse: false,
+                        min: (() => {
+                            if (viewMode !== 'day') return undefined;
+                            const nowIdx = getNowMinuteIndexMadrid();
+                            if (isMobileDayWindow('day') && nowIdx != null) {
+                                const win = computeMobileDayWindow(nowIdx);
+                                return win ? win.minIdx : 0;
+                            }
+                            return 0;
+                        })(),
+                        max: (() => {
+                            if (viewMode !== 'day') return undefined;
+                            const nowIdx = getNowMinuteIndexMadrid();
+                            if (isMobileDayWindow('day') && nowIdx != null) {
+                                const win = computeMobileDayWindow(nowIdx);
+                                return win ? win.maxIdx : 1439;
+                            }
+                            return 1439;
+                        })(),
                         ticks: {
                             color: '#fff',
-                            autoSkip: true,
-                            callback: viewMode === 'day' ? tickEvery30Minutes : undefined,
-                            maxTicksLimit: viewMode === 'day' ? 16 : 10,
+                            autoSkip: viewMode === 'day' ? false : true,
+                            stepSize: viewMode === 'day' ? 120 : undefined,
+                            maxTicksLimit: viewMode === 'day' ? 13 : 10,
+                            includeBounds: viewMode === 'day' ? true : undefined,
+                            callback: viewMode === 'day' ? (v) => minuteIndexToHHMM(v) : undefined,
                             maxRotation: 0,
                             minRotation: 0,
                             backdropColor: 'rgba(0,0,0,0)',
@@ -3189,11 +3221,33 @@
                         grid: { color: 'rgba(255,255,255,0.06)' }
                     },
                     x: {
+                        type: viewMode === 'day' ? 'linear' : 'category',
+                        reverse: false,
+                        min: (() => {
+                            if (viewMode !== 'day') return undefined;
+                            const nowIdx = getNowMinuteIndexMadrid();
+                            if (isMobileDayWindow('day') && nowIdx != null) {
+                                const win = computeMobileDayWindow(nowIdx);
+                                return win ? win.minIdx : 0;
+                            }
+                            return 0;
+                        })(),
+                        max: (() => {
+                            if (viewMode !== 'day') return undefined;
+                            const nowIdx = getNowMinuteIndexMadrid();
+                            if (isMobileDayWindow('day') && nowIdx != null) {
+                                const win = computeMobileDayWindow(nowIdx);
+                                return win ? win.maxIdx : 1439;
+                            }
+                            return 1439;
+                        })(),
                         ticks: {
                             color: '#fff',
-                            autoSkip: true,
-                            callback: viewMode === 'day' ? tickEvery30Minutes : undefined,
-                            maxTicksLimit: viewMode === 'day' ? 16 : 10,
+                            autoSkip: viewMode === 'day' ? false : true,
+                            stepSize: viewMode === 'day' ? 120 : undefined,
+                            maxTicksLimit: viewMode === 'day' ? 13 : 10,
+                            includeBounds: viewMode === 'day' ? true : undefined,
+                            callback: viewMode === 'day' ? (v) => minuteIndexToHHMM(v) : undefined,
                             maxRotation: 0,
                             minRotation: 0,
                             backdropColor: 'rgba(0,0,0,0)',
@@ -3263,11 +3317,33 @@
                             grid: { color: 'rgba(255,255,255,0.06)' }
                         },
                         x: {
+                            type: viewMode === 'day' ? 'linear' : 'category',
+                            reverse: false,
+                            min: (() => {
+                                if (viewMode !== 'day') return undefined;
+                                const nowIdx = getNowMinuteIndexMadrid();
+                                if (isMobileDayWindow('day') && nowIdx != null) {
+                                    const win = computeMobileDayWindow(nowIdx);
+                                    return win ? win.minIdx : 0;
+                                }
+                                return 0;
+                            })(),
+                            max: (() => {
+                                if (viewMode !== 'day') return undefined;
+                                const nowIdx = getNowMinuteIndexMadrid();
+                                if (isMobileDayWindow('day') && nowIdx != null) {
+                                    const win = computeMobileDayWindow(nowIdx);
+                                    return win ? win.maxIdx : 1439;
+                                }
+                                return 1439;
+                            })(),
                             ticks: {
                                 color: '#fff',
-                                autoSkip: true,
-                                callback: viewMode === 'day' ? tickEvery30Minutes : undefined,
-                                maxTicksLimit: viewMode === 'day' ? 16 : 10,
+                                autoSkip: viewMode === 'day' ? false : true,
+                                stepSize: viewMode === 'day' ? 120 : undefined,
+                                maxTicksLimit: viewMode === 'day' ? 13 : 10,
+                                includeBounds: viewMode === 'day' ? true : undefined,
+                                callback: viewMode === 'day' ? (v) => minuteIndexToHHMM(v) : undefined,
                                 maxRotation: 0,
                                 minRotation: 0,
                                 backdropColor: 'rgba(0,0,0,0)',
@@ -4680,6 +4756,70 @@
 
             setSeries(humLabels, humSeries, labels, hum);
             setSeries(valveLabels, valveSeries, labels, valve);
+            if (viewMode === 'day') {
+                try {
+                    setDayPoints(humDayPoints, hum);
+                    setDayPoints(valveDayPoints, valve);
+
+                    humChart.data.labels = [];
+                    valveChart.data.labels = [];
+                    humChart.data.datasets[0].data = humDayPoints;
+                    valveChart.data.datasets[0].data = valveDayPoints;
+
+                    humChart.options.scales.x.type = 'linear';
+                    valveChart.options.scales.x.type = 'linear';
+                    humChart.options.scales.x.reverse = false;
+                    valveChart.options.scales.x.reverse = false;
+
+                    humChart.options.scales.x.ticks.autoSkip = false;
+                    valveChart.options.scales.x.ticks.autoSkip = false;
+                    humChart.options.scales.x.ticks.stepSize = (isSmallViewport() ? 60 : 120);
+                    valveChart.options.scales.x.ticks.stepSize = (isSmallViewport() ? 60 : 120);
+                    humChart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
+                    valveChart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
+                    humChart.options.scales.x.ticks.includeBounds = true;
+                    valveChart.options.scales.x.ticks.includeBounds = true;
+                    humChart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
+                    valveChart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
+
+                    const nowIdx = getNowMinuteIndexMadrid();
+                    if (isMobileDayWindow('day') && nowIdx != null) {
+                        const win = computeMobileDayWindow(nowIdx);
+                        humChart.options.scales.x.min = win ? win.minIdx : 0;
+                        humChart.options.scales.x.max = win ? win.maxIdx : 1439;
+                        valveChart.options.scales.x.min = win ? win.minIdx : 0;
+                        valveChart.options.scales.x.max = win ? win.maxIdx : 1439;
+                    } else {
+                        humChart.options.scales.x.min = 0;
+                        humChart.options.scales.x.max = 1439;
+                        valveChart.options.scales.x.min = 0;
+                        valveChart.options.scales.x.max = 1439;
+                    }
+                } catch {}
+            } else {
+                try {
+                    humChart.data.labels = humLabels;
+                    valveChart.data.labels = valveLabels;
+                    humChart.data.datasets[0].data = humSeries;
+                    valveChart.data.datasets[0].data = valveSeries;
+                    humChart.options.scales.x.type = 'category';
+                    valveChart.options.scales.x.type = 'category';
+                    delete humChart.options.scales.x.min;
+                    delete humChart.options.scales.x.max;
+                    delete valveChart.options.scales.x.min;
+                    delete valveChart.options.scales.x.max;
+                    humChart.options.scales.x.ticks.autoSkip = true;
+                    valveChart.options.scales.x.ticks.autoSkip = true;
+                    humChart.options.scales.x.ticks.maxTicksLimit = 10;
+                    valveChart.options.scales.x.ticks.maxTicksLimit = 10;
+                    humChart.options.scales.x.ticks.callback = undefined;
+                    valveChart.options.scales.x.ticks.callback = undefined;
+                    delete humChart.options.scales.x.ticks.stepSize;
+                    delete valveChart.options.scales.x.ticks.stepSize;
+                    delete humChart.options.scales.x.ticks.includeBounds;
+                    delete valveChart.options.scales.x.ticks.includeBounds;
+                } catch {}
+            }
             humChart.update('none');
             valveChart.update('none');
             try {
@@ -4733,18 +4873,24 @@
             const t = chart.options.scales.x.ticks || (chart.options.scales.x.ticks = {});
             t.color = '#fff';
             if (mode === 'day') {
-                t.autoSkip = true;
-                t.callback = tickEvery30Minutes;
-                t.maxTicksLimit = 49;
+                t.autoSkip = false;
+                t.stepSize = (isSmallViewport() ? 60 : 120);
+                t.maxTicksLimit = (isSmallViewport() ? 25 : 13);
+                t.includeBounds = true;
+                t.callback = (v) => minuteIndexToHHMM(v);
             } else if (mode === 'month') {
                 // En MES queremos ver 01..31 (aunque se solapen un poco)
                 t.autoSkip = false;
                 t.callback = undefined;
                 t.maxTicksLimit = undefined;
+                delete t.stepSize;
+                delete t.includeBounds;
             } else {
                 t.autoSkip = true;
                 t.callback = undefined;
                 t.maxTicksLimit = 10;
+                delete t.stepSize;
+                delete t.includeBounds;
             }
             t.maxRotation = 0;
             t.minRotation = 0;
@@ -4829,23 +4975,23 @@
 
             if (viewMode === 'day') {
                 const pNow = getMadridParts(nowAdjusted());
-                const axis = buildMadridDayAxisLabels(pNow);
-                const sArr = new Array(1440).fill(null);
+                const sArr = new Array(1440);
+                for (let i = 0; i < 1440; i++) sArr[i] = { x: i, y: null };
 
                 for (const row of rows) {
                     const idx = madridMinuteIndexForTs(row?.ts, pNow);
                     if (idx == null) continue;
                     if (kind === 'valve') {
                         const onNow = Number(row?.state || 0) >= 1;
-                        sArr[idx] = onNow ? 1 : 0;
+                        sArr[idx].y = onNow ? 1 : 0;
                     } else {
                         const v = row?.value == null ? null : Number(row.value);
-                        sArr[idx] = (v == null || Number.isNaN(v)) ? null : Number(v.toFixed(2));
+                        sArr[idx].y = (v == null || Number.isNaN(v)) ? null : Number(v.toFixed(2));
                     }
                 }
 
-                for (const x of axis) labels.push(withDiaPrefixLabel(x));
-                for (const y of sArr) series.push(y);
+                // Igual que mini: labels vacío y serie de puntos {x,y}
+                for (const p of sArr) series.push(p);
             } else if (viewMode === 'month') {
                 const byDay = {};
                 for (const row of rows) {
@@ -4903,7 +5049,28 @@
             }
 
             setSeries(labelsArr, seriesArr, labels, series);
-            try { applyMobileDayWindowToChart(chart, viewMode); } catch {}
+            try {
+                if (viewMode === 'day') {
+                    chart.data.labels = [];
+                    chart.options.scales.x.type = 'linear';
+                    chart.options.scales.x.reverse = false;
+                    const nowIdx = getNowMinuteIndexMadrid();
+                    if (isMobileDayWindow('day') && nowIdx != null) {
+                        const win = computeMobileDayWindow(nowIdx);
+                        chart.options.scales.x.min = win ? win.minIdx : 0;
+                        chart.options.scales.x.max = win ? win.maxIdx : 1439;
+                    } else {
+                        chart.options.scales.x.min = 0;
+                        chart.options.scales.x.max = 1439;
+                    }
+                } else {
+                    chart.data.labels = labelsArr;
+                    chart.options.scales.x.type = 'category';
+                    delete chart.options.scales.x.min;
+                    delete chart.options.scales.x.max;
+                }
+                applyMobileDayWindowToChart(chart, viewMode);
+            } catch {}
             chart.update('none');
         }
 
@@ -5110,9 +5277,40 @@
                 setSeries(valveLabels, valveSeries, labels, valve);
                 try {
                     if (viewMode === 'day') {
-                        humChart.options.scales.x.ticks.autoSkip = true;
-                        humChart.options.scales.x.ticks.callback = tickEvery30Minutes;
-                        humChart.options.scales.x.ticks.maxTicksLimit = 16;
+                        setDayPoints(humDayPoints, hum);
+                        setDayPoints(valveDayPoints, valve);
+                        humChart.data.labels = [];
+                        valveChart.data.labels = [];
+                        humChart.data.datasets[0].data = humDayPoints;
+                        valveChart.data.datasets[0].data = valveDayPoints;
+                        humChart.options.scales.x.type = 'linear';
+                        valveChart.options.scales.x.type = 'linear';
+                        humChart.options.scales.x.reverse = false;
+                        valveChart.options.scales.x.reverse = false;
+                        humChart.options.scales.x.ticks.autoSkip = false;
+                        valveChart.options.scales.x.ticks.autoSkip = false;
+                        humChart.options.scales.x.ticks.stepSize = (isSmallViewport() ? 60 : 120);
+                        valveChart.options.scales.x.ticks.stepSize = (isSmallViewport() ? 60 : 120);
+                        humChart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
+                        valveChart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
+                        humChart.options.scales.x.ticks.includeBounds = true;
+                        valveChart.options.scales.x.ticks.includeBounds = true;
+                        humChart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
+                        valveChart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
+
+                        const nowIdx = getNowMinuteIndexMadrid();
+                        if (isMobileDayWindow('day') && nowIdx != null) {
+                            const win = computeMobileDayWindow(nowIdx);
+                            humChart.options.scales.x.min = win ? win.minIdx : 0;
+                            humChart.options.scales.x.max = win ? win.maxIdx : 1439;
+                            valveChart.options.scales.x.min = win ? win.minIdx : 0;
+                            valveChart.options.scales.x.max = win ? win.maxIdx : 1439;
+                        } else {
+                            humChart.options.scales.x.min = 0;
+                            humChart.options.scales.x.max = 1439;
+                            valveChart.options.scales.x.min = 0;
+                            valveChart.options.scales.x.max = 1439;
+                        }
                     } else if (viewMode === 'month') {
                         humChart.options.scales.x.ticks.autoSkip = false;
                         humChart.options.scales.x.ticks.callback = undefined;
@@ -5128,9 +5326,7 @@
                     humChart.options.scales.x.ticks.minRotation = 0;
 
                     if (viewMode === 'day') {
-                        valveChart.options.scales.x.ticks.autoSkip = true;
-                        valveChart.options.scales.x.ticks.callback = tickEvery30Minutes;
-                        valveChart.options.scales.x.ticks.maxTicksLimit = 16;
+                        // ya configurado arriba
                     } else if (viewMode === 'month') {
                         valveChart.options.scales.x.ticks.autoSkip = false;
                         valveChart.options.scales.x.ticks.callback = undefined;
