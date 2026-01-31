@@ -152,6 +152,33 @@
         .zone-subtitle { color:#8fa3bf; font-size: 12px; margin-top: -6px; margin-bottom: 8px; overflow-wrap: anywhere; word-break: break-word; }
         .zone-mode-row { display:flex; justify-content:flex-end; gap: 10px; flex-wrap: wrap; margin: 6px 0 10px; }
         .zone-mode-row .mini-btn { padding: 8px 10px; font-size: 11px; border-radius: 10px; }
+        .zone-mode-btn { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: rgba(233,238,247,0.92); box-shadow: 0 12px 22px rgba(0,0,0,0.20); }
+        .zone-mode-btn:hover { filter: brightness(1.04); }
+        .zone-mode-btn.active { filter: brightness(1.08); border-color: rgba(255,255,255,0.18); }
+        .zone-mode-btn.zone-mode-day { background: linear-gradient(180deg, rgba(34,197,94,0.26), rgba(15,23,42,0.70)); border-color: rgba(34,197,94,0.25); }
+        .zone-mode-btn.zone-mode-month { background: linear-gradient(180deg, rgba(59,130,246,0.26), rgba(15,23,42,0.70)); border-color: rgba(59,130,246,0.25); }
+        .zone-mode-btn.zone-mode-year { background: linear-gradient(180deg, rgba(167,139,250,0.26), rgba(15,23,42,0.70)); border-color: rgba(167,139,250,0.25); }
+
+        .sensor-meta { margin-top: 6px; margin-bottom: 8px; display:flex; flex-direction: column; gap: 4px; }
+        .sensor-meta-top { display:flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .sensor-meta-name { font-size: 11px; color: rgba(233,238,247,0.86); font-weight: 900; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sensor-meta-avg { font-size: 11px; color: rgba(148,163,184,0.95); font-weight: 900; white-space: nowrap; }
+        .sensor-meta-last { font-size: 11px; color: rgba(148,163,184,0.85); font-weight: 800; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .sensor-card .chart-wrap { position: relative; }
+        .sensor-card.card-off .chart-wrap::after {
+            content: "APAGADA";
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            color: rgba(233,238,247,0.50);
+            font-weight: 900;
+            letter-spacing: .14em;
+            font-size: 11px;
+            text-transform: uppercase;
+            pointer-events: none;
+        }
         .zone-row { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
         .zone-row .control-row { margin-bottom: 0; flex: 1 1 320px; }
         .zone-mini { font-size: 11px; color:#8fa3bf; }
@@ -988,6 +1015,7 @@
                 setCardOffByValueId(`zonePH${zoneNum}`, z.ph_soil_channel_index == null);
                 setCardOffByValueId(`zoneEC${zoneNum}`, z.ec_soil_channel_index == null);
                 setCardOffByValueId(`zoneValve${zoneNum}`, z.valve_channel_index == null);
+                try { updateZoneCardMeta(zoneNum); } catch {}
             }
 
             function populateSelect(sel, list, currentValue, usedSet, kindLabel) {
@@ -1179,19 +1207,19 @@
 
                     const bDay = document.createElement('button');
                     bDay.type = 'button';
-                    bDay.className = 'mini-btn';
+                    bDay.className = 'mini-btn zone-mode-btn zone-mode-day';
                     bDay.id = `zoneBtnDia${zoneNum}`;
                     bDay.textContent = 'DÍA';
 
                     const bMonth = document.createElement('button');
                     bMonth.type = 'button';
-                    bMonth.className = 'mini-btn';
+                    bMonth.className = 'mini-btn zone-mode-btn zone-mode-month';
                     bMonth.id = `zoneBtnMes${zoneNum}`;
                     bMonth.textContent = 'MES';
 
                     const bYear = document.createElement('button');
                     bYear.type = 'button';
-                    bYear.className = 'mini-btn';
+                    bYear.className = 'mini-btn zone-mode-btn zone-mode-year';
                     bYear.id = `zoneBtnAno${zoneNum}`;
                     bYear.textContent = 'AÑO';
 
@@ -1421,31 +1449,31 @@
 
                 const humCard = document.createElement('div');
                 humCard.className = 'sensor-card metric-neutral accent accent-green';
-                humCard.innerHTML = `<div class="sensor-label">Humedad (zona)</div><div class="sensor-value" id="zoneHum${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap"><canvas id="zoneHumChart${zoneNum}"></canvas></div>`;
+                humCard.innerHTML = `<div class="sensor-label">Humedad (zona)</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneHumName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneHumAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneHumLast${zoneNum}">Último: --</div></div><div class="sensor-value" id="zoneHum${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap"><canvas id="zoneHumChart${zoneNum}"></canvas></div>`;
 
                 const tSoilCard = document.createElement('div');
                 tSoilCard.className = 'sensor-card metric-neutral accent accent-purple';
-                tSoilCard.innerHTML = `<div class="sensor-label">Temp. tierra</div><div class="sensor-value" id="zoneTSoil${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap"><canvas id="zoneTSoilChart${zoneNum}"></canvas></div>`;
+                tSoilCard.innerHTML = `<div class="sensor-label">Temp. tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneTSoilName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneTSoilAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneTSoilLast${zoneNum}">Último: --</div></div><div class="sensor-value" id="zoneTSoil${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap"><canvas id="zoneTSoilChart${zoneNum}"></canvas></div>`;
 
                 const tAirCard = document.createElement('div');
                 tAirCard.className = 'sensor-card metric-neutral accent accent-blue';
-                tAirCard.innerHTML = `<div class="sensor-label">Temp. aire</div><div class="sensor-value" id="zoneTAir${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap"><canvas id="zoneTAirChart${zoneNum}"></canvas></div>`;
+                tAirCard.innerHTML = `<div class="sensor-label">Temp. aire</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneTAirName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneTAirAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneTAirLast${zoneNum}">Último: --</div></div><div class="sensor-value" id="zoneTAir${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap"><canvas id="zoneTAirChart${zoneNum}"></canvas></div>`;
 
                 const hAirCard = document.createElement('div');
                 hAirCard.className = 'sensor-card metric-neutral accent accent-indigo';
-                hAirCard.innerHTML = `<div class="sensor-label">Humedad aire</div><div class="sensor-value" id="zoneHAir${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap"><canvas id="zoneHAirChart${zoneNum}"></canvas></div>`;
+                hAirCard.innerHTML = `<div class="sensor-label">Humedad aire</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneHAirName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneHAirAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneHAirLast${zoneNum}">Último: --</div></div><div class="sensor-value" id="zoneHAir${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap"><canvas id="zoneHAirChart${zoneNum}"></canvas></div>`;
 
                 const phCard = document.createElement('div');
                 phCard.className = 'sensor-card metric-neutral accent accent-amber';
-                phCard.innerHTML = `<div class="sensor-label">pH tierra</div><div class="sensor-value" id="zonePH${zoneNum}">--</div><div class="sensor-unit">pH</div><div class="chart-wrap"><canvas id="zonePHChart${zoneNum}"></canvas></div>`;
+                phCard.innerHTML = `<div class="sensor-label">pH tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zonePHName${zoneNum}">—</div><div class="sensor-meta-avg" id="zonePHAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zonePHLast${zoneNum}">Último: --</div></div><div class="sensor-value" id="zonePH${zoneNum}">--</div><div class="sensor-unit">pH</div><div class="chart-wrap"><canvas id="zonePHChart${zoneNum}"></canvas></div>`;
 
                 const ecCard = document.createElement('div');
                 ecCard.className = 'sensor-card metric-neutral accent accent-cyan';
-                ecCard.innerHTML = `<div class="sensor-label">EC tierra</div><div class="sensor-value" id="zoneEC${zoneNum}">--</div><div class="sensor-unit">mS/cm</div><div class="chart-wrap"><canvas id="zoneECChart${zoneNum}"></canvas></div>`;
+                ecCard.innerHTML = `<div class="sensor-label">EC tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneECName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneECAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneECLast${zoneNum}">Último: --</div></div><div class="sensor-value" id="zoneEC${zoneNum}">--</div><div class="sensor-unit">mS/cm</div><div class="chart-wrap"><canvas id="zoneECChart${zoneNum}"></canvas></div>`;
 
                 const valveCard = document.createElement('div');
                 valveCard.className = 'sensor-card metric-neutral accent accent-red';
-                valveCard.innerHTML = `<div class="sensor-label">Válvula (zona)</div><div class="sensor-value" id="zoneValve${zoneNum}">--</div><div class="valve-indicator"><div class="valve-dot" id="zoneValveDot${zoneNum}"></div><div class="valve-text" id="zoneValveText${zoneNum}">--</div></div><div class="chart-wrap"><canvas id="zoneValveChart${zoneNum}"></canvas></div>`;
+                valveCard.innerHTML = `<div class="sensor-label">Válvula (zona)</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneValveName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneValveAvg${zoneNum}">ON: --</div></div><div class="sensor-meta-last" id="zoneValveLast${zoneNum}">Último: --</div></div><div class="sensor-value" id="zoneValve${zoneNum}">--</div><div class="valve-indicator"><div class="valve-dot" id="zoneValveDot${zoneNum}"></div><div class="valve-text" id="zoneValveText${zoneNum}">--</div></div><div class="chart-wrap"><canvas id="zoneValveChart${zoneNum}"></canvas></div>`;
 
                 const statusCard = document.createElement('div');
                 statusCard.className = 'sensor-card metric-neutral accent accent-cyan';
@@ -1483,6 +1511,7 @@
 
                 // Tarjetas visibles siempre, pero apagadas si su canal no está asignado
                 updateZoneCardsOff(zoneNum);
+                try { updateZoneCardMeta(zoneNum); } catch {}
             }
 
             applyZonesStateToUI();
@@ -1622,6 +1651,18 @@
                 const tSoilOk = tSoilLatest && tSoilLatest.value != null && (tSoilAge == null || Number(tSoilAge) <= STALE_MIN);
                 const phOk = phLatest && phLatest.value != null && (phAge == null || Number(phAge) <= STALE_MIN);
                 const ecOk = ecLatest && ecLatest.value != null && (ecAge == null || Number(ecAge) <= STALE_MIN);
+
+                // Atenuar tarjetas si el canal está asignado pero sin datos recientes (stale)
+                // Mantiene las gráficas visibles, solo cambia el estilo visual.
+                try {
+                    setCardOffByValueId(`zoneHum${zoneNum}`, soilIdx == null || !soilOk);
+                    setCardOffByValueId(`zoneTSoil${zoneNum}`, tSoilIdx == null || !tSoilOk);
+                    setCardOffByValueId(`zoneTAir${zoneNum}`, tAirIdx == null || !tAirOk);
+                    setCardOffByValueId(`zoneHAir${zoneNum}`, hAirIdx == null || !hAirOk);
+                    setCardOffByValueId(`zonePH${zoneNum}`, phIdx == null || !phOk);
+                    setCardOffByValueId(`zoneEC${zoneNum}`, ecIdx == null || !ecOk);
+                    setCardOffByValueId(`zoneValve${zoneNum}`, valveIdx == null || !valveOk);
+                } catch {}
 
                 if (humEl) {
                     const v = soilLatest?.value;
@@ -2832,6 +2873,88 @@
             return c ? c.id : null;
         }
 
+        function getChannelNameByKindIndex(kind, idx) {
+            const n = Number(idx);
+            if (!kind || !Number.isFinite(n)) return null;
+            const c = (channels || []).find(x => x && x.kind === kind && Number(x.channel_index) === n);
+            if (!c) return null;
+            const nm = (c.name == null) ? '' : String(c.name).trim();
+            return nm || null;
+        }
+
+        function setText(id, text) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = text;
+        }
+
+        function updateZoneCardMeta(zoneNum) {
+            const z = Number(zoneNum);
+            if (!Number.isFinite(z) || z < 1 || z > 8) return;
+            const zi = z - 1;
+            const st = zonesState?.[zi];
+            if (!st) return;
+
+            const defs = [
+                { base: 'zoneHum', kind: 'soil_sensor', idx: st.soil_channel_index, unit: '%', decimals: 1, isValve: false },
+                { base: 'zoneTSoil', kind: 'temperature_soil', idx: st.temperature_soil_channel_index, unit: '°C', decimals: 1, isValve: false },
+                { base: 'zoneTAir', kind: 'temperature_air', idx: st.temperature_air_channel_index, unit: '°C', decimals: 1, isValve: false },
+                { base: 'zoneHAir', kind: 'humidity_air', idx: st.humidity_air_channel_index, unit: '%', decimals: 1, isValve: false },
+                { base: 'zonePH', kind: 'ph_soil', idx: st.ph_soil_channel_index, unit: 'pH', decimals: 2, isValve: false },
+                { base: 'zoneEC', kind: 'ec_soil', idx: st.ec_soil_channel_index, unit: 'mS/cm', decimals: 2, isValve: false },
+                { base: 'zoneValve', kind: 'valve', idx: st.valve_channel_index, unit: '', decimals: 0, isValve: true }
+            ];
+
+            for (const d of defs) {
+                const nameElId = `${d.base}Name${z}`;
+                const avgElId = `${d.base}Avg${z}`;
+                const lastElId = `${d.base}Last${z}`;
+                const canvasId = `${d.base}Chart${z}`;
+
+                if (d.idx == null) {
+                    setText(nameElId, 'Sin asignar');
+                    setText(avgElId, d.isValve ? 'ON: --' : 'Media: --');
+                    setText(lastElId, 'Último: --');
+                    continue;
+                }
+
+                const nm = getChannelNameByKindIndex(d.kind, d.idx);
+                setText(nameElId, nm ? `${nm} (${d.idx})` : `${String(d.idx)}`);
+
+                const entry = zoneMiniCharts.get(canvasId);
+                if (!entry || !entry.meta) {
+                    setText(avgElId, d.isValve ? 'ON: --' : 'Media: --');
+                    setText(lastElId, 'Último: --');
+                    continue;
+                }
+
+                if (d.isValve) {
+                    const ms = Number(entry.meta.valveOnMs);
+                    setText(avgElId, Number.isFinite(ms) && ms > 0 ? `ON: ${formatDuration(ms)}` : 'ON: --');
+                } else {
+                    const sum = Number(entry.meta.sum);
+                    const cnt = Number(entry.meta.count);
+                    if (Number.isFinite(sum) && Number.isFinite(cnt) && cnt > 0) {
+                        const avg = sum / cnt;
+                        const decimals = Number.isFinite(Number(d.decimals)) ? Number(d.decimals) : 2;
+                        const unitTxt = !d.unit ? '' : ((d.unit === '%' || d.unit === '°C' || d.unit === 'pH') ? d.unit : ` ${d.unit}`);
+                        setText(avgElId, `Media: ${avg.toFixed(decimals)}${unitTxt}`);
+                    } else {
+                        setText(avgElId, 'Media: --');
+                    }
+                }
+
+                const lastMs = Number(entry.meta.lastDateMs);
+                if (Number.isFinite(lastMs) && lastMs > 0) {
+                    // Siempre mostrar hora en tarjetas para verificar que el sensor “se mueve”
+                    const txt = formatLastPointText('day', new Date(lastMs), entry.meta.lastLabel || '');
+                    setText(lastElId, `Último: ${txt}`);
+                } else {
+                    setText(lastElId, 'Último: --');
+                }
+            }
+        }
+
         function miniLabelForDate(d, mode) {
             const p = getMadridPartsFull(d);
             if (mode === 'day') return `${p.h}:${p.mi}:${p.s}`;
@@ -3132,6 +3255,11 @@
             entry.chart.update('none');
 
             try {
+                const m = String(canvasId).match(/^zone([A-Za-z]+)Chart(\d+)$/);
+                if (m) updateZoneCardMeta(Number(m[2]));
+            } catch {}
+
+            try {
                 const m = String(canvasId).match(/^zone(Hum|Valve)Chart(\d+)$/);
                 if (m) updateZoneSummary(Number(m[2]));
             } catch {}
@@ -3142,13 +3270,13 @@
             if (!Array.isArray(zonesState) || zonesState.length === 0) return;
 
             const defs = [
-                { kind: 'soil_sensor', prop: 'soil_channel_index', canvas: (z) => `zoneHumChart${z}`, yMin: 0, yMax: 100, yTickStep: 5, yTickCb: (v) => `${v}%` },
-                { kind: 'temperature_soil', prop: 'temperature_soil_channel_index', canvas: (z) => `zoneTSoilChart${z}` },
-                { kind: 'temperature_air', prop: 'temperature_air_channel_index', canvas: (z) => `zoneTAirChart${z}` },
-                { kind: 'humidity_air', prop: 'humidity_air_channel_index', canvas: (z) => `zoneHAirChart${z}`, yMin: 0, yMax: 100, yTickStep: 5, yTickCb: (v) => `${v}%` },
-                { kind: 'ph_soil', prop: 'ph_soil_channel_index', canvas: (z) => `zonePHChart${z}`, yMin: 0, yMax: 14 },
-                { kind: 'ec_soil', prop: 'ec_soil_channel_index', canvas: (z) => `zoneECChart${z}` },
-                { kind: 'valve', prop: 'valve_channel_index', canvas: (z) => `zoneValveChart${z}`, stepped: true }
+                { base: 'zoneHum', kind: 'soil_sensor', prop: 'soil_channel_index', canvas: (z) => `zoneHumChart${z}`, yMin: 0, yMax: 100, yTickStep: 5, yTickCb: (v) => `${v}%` },
+                { base: 'zoneTSoil', kind: 'temperature_soil', prop: 'temperature_soil_channel_index', canvas: (z) => `zoneTSoilChart${z}` },
+                { base: 'zoneTAir', kind: 'temperature_air', prop: 'temperature_air_channel_index', canvas: (z) => `zoneTAirChart${z}` },
+                { base: 'zoneHAir', kind: 'humidity_air', prop: 'humidity_air_channel_index', canvas: (z) => `zoneHAirChart${z}`, yMin: 0, yMax: 100, yTickStep: 5, yTickCb: (v) => `${v}%` },
+                { base: 'zonePH', kind: 'ph_soil', prop: 'ph_soil_channel_index', canvas: (z) => `zonePHChart${z}`, yMin: 0, yMax: 14 },
+                { base: 'zoneEC', kind: 'ec_soil', prop: 'ec_soil_channel_index', canvas: (z) => `zoneECChart${z}` },
+                { base: 'zoneValve', kind: 'valve', prop: 'valve_channel_index', canvas: (z) => `zoneValveChart${z}`, stepped: true }
             ];
 
             const wantedZones = Array.isArray(zonesToRebuild) && zonesToRebuild.length
@@ -3172,11 +3300,36 @@
                 for (const def of defs) {
                     const canvasId = def.canvas(zoneNum);
                     const idx = z[def.prop];
+                    // Siempre mostrar mini-gráfica: si no hay asignación, dejamos placeholder (apagada)
                     if (idx == null) {
-                        const existing = zoneMiniCharts.get(canvasId);
-                        if (existing) {
-                            try { existing.chart?.destroy(); } catch {}
-                            zoneMiniCharts.delete(canvasId);
+                        let yMin = def.yMin;
+                        let yMax = def.yMax;
+                        let yTickCb = def.yTickCb;
+                        let yTickStep = def.yTickStep;
+
+                        if (def.kind === 'valve') {
+                            if (mode === 'day') {
+                                yMin = 0;
+                                yMax = 1;
+                                yTickCb = (v) => (Number(v) >= 0.5 ? 'ON' : 'OFF');
+                                yTickStep = 1;
+                            } else {
+                                yMin = 0;
+                                yMax = undefined;
+                                yTickCb = undefined;
+                                yTickStep = undefined;
+                            }
+                        }
+
+                        const e = ensureMiniChart(canvasId, { stepped: def.stepped, yMin, yMax, yTickCb, yTickStep, mode });
+                        if (e) {
+                            e.labels.length = 0;
+                            e.series.length = 0;
+                            e.ts.length = 0;
+                            e.lastTsMs = null;
+                            e.mode = mode;
+                            e.meta = { sum: 0, count: 0, valveOnMs: 0, lastDateMs: null, lastLabel: '' };
+                            try { e.chart.update('none'); } catch {}
                         }
                         continue;
                     }
@@ -3208,6 +3361,7 @@
                 }
 
                 try { updateZoneSummary(zoneNum); } catch {}
+                try { updateZoneCardMeta(zoneNum); } catch {}
             }
         }
 
