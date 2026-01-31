@@ -3368,6 +3368,31 @@
             return labels;
         }
 
+        function minuteIndexToHHMM(minuteIndex) {
+            const i = Number(minuteIndex);
+            if (!Number.isFinite(i)) return '';
+            const clamped = Math.max(0, Math.min(1439, Math.trunc(i)));
+            const hh = pad2(Math.floor(clamped / 60));
+            const mm = pad2(clamped % 60);
+            return `${hh}:${mm}`;
+        }
+
+        function initMiniChartDayAxis(entry, pNow) {
+            if (!entry) return;
+
+            // Para mini-gráficas en DÍA usamos X lineal (0..1439) con puntos {x,y}
+            entry.labels.length = 0;
+            entry.series.length = 0;
+            entry.ts.length = 0;
+            for (let i = 0; i < 1440; i++) entry.series.push({ x: i, y: null });
+            for (let i = 0; i < 1440; i++) entry.ts.push(null);
+
+            try {
+                // Guardamos el día actual en el entry (por si hay cambio de día)
+                entry.dayKey = `${pNow?.y ?? ''}-${pNow?.mo ?? ''}-${pNow?.d ?? ''}`;
+            } catch {}
+        }
+
         function madridMinuteIndexForTs(ts, pNow) {
             const d = parseTsToDate(ts);
             if (!d) return null;
@@ -3713,6 +3738,15 @@
                 const e = zoneMiniCharts.get(canvasId);
                 try {
                     if (e?.chart) {
+                        const wantDay = mode === 'day';
+                        const curType = e.chart?.options?.scales?.x?.type || 'category';
+                        const needType = wantDay ? 'linear' : 'category';
+                        if (curType !== needType) {
+                            try { e.chart.destroy(); } catch {}
+                            zoneMiniCharts.delete(canvasId);
+                            return ensureMiniChart(canvasId, { stepped, yMin, yMax, yTickCb, yTickStep, mode });
+                        }
+
                         e.chart.data.datasets[0].stepped = !!stepped;
                         e.chart.data.datasets[0].tension = stepped ? 0 : 0.25;
                         e.chart.options.scales.y.min = yMin;
@@ -3721,9 +3755,24 @@
                         e.chart.options.scales.y.ticks.stepSize = yTickStep;
                         e.chart.options.scales.y.ticks.color = '#fff';
                         e.chart.options.scales.x.ticks.color = '#fff';
-                        e.chart.options.scales.x.ticks.autoSkip = true;
-                        e.chart.options.scales.x.ticks.callback = mode === 'day' ? tickEvery30Minutes : undefined;
-                        e.chart.options.scales.x.ticks.maxTicksLimit = mode === 'day' ? 49 : 8;
+
+                        if (mode === 'day') {
+                            e.chart.options.scales.x.type = 'linear';
+                            e.chart.options.scales.x.min = 0;
+                            e.chart.options.scales.x.max = 1439;
+                            e.chart.options.scales.x.ticks.autoSkip = false;
+                            e.chart.options.scales.x.ticks.stepSize = 30;
+                            e.chart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
+                        } else {
+                            e.chart.options.scales.x.type = 'category';
+                            delete e.chart.options.scales.x.min;
+                            delete e.chart.options.scales.x.max;
+                            e.chart.options.scales.x.ticks.autoSkip = true;
+                            e.chart.options.scales.x.ticks.maxTicksLimit = 8;
+                            e.chart.options.scales.x.ticks.callback = undefined;
+                            delete e.chart.options.scales.x.ticks.stepSize;
+                        }
+
                         e.chart.options.scales.x.ticks.maxRotation = 0;
                         e.chart.options.scales.x.ticks.minRotation = 0;
                         e.chart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
@@ -3762,7 +3811,24 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
-                    plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            enabled: true,
+                            callbacks: mode === 'day' ? {
+                                title: (items) => {
+                                    try {
+                                        const it = items && items[0] ? items[0] : null;
+                                        const x = it && it.parsed && typeof it.parsed.x === 'number' ? it.parsed.x : null;
+                                        if (x == null) return '';
+                                        return minuteIndexToHHMM(x);
+                                    } catch {
+                                        return '';
+                                    }
+                                }
+                            } : undefined
+                        }
+                    },
                     scales: {
                         y: {
                             min: yMin,
@@ -3775,11 +3841,15 @@
                             grid: { color: 'rgba(255,255,255,0.06)' }
                         },
                         x: {
+                            type: mode === 'day' ? 'linear' : 'category',
+                            min: mode === 'day' ? 0 : undefined,
+                            max: mode === 'day' ? 1439 : undefined,
                             ticks: {
                                 color: '#fff',
-                                maxTicksLimit: mode === 'day' ? 49 : 8,
-                                autoSkip: true,
-                                callback: mode === 'day' ? tickEvery30Minutes : undefined,
+                                autoSkip: mode === 'day' ? false : true,
+                                stepSize: mode === 'day' ? 30 : undefined,
+                                maxTicksLimit: mode === 'day' ? undefined : 8,
+                                callback: mode === 'day' ? (v) => minuteIndexToHHMM(v) : undefined,
                                 maxRotation: 0,
                                 minRotation: 0,
                                 backdropColor: 'rgba(0,0,0,0)',
@@ -3798,6 +3868,7 @@
                 ts,
                 lastTsMs: null,
                 mode,
+                dayKey: null,
                 meta: { sum: 0, count: 0, valveOnMs: 0, lastDateMs: null, lastLabel: '' }
             };
 
@@ -3805,13 +3876,7 @@
             if (mode === 'day') {
                 try {
                     const pNow = getMadridParts(nowAdjusted());
-                    const axis = buildMadridDayAxisLabels(pNow).map(withDiaPrefixLabel);
-                    labels.length = 0;
-                    series.length = 0;
-                    ts.length = 0;
-                    for (const x of axis) labels.push(x);
-                    for (let i = 0; i < 1440; i++) series.push(null);
-                    for (let i = 0; i < 1440; i++) ts.push(null);
+                    initMiniChartDayAxis(entry, pNow);
                 } catch {}
             }
             zoneMiniCharts.set(canvasId, entry);
@@ -3852,8 +3917,9 @@
 
             if (mode === 'day') {
                 const pNow = getMadridParts(nowAdjusted());
-                const axis = buildMadridDayAxisLabels(pNow);
-                const sArr = new Array(1440).fill(null);
+                const sArr = new Array(1440);
+                const tArr = new Array(1440).fill(null);
+                for (let i = 0; i < 1440; i++) sArr[i] = { x: i, y: null };
 
                 let prevT = null;
                 let prevOn = false;
@@ -3867,10 +3933,11 @@
 
                     const idx = madridMinuteIndexForTs(row?.ts, pNow);
                     if (idx == null) continue;
+                    tArr[idx] = tsMs;
 
                     if (kind === 'valve') {
                         const onNow = Number(row?.state || 0) >= 1;
-                        sArr[idx] = onNow ? 1 : 0;
+                        sArr[idx].y = onNow ? 1 : 0;
 
                         if (prevT != null) {
                             const dt = Math.max(0, tsMs - prevT);
@@ -3881,12 +3948,17 @@
                     } else {
                         const v = row?.value == null ? null : Number(row.value);
                         if (Number.isFinite(v)) { totalSum += v; totalCount += 1; }
-                        sArr[idx] = Number.isFinite(v) ? v : null;
+                        sArr[idx].y = Number.isFinite(v) ? v : null;
                     }
                 }
 
-                for (const x of axis) labels.push(withDiaPrefixLabel(x));
+                // En DÍA usamos serie de puntos {x,y} y X lineal fijo
                 for (const y of sArr) series.push(y);
+                // labels se queda vacío (no se usa en escala lineal)
+
+                // Guardar timestamps por minuto (útil para debug y para deltas futuros)
+                entry.ts.length = 0;
+                for (const t of tArr) entry.ts.push(t);
             } else if (mode === 'month') {
                 // Agrupar por día
                 if (kind === 'valve') {
@@ -3981,10 +4053,12 @@
 
             entry.labels.length = 0;
             entry.series.length = 0;
-            entry.ts.length = 0;
+            if (mode !== 'day') entry.ts.length = 0;
             for (const x of labels) entry.labels.push(x);
             for (const y of series) entry.series.push(y);
-            for (const t of tsArr) entry.ts.push(t);
+            if (mode !== 'day') {
+                for (const t of tsArr) entry.ts.push(t);
+            }
             entry.lastTsMs = lastTsMs;
             entry.mode = mode;
 
@@ -4035,7 +4109,8 @@
                     }
                 })();
                 if (Number.isFinite(prevT) && prevIdx != null) {
-                    const prevOn = Number(entry.series[prevIdx]) >= 0.5;
+                    const prevV = entry.series?.[prevIdx];
+                    const prevOn = Number((prevV && typeof prevV === 'object') ? prevV.y : prevV) >= 0.5;
                     const dt = Math.max(0, tsMs - prevT);
                     if (prevOn) entry.meta.valveOnMs = (Number(entry.meta.valveOnMs) || 0) + dt;
                 }
@@ -4053,20 +4128,23 @@
             if (idx == null) return;
 
             // Inicializar si venía de una versión anterior sin eje completo
-            if (!Array.isArray(entry.labels) || entry.labels.length !== 1440) {
+            const needsInit = (() => {
+                if (!Array.isArray(entry.series) || entry.series.length !== 1440) return true;
+                const first = entry.series[0];
+                return !(first && typeof first === 'object' && 'x' in first && 'y' in first);
+            })();
+            if (needsInit) {
                 try {
-                    const axis = buildMadridDayAxisLabels(pNow).map(withDiaPrefixLabel);
-                    entry.labels.length = 0;
-                    entry.series.length = 0;
-                    entry.ts.length = 0;
-                    for (const x of axis) entry.labels.push(x);
-                    for (let i = 0; i < 1440; i++) entry.series.push(null);
-                    for (let i = 0; i < 1440; i++) entry.ts.push(null);
+                    initMiniChartDayAxis(entry, pNow);
                 } catch {}
             }
 
-            entry.series[idx] = (val == null || !Number.isFinite(val)) ? null : val;
-            entry.ts[idx] = tsMs;
+            if (entry.series[idx] && typeof entry.series[idx] === 'object') {
+                entry.series[idx].y = (val == null || !Number.isFinite(val)) ? null : val;
+            } else {
+                entry.series[idx] = (val == null || !Number.isFinite(val)) ? null : val;
+            }
+            if (Array.isArray(entry.ts) && entry.ts.length === 1440) entry.ts[idx] = tsMs;
             entry.lastTsMs = tsMs;
             entry.meta.lastDateMs = tsMs;
             {
