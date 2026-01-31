@@ -72,6 +72,32 @@
             word-break: break-word;
         }
 
+        /* Chips (para que las tarjetas se vean más “llenas”) */
+        .chips { display:flex; flex-wrap:wrap; gap: 8px; margin-top: 10px; justify-content:center; }
+        .chip { display:inline-flex; align-items:center; gap: 6px; padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.08); color:#d7deea; font-size: 11px; font-weight: 900; letter-spacing: .01em; }
+        .chip .k { opacity: .72; font-weight: 900; }
+        .chip .v { color:#ffffff; }
+        .chip-ok { border-color: rgba(34,197,94,0.30); background: rgba(34,197,94,0.10); color: rgba(187,247,208,0.95); }
+        .chip-warn { border-color: rgba(250,204,21,0.35); background: rgba(250,204,21,0.10); color: rgba(254,249,195,0.98); }
+        .chip-bad { border-color: rgba(239,68,68,0.35); background: rgba(239,68,68,0.10); color: rgba(254,202,202,0.98); }
+        .chip-neutral { border-color: rgba(148,163,184,0.22); background: rgba(148,163,184,0.08); }
+
+        /* Tarjetas del bloque DISPOSITIVO CONECTADO: más modernas y menos vacías */
+        #connectedSection .sensor-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+        #connectedSection .sensor-card { position: relative; overflow: hidden; padding: 16px; }
+        #connectedSection .sensor-card::before {
+            content: "";
+            position: absolute;
+            inset: -120px -160px auto auto;
+            width: 260px;
+            height: 260px;
+            background: radial-gradient(circle, rgba(34,211,238,0.16), transparent 62%);
+            transform: rotate(18deg);
+            pointer-events: none;
+        }
+        #connectedSection .sensor-label { font-size: 12px; letter-spacing: .03em; opacity: .96; }
+        #connectedSection .sensor-value { font-size: clamp(22px, 5vw, 34px); }
+
         /* Zonas / Plantas */
         .zone-off { opacity: 0.62; }
         .zone-subtitle { color:#8fa3bf; font-size: 12px; margin-top: -6px; margin-bottom: 8px; overflow-wrap: anywhere; word-break: break-word; }
@@ -81,9 +107,12 @@
         .mini-btn.tiny { padding: 6px 10px; font-size: 11px; border-radius: 10px; box-shadow: 0 10px 22px rgba(0,0,0,0.18); }
         .sensor-value.small { font-size: 16px; color: #e9eef7; font-weight: 800; word-break: break-word; }
         .valve-indicator { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
-        .valve-dot { width: 14px; height: 14px; border-radius: 50%; background: #666; box-shadow: 0 0 10px #000; }
-        .valve-dot.on { background: #33cc33; box-shadow: 0 0 18px #33cc33; }
-        .valve-dot.off { background: #ff3333; box-shadow: 0 0 18px #ff3333; }
+        .valve-dot { width: 14px; height: 14px; border-radius: 999px; background: radial-gradient(circle at 30% 30%, rgba(148,163,184,1), rgba(71,85,105,1)); box-shadow: 0 10px 18px rgba(0,0,0,0.35), inset 0 0 0 2px rgba(255,255,255,0.10); position: relative; }
+        .valve-dot::after { content:""; position:absolute; inset:-8px; border-radius:999px; opacity:0; transition: opacity .18s ease; }
+        .valve-dot.on { background: radial-gradient(circle at 30% 30%, rgba(34,197,94,1), rgba(22,163,74,1)); }
+        .valve-dot.on::after { opacity:1; background: radial-gradient(circle, rgba(34,197,94,0.28), transparent 58%); }
+        .valve-dot.off { background: radial-gradient(circle at 30% 30%, rgba(239,68,68,1), rgba(185,28,28,1)); }
+        .valve-dot.off::after { opacity:1; background: radial-gradient(circle, rgba(239,68,68,0.26), transparent 58%); }
         .valve-text { font-size: 14px; font-weight: bold; color: #ddd; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
         .leds-container { display: flex; justify-content: center; gap: 15px; margin: 20px 0; }
         .led { width: 40px; height: 40px; border-radius: 50%; border: 3px solid #333; transition: all 0.3s; }
@@ -222,10 +251,12 @@
         .badge.hidden { display:none; }
 
         .conn { display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: #c9d1d9; opacity: 0.95; }
-        .dot { width: 10px; height: 10px; border-radius: 999px; background: #6b7280; box-shadow: 0 0 0 2px rgba(255,255,255,0.08) inset; }
-        .dot.online { background: #22c55e; }
-        .dot.offline { background: #ef4444; }
-        .dot.unknown { background: #6b7280; }
+        .dot { width: 10px; height: 10px; border-radius: 999px; background: #6b7280; position: relative; box-shadow: 0 0 0 2px rgba(255,255,255,0.10) inset, 0 6px 14px rgba(0,0,0,0.35); }
+        .dot::after { content:""; position:absolute; inset:-6px; border-radius:999px; opacity:0; background: radial-gradient(circle, rgba(34,197,94,0.22), transparent 55%); transition: opacity .18s ease; }
+        .dot.online { background: radial-gradient(circle at 30% 30%, rgba(34,197,94,1), rgba(22,163,74,1)); }
+        .dot.offline { background: radial-gradient(circle at 30% 30%, rgba(239,68,68,1), rgba(185,28,28,1)); }
+        .dot.unknown { background: radial-gradient(circle at 30% 30%, rgba(148,163,184,1), rgba(71,85,105,1)); }
+        .dot.online::after { opacity: 1; }
 
         /* Secciones plegables */
         .section-head { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
@@ -376,39 +407,38 @@
             <div class="sensor-grid">
                 <div class="sensor-card metric-neutral">
                     <div class="sensor-label">Pantalla OLED (tiempo real)</div>
-                    <div class="sensor-value" id="sendInterval">--</div>
-                    <div class="sensor-unit" id="sendIntervalHint">--</div>
+                    <div class="chips" id="oledMeta"></div>
                     <div class="oled-panel" id="oledPanel">--</div>
                 </div>
                 <div class="sensor-card metric-neutral">
                     <div class="sensor-label">Tiempo encendido</div>
                     <div class="sensor-value small" id="uptime">--</div>
-                    <div class="sensor-unit" id="uptimeMeta">--</div>
+                    <div class="chips" id="uptimeMeta"></div>
                 </div>
                 <div class="sensor-card metric-neutral">
                     <div class="sensor-label">IP</div>
                     <div class="sensor-value small" id="ip">--</div>
-                    <div class="sensor-unit">red</div>
+                    <div class="chips" id="ipMeta"></div>
                 </div>
                 <div class="sensor-card metric-neutral">
                     <div class="sensor-label">Memoria libre</div>
                     <div class="sensor-value" id="heap">--</div>
-                    <div class="sensor-unit">KB</div>
+                    <div class="chips" id="heapMeta"></div>
                 </div>
                 <div class="sensor-card">
                     <div class="sensor-label">Voltaje</div>
                     <div class="sensor-value" id="voltage">--</div>
-                    <div class="sensor-unit">V</div>
+                    <div class="chips" id="voltageMeta"></div>
                 </div>
                 <div class="sensor-card">
                     <div class="sensor-label">WiFi</div>
                     <div class="sensor-value" id="rssi">--</div>
-                    <div class="sensor-unit" id="wifiMeta">dBm · --</div>
+                    <div class="chips" id="wifiMeta"></div>
                 </div>
                 <div class="sensor-card">
                     <div class="sensor-label">Reinicios</div>
                     <div class="sensor-value" id="reboots">--</div>
-                    <div class="sensor-unit">#</div>
+                    <div class="chips" id="rebootsMeta"></div>
                     <div style="margin-top: 10px;">
                         <button class="mini-btn danger" id="resetRebootsBtn" type="button">Reset a 0</button>
                     </div>
@@ -1779,6 +1809,32 @@
             return formatDuration(n * 1000);
         }
 
+        function escapeHtml(s) {
+            return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[c]));
+        }
+
+        function setChips(el, chips) {
+            if (!el) return;
+            const arr = Array.isArray(chips) ? chips.filter(Boolean) : [];
+            if (arr.length === 0) {
+                el.innerHTML = '';
+                return;
+            }
+            el.innerHTML = arr.map(c => {
+                const variant = c.variant ? ` chip-${escapeHtml(c.variant)}` : '';
+                const title = c.title ? ` title="${escapeHtml(c.title)}"` : '';
+                const k = c.k == null ? '' : `<span class="k">${escapeHtml(c.k)}</span>`;
+                const v = c.v == null ? '' : `<span class="v">${escapeHtml(c.v)}</span>`;
+                return `<span class="chip${variant}"${title}>${k}${v}</span>`;
+            }).join('');
+        }
+
         function setMetricStateById(valueId, state, title) {
             const valueEl = document.getElementById(valueId);
             const card = valueEl ? valueEl.closest('.sensor-card') : null;
@@ -1812,9 +1868,8 @@
                 ? String(data.created_at_madrid)
                 : (createdAt ? createdAt.toLocaleString('es-ES', { timeZone: TZ, hour12: false }) : '--');
 
-            // Intervalo de envío (delta entre esta lectura y la anterior)
-            const sendIntervalEl = document.getElementById('sendInterval');
-            const sendIntervalHintEl = document.getElementById('sendIntervalHint');
+            // OLED meta (chips compactos, sin texto repetido)
+            const oledMeta = document.getElementById('oledMeta');
             const createdMs = createdAt ? createdAt.getTime() : null;
             let deltaSec = null;
             if (createdMs != null && lastSampleMsForInterval != null) {
@@ -1823,12 +1878,15 @@
                 if (Number.isFinite(d) && d > 0.5 && d < 3600) deltaSec = d;
             }
             if (createdMs != null) lastSampleMsForInterval = createdMs;
-            if (sendIntervalEl) sendIntervalEl.textContent = deltaSec == null ? '--' : formatIntervalSeconds(deltaSec);
-            if (sendIntervalHintEl) {
-                const nowTxt = fmtNowEs.format(nowAdjusted());
-                const lastTxt = createdAtLabel === '--' ? '--' : createdAtLabel;
-                sendIntervalHintEl.textContent = `intervalo: ${deltaSec == null ? '--' : formatIntervalSeconds(deltaSec)} · último: ${lastTxt} · ahora: ${nowTxt}`;
-            }
+
+            const pLast = createdAt ? getMadridPartsFull(createdAt) : null;
+            const lastTimeTxt = pLast ? `${pLast.h}:${pLast.mi}:${pLast.s}` : '--';
+            const nowTxt = fmtNowEs.format(nowAdjusted());
+            setChips(oledMeta, [
+                { k: 'Δ', v: (deltaSec == null ? '--' : formatIntervalSeconds(deltaSec)), variant: (deltaSec != null && deltaSec <= 90) ? 'ok' : 'neutral', title: 'Tiempo entre lecturas (aprox.)' },
+                { k: 'Últ', v: lastTimeTxt, variant: (createdAtLabel === '--') ? 'neutral' : 'ok', title: createdAtLabel === '--' ? '' : createdAtLabel },
+                { k: 'Now', v: String(nowTxt).slice(-8), variant: 'neutral' },
+            ]);
 
             const uptimeEl = document.getElementById('uptime');
             if (uptimeEl) uptimeEl.textContent = formatUptimeSeconds(data?.uptime_s);
@@ -1855,10 +1913,13 @@
                     }
                 }
                 const uptimeMeta = document.getElementById('uptimeMeta');
-                if (uptimeMeta) uptimeMeta.textContent = `Sensores: ${soilActive}/${soilTotal} · Válvulas: ${valveActive}/${valveTotal}`;
+                setChips(uptimeMeta, [
+                    { k: 'Sens', v: `${soilActive}/${soilTotal}`, variant: (soilTotal > 0 && soilActive === soilTotal) ? 'ok' : 'neutral' },
+                    { k: 'Valv', v: `${valveActive}/${valveTotal}`, variant: (valveTotal > 0 && valveActive === valveTotal) ? 'ok' : 'neutral' },
+                ]);
             } catch {
                 const uptimeMeta = document.getElementById('uptimeMeta');
-                if (uptimeMeta) uptimeMeta.textContent = '--';
+                setChips(uptimeMeta, [{ k: 'Sens', v: '--', variant: 'neutral' }, { k: 'Valv', v: '--', variant: 'neutral' }]);
             }
 
             const ipEl = document.getElementById('ip');
@@ -1867,12 +1928,24 @@
                 ipEl.textContent = ip || '--';
             }
 
+            const ipMeta = document.getElementById('ipMeta');
+            setChips(ipMeta, [
+                { k: 'Red', v: 'LAN', variant: 'neutral' },
+                { k: 'OK', v: (ipEl && ipEl.textContent && ipEl.textContent !== '--') ? 'sí' : '—', variant: (ipEl && ipEl.textContent && ipEl.textContent !== '--') ? 'ok' : 'neutral' },
+            ]);
+
             const heapEl = document.getElementById('heap');
             if (heapEl) {
                 const hb = (data?.heap_free == null ? null : Number(data.heap_free));
                 const kb = (hb == null || Number.isNaN(hb)) ? null : Math.max(0, Math.round(hb / 1024));
                 heapEl.textContent = kb == null ? '--' : String(kb);
             }
+
+            const heapMeta = document.getElementById('heapMeta');
+            setChips(heapMeta, [
+                { k: 'Unidad', v: 'KB', variant: 'neutral' },
+                { k: 'Libre', v: (heapEl && heapEl.textContent) ? heapEl.textContent : '--', variant: 'neutral' },
+            ]);
 
             // WiFi: SSID + RSSI
             {
@@ -1881,10 +1954,12 @@
                 const rssi = (data?.wifi_rssi == null ? null : Number(data.wifi_rssi));
                 const rssiOk = !(rssi == null || Number.isNaN(rssi) || rssi === 0);
                 const wifiMeta = document.getElementById('wifiMeta');
-                if (wifiMeta) {
-                    const rssiTxt = rssiOk ? `${Math.trunc(rssi)} dBm` : '-- dBm';
-                    wifiMeta.textContent = `${rssiTxt} · ${ssid ? ssid : '--'}`;
-                }
+                const rssiTxt = rssiOk ? `${Math.trunc(rssi)} dBm` : '-- dBm';
+                const rssiVariant = !rssiOk ? 'neutral' : (rssi >= -60 ? 'ok' : (rssi >= -75 ? 'warn' : 'bad'));
+                setChips(wifiMeta, [
+                    { k: 'RSSI', v: rssiTxt, variant: rssiVariant },
+                    { k: 'SSID', v: ssid ? (ssid.length > 16 ? (ssid.slice(0, 16) + '…') : ssid) : '--', variant: 'neutral', title: ssid || '' },
+                ]);
             }
 
             // Pantalla OLED (aprox: como OLED para PLANTA 1)
@@ -1919,6 +1994,8 @@
                     const vTxt = (v == null || Number.isNaN(v)) ? '--.-V' : `${v.toFixed(2)}V`;
                     const rssi = (data?.wifi_rssi == null ? null : Number(data.wifi_rssi));
                     const rssiTxt = (rssi == null || Number.isNaN(rssi) || rssi === 0) ? '--dBm' : `${Math.trunc(rssi)}dBm`;
+                    const ssidRaw = (data && (data.wifi_ssid != null ? data.wifi_ssid : (data.ssid != null ? data.ssid : null)));
+                    const ssid = ssidRaw == null ? '' : String(ssidRaw).trim();
 
                     const now = nowAdjusted();
                     const p = getMadridPartsFull(now);
@@ -1929,7 +2006,7 @@
                         `OLED ${timeTxt}\n` +
                         `PL1 HUM ${humTxt}  THR ${thrTxt}\n` +
                         `VAL ${valveTxt}   V ${vTxt}\n` +
-                        `WiFi ${rssiTxt}${ip ? `  IP ${ip}` : ''}`;
+                        `WiFi ${rssiTxt}${ssid ? ` ${ssid.slice(0, 10)}` : ''}${ip ? `  IP ${ip}` : ''}`;
                 }
             } catch {
                 const panel = document.getElementById('oledPanel');
@@ -2797,6 +2874,15 @@
 
                 const v = (data.voltage == null ? null : Number(data.voltage));
                 document.getElementById('voltage').textContent = (v == null || Number.isNaN(v) ? '--' : v.toFixed(2));
+                {
+                    const el = document.getElementById('voltageMeta');
+                    const vOk = !(v == null || Number.isNaN(v));
+                    const variant = !vOk ? 'neutral' : (v >= 1.8 ? 'ok' : (v >= 1.0 ? 'warn' : 'bad'));
+                    setChips(el, [
+                        { k: 'Unidad', v: 'V', variant: 'neutral' },
+                        { k: 'Estado', v: !vOk ? '--' : (variant === 'ok' ? 'ok' : (variant === 'warn' ? 'bajo' : 'crítico')), variant },
+                    ]);
+                }
 
                 const rssi = (data.wifi_rssi == null ? null : Number(data.wifi_rssi));
                 const rssiOk = !(rssi == null || Number.isNaN(rssi) || rssi === 0);
@@ -2808,6 +2894,13 @@
                 const localOffset = getLocalRebootsOffset(deviceCode);
                 const rbShown = (lastRebootsBase == null) ? null : Math.max(0, lastRebootsBase - localOffset);
                 document.getElementById('reboots').textContent = (rbShown == null ? '--' : String(Math.trunc(rbShown)));
+                {
+                    const el = document.getElementById('rebootsMeta');
+                    setChips(el, [
+                        { k: 'Total', v: (rbShown == null ? '--' : String(Math.trunc(rbShown))), variant: (rbShown != null && rbShown === 0) ? 'ok' : 'neutral' },
+                        { k: 'Reset', v: 'manual', variant: 'neutral', title: 'Reset a 0 (UI)' },
+                    ]);
+                }
 
                 // Colores por umbral (valores típicos; además se respetan min/max de alertas si están configurados)
                 const alertVminRaw = document.getElementById('alertVmin')?.value;
