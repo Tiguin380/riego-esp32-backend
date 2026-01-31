@@ -58,7 +58,7 @@
 
         /* Zonas / Plantas */
         .zone-off { opacity: 0.62; }
-        .zone-subtitle { color:#8fa3bf; font-size: 12px; margin-top: -6px; margin-bottom: 8px; }
+        .zone-subtitle { color:#8fa3bf; font-size: 12px; margin-top: -6px; margin-bottom: 8px; overflow-wrap: anywhere; word-break: break-word; }
         .zone-row { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
         .zone-row .control-row { margin-bottom: 0; flex: 1 1 320px; }
         .zone-mini { font-size: 11px; color:#8fa3bf; }
@@ -235,6 +235,13 @@
             /* Zonas: evitar overflow horizontal en móvil */
             .zone-row { gap: 8px; }
             .zone-row .control-row { flex: 1 1 100%; }
+            .zone-subtitle { font-size: 11px; line-height: 1.35; }
+
+            /* Controles: label arriba, control abajo */
+            .zone-row .control-row { flex-wrap: wrap; }
+            .zone-row .control-row label { flex: 0 0 100%; }
+            .zone-row .control-row input,
+            .zone-row .control-row select { flex: 1 1 100%; width: 100%; }
         }
     </style>
 </head>
