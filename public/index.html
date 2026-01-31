@@ -3154,6 +3154,9 @@
             }
         });
 
+        // Ventana móvil (si aplica)
+        try { applyMobileDayWindowToChart(humChart, viewMode); humChart.update('none'); } catch {}
+
         const valveChart = new Chart(document.getElementById('valveChart'), {
             type: 'line',
             data: {
@@ -3201,6 +3204,9 @@
                 }
             }
         });
+
+        // Ventana móvil (si aplica)
+        try { applyMobileDayWindowToChart(valveChart, viewMode); valveChart.update('none'); } catch {}
 
         // --- Comparador (máx 8 gráficas en la sección: 2 base + 6 extra) ---
         const CMP_SLOTS = [3, 4, 5, 6, 7, 8];
@@ -3278,6 +3284,14 @@
             const pal = CMP_PALETTE[slot] || CMP_PALETTE[3];
             cmpChartsBySlot[slot] = createCompareChart(`cmpChart${slot}`, cmpLabelsBySlot[slot], cmpSeriesBySlot[slot], pal);
         }
+
+        // Ventana móvil para comparador (si aplica)
+        try {
+            for (const slot of CMP_SLOTS) {
+                const ch = cmpChartsBySlot[slot];
+                if (ch) { applyMobileDayWindowToChart(ch, viewMode); ch.update('none'); }
+            }
+        } catch {}
 
         // --- Mini charts por planta (por tarjeta) ---
         const zoneMiniCharts = new Map();
@@ -3379,6 +3393,67 @@
             try { return window.matchMedia && window.matchMedia('(max-width: 900px)').matches; } catch { return false; }
         }
 
+        // IMPORTANTE: el scroll DOM horizontal oculta el eje Y izquierdo (canvas se desplaza).
+        // Para garantizar que el lado izquierdo SIEMPRE sea visible, usamos “ventana móvil”
+        // (x.min/x.max) en modo DÍA + eje X invertido (lo más reciente a la izquierda).
+        const MOBILE_DAY_WINDOW_MINUTES = 12 * 60; // horas visibles en móvil/tablet (ajustable)
+
+        function getNowMinuteIndexMadrid() {
+            try {
+                const p = getMadridParts(nowAdjusted());
+                const h = Number(p?.h);
+                const mi = Number(p?.mi);
+                const idx = h * 60 + mi;
+                if (!Number.isFinite(idx)) return null;
+                return Math.max(0, Math.min(1439, Math.trunc(idx)));
+            } catch {
+                return null;
+            }
+        }
+
+        function isMobileDayWindow(mode) {
+            return isSmallViewport() && mode === 'day';
+        }
+
+        function applyMobileDayWindowToChart(chart, mode) {
+            if (!chart || !chart.options || !chart.options.scales || !chart.options.scales.x) return;
+            const x = chart.options.scales.x;
+
+            const xType = String(x.type || 'category');
+
+            if (!isMobileDayWindow(mode)) {
+                x.reverse = false;
+                // En lineal (mini DÍA) mantenemos eje completo 00:00..23:59 en escritorio.
+                if (mode === 'day' && xType === 'linear') {
+                    x.min = 0;
+                    x.max = 1439;
+                } else {
+                    x.min = undefined;
+                    x.max = undefined;
+                }
+                return;
+            }
+
+            const nowIdx = getNowMinuteIndexMadrid();
+            if (nowIdx == null) return;
+            const maxIdx = nowIdx;
+            const minIdx = Math.max(0, maxIdx - MOBILE_DAY_WINDOW_MINUTES);
+
+            // Último dato a la IZQUIERDA
+            x.reverse = true;
+
+            // lineal (mini) usa índice numérico; category (principales/comparador) usa label
+            if (xType === 'linear') {
+                x.min = minIdx;
+                x.max = maxIdx;
+            } else {
+                const labels = chart.data && Array.isArray(chart.data.labels) ? chart.data.labels : null;
+                if (!labels || !labels.length) return;
+                x.min = labels[minIdx] ?? labels[0];
+                x.max = labels[maxIdx] ?? labels[labels.length - 1];
+            }
+        }
+
         function ensureChartScrollDomForCanvas(canvas) {
             if (!canvas) return null;
             const wrap = canvas.closest('.chart-wrap');
@@ -3417,44 +3492,16 @@
             const s = ensureChartScrollDomForCanvas(canvas);
             if (!s) return;
 
-            const enable = isSmallViewport() && mode === 'day';
-            s.wrap.classList.toggle('scroll-x', !!enable);
-
-            if (enable) {
-                // Menos “zoom” en mini-gráficas de tarjetas: se ven más horas a la vez.
-                const isCardMini = !!canvas.closest('.sensor-card');
-                const base = isCardMini ? 720 : 1440; // px aprox como referencia visual
-                const mult = isCardMini ? 1.25 : 1.8;
-                const w = Math.max(base, Math.round((s.wrap.clientWidth || 0) * mult));
-                s.inner.style.width = `${w}px`;
-            } else {
-                s.inner.style.width = '100%';
-                try { s.wrap.scrollLeft = 0; } catch {}
-                try { s.wrap.dataset.follow = '1'; } catch {}
-            }
+            // Scroll DOM desactivado (para no ocultar el eje izquierdo)
+            s.wrap.classList.remove('scroll-x');
+            s.inner.style.width = '100%';
+            try { s.wrap.scrollLeft = 0; } catch {}
+            try { s.wrap.dataset.follow = '1'; } catch {}
         }
 
         function scrollCanvasToNowIfFollowing(canvas, mode) {
-            if (!(isSmallViewport() && mode === 'day')) return;
-            const s = ensureChartScrollDomForCanvas(canvas);
-            if (!s) return;
-            if (s.wrap.dataset.follow === '0') return;
-            const lastUser = Number(s.wrap.dataset.lastUserScroll || 0);
-            if (Number.isFinite(lastUser) && lastUser > 0 && (Date.now() - lastUser) < 5000) return;
-
-            try {
-                const p = getMadridParts(nowAdjusted());
-                const minute = (Number(p?.h) * 60 + Number(p?.mi));
-                if (!Number.isFinite(minute)) return;
-
-                const ratio = Math.max(0, Math.min(1, minute / 1439));
-                const max = Math.max(0, s.wrap.scrollWidth - s.wrap.clientWidth);
-                // Colocar “ahora” cerca del BORDE IZQUIERDO para que el contenido
-                // “avance hacia la izquierda” al pasar el tiempo.
-                const xNow = ratio * (s.wrap.scrollWidth || 0);
-                const target = Math.max(0, Math.min(max, Math.round(xNow - 24)));
-                s.wrap.scrollLeft = target;
-            } catch {}
+            // Compatibilidad: ya no usamos scroll DOM. La “marcha” se hace con x.min/x.max.
+            return;
         }
 
         function buildMadridDayAxisLabels(pNow) {
@@ -3865,8 +3912,7 @@
 
                         if (mode === 'day') {
                             e.chart.options.scales.x.type = 'linear';
-                            e.chart.options.scales.x.min = 0;
-                            e.chart.options.scales.x.max = 1439;
+                            try { applyMobileDayWindowToChart(e.chart, 'day'); } catch {}
                             e.chart.options.scales.x.ticks.autoSkip = false;
                             e.chart.options.scales.x.ticks.stepSize = (isSmallViewport() ? 60 : 120);
                             e.chart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
@@ -3874,6 +3920,7 @@
                             e.chart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
                         } else {
                             e.chart.options.scales.x.type = 'category';
+                            e.chart.options.scales.x.reverse = false;
                             delete e.chart.options.scales.x.min;
                             delete e.chart.options.scales.x.max;
                             e.chart.options.scales.x.ticks.autoSkip = true;
@@ -3954,8 +4001,19 @@
                         },
                         x: {
                             type: mode === 'day' ? 'linear' : 'category',
-                            min: mode === 'day' ? 0 : undefined,
-                            max: mode === 'day' ? 1439 : undefined,
+                            reverse: (mode === 'day' && isMobileDayWindow('day')) ? true : false,
+                            min: (() => {
+                                if (mode !== 'day') return undefined;
+                                const nowIdx = getNowMinuteIndexMadrid();
+                                if (isMobileDayWindow('day') && nowIdx != null) return Math.max(0, nowIdx - MOBILE_DAY_WINDOW_MINUTES);
+                                return 0;
+                            })(),
+                            max: (() => {
+                                if (mode !== 'day') return undefined;
+                                const nowIdx = getNowMinuteIndexMadrid();
+                                if (isMobileDayWindow('day') && nowIdx != null) return nowIdx;
+                                return 1439;
+                            })(),
                             ticks: {
                                 color: '#fff',
                                 autoSkip: mode === 'day' ? false : true,
@@ -3997,6 +4055,7 @@
                 } catch {}
             }
             zoneMiniCharts.set(canvasId, entry);
+            try { applyMobileDayWindowToChart(entry.chart, mode); entry.chart.update('none'); } catch {}
             return entry;
         }
 
@@ -4194,7 +4253,8 @@
                 entry.meta.lastLabel = labels.length ? String(labels[labels.length - 1]) : '';
             }
 
-            entry.chart.update('none');
+                try { applyMobileDayWindowToChart(entry.chart, mode); } catch {}
+                entry.chart.update('none');
 
             try {
                 const m = String(canvasId).match(/^zone(Hum|Valve)Chart(\d+)$/);
@@ -4296,6 +4356,7 @@
                 entry.meta.lastLabel = withDiaPrefixLabel(`día ${pLast.d} ${pLast.h}:${pLast.mi}`);
             }
 
+            try { applyMobileDayWindowToChart(entry.chart, entry.mode || 'day'); } catch {}
             entry.chart.update('none');
 
             try {
@@ -4819,11 +4880,8 @@
             }
 
             setSeries(labelsArr, seriesArr, labels, series);
+            try { applyMobileDayWindowToChart(chart, viewMode); } catch {}
             chart.update('none');
-            try {
-                applyTimelineScrollForCanvas(chart?.canvas, viewMode);
-                scrollCanvasToNowIfFollowing(chart?.canvas, viewMode);
-            } catch {}
         }
 
         function rebuildCompareExtraCharts() {
@@ -5286,21 +5344,21 @@
             humChart.update('none');
             valveChart.update('none');
             try {
-                applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
-                applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
-                scrollCanvasToNowIfFollowing(document.getElementById('humChart'), viewMode);
-                scrollCanvasToNowIfFollowing(document.getElementById('valveChart'), viewMode);
+                applyMobileDayWindowToChart(humChart, viewMode);
+                applyMobileDayWindowToChart(valveChart, viewMode);
+                humChart.update('none');
+                valveChart.update('none');
             } catch {}
         }
 
         function rebuildCharts(storeOpt) {
             try {
-                applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
-                applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
-                for (const slot of CMP_SLOTS) applyTimelineScrollForCanvas(document.getElementById(`cmpChart${slot}`), viewMode);
-                scrollCanvasToNowIfFollowing(document.getElementById('humChart'), viewMode);
-                scrollCanvasToNowIfFollowing(document.getElementById('valveChart'), viewMode);
-                for (const slot of CMP_SLOTS) scrollCanvasToNowIfFollowing(document.getElementById(`cmpChart${slot}`), viewMode);
+                applyMobileDayWindowToChart(humChart, viewMode);
+                applyMobileDayWindowToChart(valveChart, viewMode);
+                for (const slot of CMP_SLOTS) {
+                    const ch = cmpChartsBySlot[slot];
+                    if (ch) applyMobileDayWindowToChart(ch, viewMode);
+                }
             } catch {}
             if (storeOpt) {
                 rebuildChartsFromStore(storeOpt);
@@ -5323,19 +5381,21 @@
 
         function tickChartAutoScroll() {
             try {
-                // Principales
-                scrollCanvasToNowIfFollowing(document.getElementById('humChart'), viewMode);
-                scrollCanvasToNowIfFollowing(document.getElementById('valveChart'), viewMode);
+                // Ventana móvil (sin scroll DOM): lo más reciente a la izquierda
+                if (humChart) { applyMobileDayWindowToChart(humChart, viewMode); humChart.update('none'); }
+                if (valveChart) { applyMobileDayWindowToChart(valveChart, viewMode); valveChart.update('none'); }
 
-                // Comparador
                 for (const slot of CMP_SLOTS) {
-                    scrollCanvasToNowIfFollowing(document.getElementById(`cmpChart${slot}`), viewMode);
+                    const ch = cmpChartsBySlot[slot];
+                    if (!ch) continue;
+                    applyMobileDayWindowToChart(ch, viewMode);
+                    ch.update('none');
                 }
 
-                // Mini-gráficas (solo las que estén en modo DÍA)
-                for (const [canvasId, entry] of zoneMiniCharts.entries()) {
-                    if (!entry || entry.mode !== 'day') continue;
-                    scrollCanvasToNowIfFollowing(document.getElementById(canvasId), 'day');
+                for (const entry of zoneMiniCharts.values()) {
+                    if (!entry || !entry.chart) continue;
+                    applyMobileDayWindowToChart(entry.chart, entry.mode || 'day');
+                    entry.chart.update('none');
                 }
             } catch {}
         }
