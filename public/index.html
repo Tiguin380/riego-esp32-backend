@@ -3851,8 +3851,9 @@
                             ticks: {
                                 color: '#fff',
                                 callback: yTickCb,
-                                stepSize: mode === 'day' ? 120 : undefined,
-                                maxTicksLimit: mode === 'day' ? 13 : 8,
+                                stepSize: yTickStep,
+                                maxTicksLimit: 8
+                            },
                             grid: { color: 'rgba(255,255,255,0.06)' }
                         },
                         x: {
@@ -3862,8 +3863,8 @@
                             ticks: {
                                 color: '#fff',
                                 autoSkip: mode === 'day' ? false : true,
-                                stepSize: mode === 'day' ? 30 : undefined,
-                                maxTicksLimit: mode === 'day' ? 49 : 8,
+                                stepSize: mode === 'day' ? 120 : undefined,
+                                maxTicksLimit: mode === 'day' ? 13 : 8,
                                 includeBounds: mode === 'day' ? true : undefined,
                                 callback: mode === 'day' ? (v) => minuteIndexToHHMM(v) : undefined,
                                 maxRotation: 0,
