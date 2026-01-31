@@ -1010,21 +1010,26 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <!-- Hammer.js es requerido por chartjs-plugin-zoom para gestos (pinch) -->
-    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
+    <!-- chartjs-plugin-zoom DESACTIVADO: estaba provocando errores internos (Recursion/_scriptable y t.startsWith). -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script> -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script> -->
     <script>
         let config = { threshold: 25, colorB: 'Rojo', colorG: 'Verde' };
 
+        const ENABLE_CHART_ZOOM_PLUGIN = false;
+
         // chartjs-plugin-zoom (pan/pinch) para “scroll” horizontal sin desplazar el eje izquierdo.
-        try {
-            const cand = window.ChartZoom || window.zoomPlugin || window.ZoomPlugin || window['chartjs-plugin-zoom'];
-            const list = Array.isArray(cand) ? cand : [cand];
-            for (const item of list) {
-                const plugin = item && item.default ? item.default : item;
-                if (plugin) Chart.register(plugin);
-            }
-        } catch {}
+        // OJO: lo dejamos desactivado por estabilidad; el auto-follow se mantiene con x.min/x.max.
+        if (ENABLE_CHART_ZOOM_PLUGIN) {
+            try {
+                const cand = window.ChartZoom || window.zoomPlugin || window.ZoomPlugin || window['chartjs-plugin-zoom'];
+                const list = Array.isArray(cand) ? cand : [cand];
+                for (const item of list) {
+                    const plugin = item && item.default ? item.default : item;
+                    if (plugin) Chart.register(plugin);
+                }
+            } catch {}
+        }
 
         const DEFAULT_AUTO_CONFIG = {
             wet_v: 1.10,
@@ -3460,40 +3465,48 @@
             t.backdropColor = 'rgba(0,0,0,0)';
             t.showLabelBackdrop = false;
 
-            chart.options.plugins = chart.options.plugins || {};
-            chart.options.plugins.zoom = {
-                limits: { x: { min: 0, max: 1439 } },
-                pan: {
-                    enabled: true,
-                    mode: 'x',
-                    threshold: 8,
-                    onPanComplete: ({ chart: c }) => {
-                        try {
-                            if (!c) return;
-                            c.$lastUserPanAt = Date.now();
-                            const nowIdx = getNowMinuteIndexMadrid();
-                            const maxNow = Number(c?.scales?.x?.max);
-                            if (nowIdx == null || !Number.isFinite(maxNow)) { c.$followX = false; return; }
-                            c.$followX = maxNow >= (nowIdx - 3);
-                        } catch {}
-                    }
-                },
-                zoom: {
-                    wheel: { enabled: false },
-                    pinch: { enabled: true },
-                    mode: 'x',
-                    onZoomComplete: ({ chart: c }) => {
-                        try {
-                            if (!c) return;
-                            c.$lastUserPanAt = Date.now();
-                            const nowIdx = getNowMinuteIndexMadrid();
-                            const maxNow = Number(c?.scales?.x?.max);
-                            if (nowIdx == null || !Number.isFinite(maxNow)) { c.$followX = false; return; }
-                            c.$followX = maxNow >= (nowIdx - 3);
-                        } catch {}
-                    }
+            // Mantener estabilidad: por defecto NO activamos pan/zoom; solo ventana X (x.min/x.max)
+            // para que el eje izquierdo nunca se oculte.
+            try {
+                chart.options.plugins = chart.options.plugins || {};
+                if (typeof ENABLE_CHART_ZOOM_PLUGIN !== 'undefined' && ENABLE_CHART_ZOOM_PLUGIN) {
+                    chart.options.plugins.zoom = {
+                        limits: { x: { min: 0, max: 1439 } },
+                        pan: {
+                            enabled: true,
+                            mode: 'x',
+                            threshold: 8,
+                            onPanComplete: ({ chart: c }) => {
+                                try {
+                                    if (!c) return;
+                                    c.$lastUserPanAt = Date.now();
+                                    const nowIdx = getNowMinuteIndexMadrid();
+                                    const maxNow = Number(c?.scales?.x?.max);
+                                    if (nowIdx == null || !Number.isFinite(maxNow)) { c.$followX = false; return; }
+                                    c.$followX = maxNow >= (nowIdx - 3);
+                                } catch {}
+                            }
+                        },
+                        zoom: {
+                            wheel: { enabled: false },
+                            pinch: { enabled: true },
+                            mode: 'x',
+                            onZoomComplete: ({ chart: c }) => {
+                                try {
+                                    if (!c) return;
+                                    c.$lastUserPanAt = Date.now();
+                                    const nowIdx = getNowMinuteIndexMadrid();
+                                    const maxNow = Number(c?.scales?.x?.max);
+                                    if (nowIdx == null || !Number.isFinite(maxNow)) { c.$followX = false; return; }
+                                    c.$followX = maxNow >= (nowIdx - 3);
+                                } catch {}
+                            }
+                        }
+                    };
+                } else {
+                    if (chart.options.plugins && chart.options.plugins.zoom) delete chart.options.plugins.zoom;
                 }
-            };
+            } catch {}
 
             if (chart.$followX == null) chart.$followX = true;
         }
