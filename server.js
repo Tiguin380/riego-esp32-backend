@@ -757,7 +757,15 @@ const SensorDataSchema = z
       .array(
         z
           .object({
-            kind: z.enum(['soil_sensor', 'valve']),
+            kind: z.enum([
+              'soil_sensor',
+              'valve',
+              'temperature_air',
+              'temperature_soil',
+              'humidity_air',
+              'ph_soil',
+              'ec_soil'
+            ]),
             index: z.coerce.number().int().min(1).max(32),
             value: z.coerce.number().optional().nullable(),
             state: z.coerce.number().int().optional().nullable()
@@ -937,7 +945,7 @@ async function initDB() {
       CREATE TABLE IF NOT EXISTS device_channels (
         id UUID PRIMARY KEY,
         device_id UUID REFERENCES devices(id),
-        kind VARCHAR(20) NOT NULL, -- 'soil_sensor' | 'valve'
+        kind VARCHAR(20) NOT NULL, -- 'soil_sensor' | 'valve' | 'temperature_air' | 'temperature_soil' | 'humidity_air' | 'ph_soil' | 'ec_soil'
         channel_index INTEGER NOT NULL,
         name VARCHAR(80) NOT NULL,
         deleted_at TIMESTAMP,
@@ -2423,21 +2431,24 @@ app.post('/api/sensor/data', async (req, res) => {
         for (const c of chArr) {
           const kind = c?.kind;
           const idx = Number(c?.index);
-          if ((kind !== 'soil_sensor' && kind !== 'valve') || !Number.isInteger(idx)) continue;
+          if (!Number.isInteger(idx)) continue;
+          if (
+            kind !== 'soil_sensor' &&
+            kind !== 'valve' &&
+            kind !== 'temperature_air' &&
+            kind !== 'temperature_soil' &&
+            kind !== 'humidity_air' &&
+            kind !== 'ph_soil' &&
+            kind !== 'ec_soil'
+          ) {
+            continue;
+          }
 
-          const channelId = await ensureChannel(device_id, kind, idx);
+          // No recrear canales automáticamente: solo guardar si el canal existe.
+          const channelId = await getChannelId(device_id, kind, idx);
           if (!channelId) continue;
 
-          if (kind === 'soil_sensor') {
-            sawSoil = true;
-            const v = c?.value;
-            const num = typeof v === 'number' ? v : Number(v);
-            if (!Number.isFinite(num)) continue;
-            await pool.query(
-              `INSERT INTO channel_samples (channel_id, ts, value) VALUES ($1, $2, $3)`,
-              [channelId, now, num]
-            );
-          } else {
+          if (kind === 'valve') {
             sawValve = true;
             const s = c?.state;
             const st = typeof s === 'number' ? s : Number(s);
@@ -2445,6 +2456,15 @@ app.post('/api/sensor/data', async (req, res) => {
             await pool.query(
               `INSERT INTO channel_samples (channel_id, ts, state) VALUES ($1, $2, $3)`,
               [channelId, now, st >= 1 ? 1 : 0]
+            );
+          } else {
+            sawSoil = true;
+            const v = c?.value;
+            const num = typeof v === 'number' ? v : Number(v);
+            if (!Number.isFinite(num)) continue;
+            await pool.query(
+              `INSERT INTO channel_samples (channel_id, ts, value) VALUES ($1, $2, $3)`,
+              [channelId, now, num]
             );
           }
         }
@@ -2838,8 +2858,17 @@ app.post('/api/channels/:device_code', async (req, res) => {
     const ok = await enforceDeviceTokenIfRequired(req, res, device_code);
     if (!ok) return;
 
-    if (kind !== 'soil_sensor' && kind !== 'valve') {
-      return res.status(400).json({ error: 'kind inválido (soil_sensor|valve)' });
+    const allowedKinds = new Set([
+      'soil_sensor',
+      'valve',
+      'temperature_air',
+      'temperature_soil',
+      'humidity_air',
+      'ph_soil',
+      'ec_soil'
+    ]);
+    if (!allowedKinds.has(kind)) {
+      return res.status(400).json({ error: 'kind inválido' });
     }
 
     await ensureDefaultChannels(dev.id);

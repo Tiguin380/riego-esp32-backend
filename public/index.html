@@ -41,7 +41,7 @@
         .sensor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 15px; }
         .sensor-card { --accent: #4CAF50; --accent-soft: rgba(76,175,80,0.18); background: #0f3460; padding: 15px; border-radius: 8px; text-align: center; min-width: 0; border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 10px 26px rgba(0,0,0,0.25); transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease; }
         .sensor-card:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.12); box-shadow: 0 14px 32px rgba(0,0,0,0.30); }
-        .sensor-label { font-size: 11px; color: #ffffff; text-transform: uppercase; margin-bottom: 5px; }
+        .sensor-label { font-size: 11px; color: #ffffff; text-transform: uppercase; margin-bottom: 5px; margin-top: 5px; }
         .sensor-value { font-size: clamp(22px, 6vw, 32px); font-weight: bold; color: var(--accent); }
         .sensor-unit { font-size: 14px; color: var(--accent); opacity: 0.88; }
 
@@ -105,7 +105,7 @@
             word-break: break-word;
         }
 
-        .oled-panel .oled-k { color: rgba(148,163,184,0.98); font-weight: 900; }
+        .oled-panel .oled-k { color: rgba(255, 255, 255, 0.98); font-weight: 900; }
         .oled-panel .oled-v { color: rgba(233,238,247,0.92); font-weight: 900; }
         .oled-panel .oled-v-hum { color: #22c55e; text-shadow: 0 0 12px rgba(34,197,94,0.18); }
         .oled-panel .oled-v-thr { color: #fbbf24; text-shadow: 0 0 12px rgba(251,191,36,0.18); }
@@ -368,6 +368,7 @@
             .sensor-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
             .sensor-card { padding: 12px; }
             .btn-grid { grid-template-columns: repeat(2, 1fr); }
+            .device-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             /* Zonas: evitar overflow horizontal en móvil */
             .zone-row { gap: 8px; }
             .zone-row .control-row { flex: 1 1 100%; }
@@ -379,6 +380,19 @@
             .zone-row .control-row input,
             .zone-row .control-row select { flex: 1 1 100%; width: 100%; }
         }
+
+        /* Acciones del bloque DISPOSITIVO: 2 por fila en móvil, 4 en desktop */
+        .device-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+        @media (min-width: 900px) { .device-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+        .device-actions .mini-btn { width: 100%; justify-content: center; }
+
+        /* Modal ligero (selector de tipo de sensor) */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display:flex; align-items:center; justify-content:center; padding: 16px; z-index: 2200; }
+        .modal { width: min(520px, 100%); background: rgba(22,33,62,0.98); border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; padding: 14px; box-shadow: 0 24px 70px rgba(0,0,0,0.55); }
+        .modal-title { font-weight: 900; letter-spacing: .02em; margin-bottom: 10px; color:#e9eef7; }
+        .choice-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        @media (max-width: 360px) { .choice-grid { grid-template-columns: 1fr; } }
+        .modal-actions { display:flex; justify-content:flex-end; gap: 10px; margin-top: 12px; }
     </style>
 </head>
 <body>
@@ -457,11 +471,11 @@
                 <label>Seleccionar:</label>
                 <select id="deviceSelect" title="Seleccionar dispositivo"></select>
             </div>
-            <div style="display:flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+            <div class="device-actions">
                 <button class="mini-btn primary" id="btnAddDevice" type="button">+ Añadir dispositivo</button>
                 <button class="mini-btn danger" id="btnDeleteDevice" type="button" title="Quitar este dispositivo de tu cuenta">Eliminar dispositivo</button>
                 <button class="mini-btn" id="btnAddValve" type="button">+ Añadir válvula</button>
-                <button class="mini-btn" id="btnAddSensor" type="button">+ Añadir sensor humedad</button>
+                <button class="mini-btn" id="btnAddSensor" type="button">AÑADIR SENSOR</button>
             </div>
             <div class="status" style="margin-top: 10px;" id="deviceMeta">--</div>
 
@@ -1628,7 +1642,7 @@
                 const lastSeenDate = current?.last_seen ? parseTsToDate(current.last_seen) : null;
                 const ageMin = lastSeenDate ? Math.max(0, Math.round((nowAdjusted().getTime() - lastSeenDate.getTime()) / 60000)) : null;
                 const ageText = ageMin == null ? '' : ` (hace ${ageMin} min)`;
-                meta.textContent = `${current?.name || deviceCode}${current?.location ? ' · ' + current.location : ''} · Último dato: ${lastSeen}${ageText}`;
+                meta.textContent = `${current?.name || deviceCode}${current?.location ? ' · ' + current.location : ''}`;
 
                 select.addEventListener('change', () => {
                     const next = select.value;
@@ -3256,16 +3270,85 @@
                 });
             })();
         });
+
+        function pickSensorTypeModal() {
+            const options = [
+                { kind: 'temperature_air', label: 'Temperatura aire' },
+                { kind: 'temperature_soil', label: 'Temperatura tierra' },
+                { kind: 'ph_soil', label: 'pH tierra' },
+                { kind: 'ec_soil', label: 'EC tierra' },
+                { kind: 'soil_sensor', label: 'Humedad tierra' },
+                { kind: 'humidity_air', label: 'Humedad aire' }
+            ];
+
+            return new Promise((resolve) => {
+                const overlay = document.createElement('div');
+                overlay.className = 'modal-overlay';
+                overlay.innerHTML = `
+                    <div class="modal" role="dialog" aria-modal="true" aria-label="Seleccionar tipo de sensor">
+                        <div class="modal-title">¿Qué sensor quieres añadir?</div>
+                        <div class="choice-grid">
+                            ${options.map(o => `<button class="mini-btn" type="button" data-kind="${escapeHtml(o.kind)}">${escapeHtml(o.label)}</button>`).join('')}
+                        </div>
+                        <div class="modal-actions">
+                            <button class="mini-btn" type="button" data-cancel="1">Cancelar</button>
+                        </div>
+                    </div>
+                `;
+
+                const cleanup = () => {
+                    try { document.removeEventListener('keydown', onKeyDown); } catch {}
+                    overlay.remove();
+                };
+
+                const onKeyDown = (e) => {
+                    if (e.key === 'Escape') {
+                        cleanup();
+                        resolve(null);
+                    }
+                };
+
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay) {
+                        cleanup();
+                        resolve(null);
+                    }
+                });
+
+                overlay.querySelectorAll('button[data-kind]').forEach((b) => {
+                    b.addEventListener('click', () => {
+                        const kind = b.getAttribute('data-kind');
+                        const opt = options.find(o => o.kind === kind) || null;
+                        cleanup();
+                        resolve(opt);
+                    });
+                });
+                overlay.querySelector('button[data-cancel]')?.addEventListener('click', () => {
+                    cleanup();
+                    resolve(null);
+                });
+
+                document.addEventListener('keydown', onKeyDown);
+                document.body.appendChild(overlay);
+            });
+        }
+
         document.getElementById('btnAddSensor')?.addEventListener('click', () => {
             (async () => {
                 const btn = document.getElementById('btnAddSensor');
                 await withBusy(btn, 'Añadiendo...', async () => {
-                const current = (channels || []).filter(c => c && c.kind === 'soil_sensor').length;
+                const picked = await pickSensorTypeModal();
+                if (!picked) return;
+                const kind = picked.kind;
+
+                const current = (channels || []).filter(c => c && c.kind === kind).length;
                 if (current >= 8) {
-                    alert('Máximo 8 sensores de humedad por dispositivo (modelo de 8 zonas).');
+                    alert('Máximo 8 sensores de este tipo por dispositivo.');
                     return;
                 }
-                const nameRaw = prompt('Nombre del nuevo sensor (ej: Sensor 2):');
+
+                const suggested = `${picked.label} ${current + 1}`;
+                const nameRaw = prompt(`Nombre del nuevo sensor (${picked.label}):`, suggested);
                 if (nameRaw === null) return; // Cancel
                 const name = String(nameRaw || '').trim();
                 const headers = { 'Content-Type': 'application/json' };
@@ -3275,7 +3358,7 @@
                     method: 'POST',
                     headers,
                     credentials: 'include',
-                    body: JSON.stringify({ kind: 'soil_sensor', name: name || undefined })
+                    body: JSON.stringify({ kind, name: name || undefined })
                 });
                 if ((r.status === 401 || r.status === 403) && !saved) {
                     const tRaw = prompt('Este dispositivo requiere token para añadir sensores. Pégalo aquí:');
@@ -3287,14 +3370,14 @@
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'X-Device-Token': t },
                             credentials: 'include',
-                            body: JSON.stringify({ kind: 'soil_sensor', name: name || undefined })
+                            body: JSON.stringify({ kind, name: name || undefined })
                         });
                     }
                 }
                 if (!r.ok) return alert('No se pudo añadir el sensor');
                 await loadChannels();
                 scheduleChartsRebuild();
-                alert('Sensor añadido. La gráfica aparecerá cuando el ESP32 envíe datos de ese sensor.');
+                alert('Sensor añadido. Aparecerá cuando el ESP32 envíe datos de ese sensor.');
                 });
             })();
         });
