@@ -39,22 +39,45 @@
         .section h2 { color: #4CAF50; font-size: 16px; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
         /* Rejilla responsive: evita que en móvil se “salgan” las tarjetas */
         .sensor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 15px; }
-        .sensor-card { background: #0f3460; padding: 15px; border-radius: 8px; text-align: center; min-width: 0; border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 10px 26px rgba(0,0,0,0.25); transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease; }
+        .sensor-card { --accent: #4CAF50; --accent-soft: rgba(76,175,80,0.18); background: #0f3460; padding: 15px; border-radius: 8px; text-align: center; min-width: 0; border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 10px 26px rgba(0,0,0,0.25); transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease; }
         .sensor-card:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.12); box-shadow: 0 14px 32px rgba(0,0,0,0.30); }
         .sensor-label { font-size: 11px; color: #ffffff; text-transform: uppercase; margin-bottom: 5px; }
-        .sensor-value { font-size: clamp(22px, 6vw, 32px); font-weight: bold; color: #4CAF50; }
-        .sensor-unit { font-size: 14px; color: #33cc33; }
+        .sensor-value { font-size: clamp(22px, 6vw, 32px); font-weight: bold; color: var(--accent); }
+        .sensor-unit { font-size: 14px; color: var(--accent); opacity: 0.88; }
 
         /* Estado visual para métricas (voltaje/RSSI/uptime/reinicios) */
         .metric-good .sensor-value { color: #33cc33; }
         .metric-warn .sensor-value { color: #ffcc00; }
         .metric-bad  .sensor-value { color: #ff4d4d; }
-        .metric-neutral .sensor-value { color: #aaa; }
+        .metric-neutral .sensor-value { color: var(--accent); opacity: 0.92; }
 
         .metric-good { border-color: rgba(51,204,51,0.25); box-shadow: 0 12px 28px rgba(51,204,51,0.08), 0 10px 26px rgba(0,0,0,0.25); }
         .metric-warn { border-color: rgba(255,204,0,0.25); box-shadow: 0 12px 28px rgba(255,204,0,0.08), 0 10px 26px rgba(0,0,0,0.25); }
         .metric-bad  { border-color: rgba(255,77,77,0.30); box-shadow: 0 12px 28px rgba(255,77,77,0.10), 0 10px 26px rgba(0,0,0,0.25); }
         .metric-neutral { border-color: rgba(255,255,255,0.08); }
+
+        /* Colores por tarjeta (accent): aplica a tarjetas sin “color” propio */
+        .sensor-card.accent { position: relative; border-color: rgba(255,255,255,0.10); box-shadow: 0 12px 28px rgba(0,0,0,0.25), inset 0 0 0 1px var(--accent-soft); }
+        .sensor-card.accent::after {
+            content: "";
+            position: absolute;
+            left: 12px;
+            right: 12px;
+            top: 10px;
+            height: 3px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0.65;
+            pointer-events: none;
+        }
+
+        .accent-green { --accent:#22c55e; --accent-soft: rgba(34,197,94,0.18); }
+        .accent-cyan { --accent:#22d3ee; --accent-soft: rgba(34,211,238,0.18); }
+        .accent-blue { --accent:#60a5fa; --accent-soft: rgba(96,165,250,0.18); }
+        .accent-indigo { --accent:#818cf8; --accent-soft: rgba(129,140,248,0.18); }
+        .accent-purple { --accent:#a78bfa; --accent-soft: rgba(167,139,250,0.18); }
+        .accent-amber { --accent:#fbbf24; --accent-soft: rgba(251,191,36,0.18); }
+        .accent-red { --accent:#fb7185; --accent-soft: rgba(251,113,133,0.18); }
 
         /* Mini “pantalla OLED” dentro de tarjeta */
         .oled-panel {
@@ -91,7 +114,7 @@
             inset: -120px -160px auto auto;
             width: 260px;
             height: 260px;
-            background: radial-gradient(circle, rgba(34,211,238,0.16), transparent 62%);
+            background: radial-gradient(circle, var(--accent-soft), transparent 62%);
             transform: rotate(18deg);
             pointer-events: none;
         }
@@ -407,37 +430,37 @@
         <div class="section" id="connectedSection">
             <h2> DISPOSITIVO CONECTADO</h2>
             <div class="sensor-grid">
-                <div class="sensor-card metric-neutral">
-                    <div class="sensor-label">Pantalla(tiempo real)</div>
+                <div class="sensor-card metric-neutral accent accent-green">
+                    <div class="sensor-label">Pantalla (tiempo real)</div>
                     <div class="chips" id="oledMeta"></div>
                     <div class="oled-panel" id="oledPanel">--</div>
                 </div>
-                <div class="sensor-card metric-neutral">
+                <div class="sensor-card metric-neutral accent accent-cyan">
                     <div class="sensor-label">Sensores / Válvulas (activos)</div>
                     <div class="sensor-value small" id="uptime">--</div>
                     <div class="chips" id="uptimeMeta"></div>
                 </div>
-                <div class="sensor-card metric-neutral">
+                <div class="sensor-card metric-neutral accent accent-blue">
                     <div class="sensor-label">IP</div>
                     <div class="sensor-value small" id="ip">--</div>
                     <div class="chips" id="ipMeta"></div>
                 </div>
-                <div class="sensor-card metric-neutral">
+                <div class="sensor-card metric-neutral accent accent-purple">
                     <div class="sensor-label">Memoria </div>
                     <div class="sensor-value" id="heap">--</div>
                     <div class="chips" id="heapMeta"></div>
                 </div>
-                <div class="sensor-card">
+                <div class="sensor-card accent accent-amber">
                     <div class="sensor-label">Voltaje</div>
                     <div class="sensor-value" id="voltage">--</div>
                     <div class="chips" id="voltageMeta"></div>
                 </div>
-                <div class="sensor-card">
+                <div class="sensor-card accent accent-indigo">
                     <div class="sensor-label">WiFi</div>
                     <div class="sensor-value" id="rssi">--</div>
                     <div class="chips" id="wifiMeta"></div>
                 </div>
-                <div class="sensor-card">
+                <div class="sensor-card accent accent-red">
                     <div class="sensor-label">Reinicios</div>
                     <div class="sensor-value" id="reboots">--</div>
                     <div class="chips" id="rebootsMeta"></div>
