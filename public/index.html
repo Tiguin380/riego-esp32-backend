@@ -324,14 +324,21 @@
         .chart-wrap.scroll-x { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
         .chart-wrap.scroll-x { scrollbar-color: rgba(255,255,255,0.35) rgba(255,255,255,0.08); }
 
-        /* En escritorio: mantener visible la gráfica izquierda (humedad) */
+        /* Mantener visible la gráfica izquierda (humedad) */
+        .sticky-left-chart { align-self: start; }
         @media (min-width: 901px) {
             .charts-grid { align-items: start; }
+            .sticky-left-chart { position: sticky; top: 10px; z-index: 5; }
+        }
+        /* En móvil/tablet: que la de arriba (humedad) se quede siempre visible mientras bajas */
+        @media (max-width: 900px) {
             .sticky-left-chart {
                 position: sticky;
-                top: 10px;
-                align-self: start;
-                z-index: 5;
+                top: 8px;
+                z-index: 20;
+                background: rgba(15, 52, 96, 0.92);
+                backdrop-filter: blur(10px);
+                box-shadow: 0 18px 38px rgba(0,0,0,0.32);
             }
         }
         /* Las gráficas de tarjetas usan el mismo tamaño que las principales */
@@ -3444,8 +3451,8 @@
 
             if (enable) {
                 // Más horas visibles: menos “zoom” que antes
-                const base = 960; // px aprox como referencia visual
-                const w = Math.max(base, Math.round((s.wrap.clientWidth || 0) * 1.25));
+                const base = 720; // px aprox como referencia visual
+                const w = Math.max(base, Math.round((s.wrap.clientWidth || 0) * 1.10));
                 s.inner.style.width = `${w}px`;
             } else {
                 s.inner.style.width = '100%';
