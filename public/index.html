@@ -98,6 +98,7 @@
         #connectedSection .sensor-label { font-size: 12px; letter-spacing: .03em; opacity: .96; }
         #connectedSection .sensor-value { font-size: clamp(22px, 5vw, 34px); }
         #connectedSection .sensor-value.small { font-size: 16px; }
+        #connectedSection #uptime { white-space: pre-line; line-height: 1.25; }
 
         /* Zonas / Plantas */
         .zone-off { opacity: 0.62; }
@@ -407,12 +408,12 @@
             <h2> DISPOSITIVO CONECTADO</h2>
             <div class="sensor-grid">
                 <div class="sensor-card metric-neutral">
-                    <div class="sensor-label">Pantalla OLED (tiempo real)</div>
+                    <div class="sensor-label">Pantalla(tiempo real)</div>
                     <div class="chips" id="oledMeta"></div>
                     <div class="oled-panel" id="oledPanel">--</div>
                 </div>
                 <div class="sensor-card metric-neutral">
-                    <div class="sensor-label">Sensores / Válvulas (añadidos)</div>
+                    <div class="sensor-label">Sensores / Válvulas (activos)</div>
                     <div class="sensor-value small" id="uptime">--</div>
                     <div class="chips" id="uptimeMeta"></div>
                 </div>
@@ -422,7 +423,7 @@
                     <div class="chips" id="ipMeta"></div>
                 </div>
                 <div class="sensor-card metric-neutral">
-                    <div class="sensor-label">Memoria libre</div>
+                    <div class="sensor-label">Memoria </div>
                     <div class="sensor-value" id="heap">--</div>
                     <div class="chips" id="heapMeta"></div>
                 </div>
@@ -448,7 +449,7 @@
         </div>
 
         <div class="section" id="zonesSection">
-            <h2> ZONAS / PLANTAS (1–8)</h2>
+            <h2> PLANTAS (1–8)</h2>
             <div class="muted" style="margin-top: -6px; margin-bottom: 10px; font-size:12px; color:#8fa3bf; line-height:1.35;">
                 Configura cada planta con su sensor de humedad, su válvula y su umbral.
                 Si un sensor/válvula no está enviando datos, la zona se verá “apagada”.
@@ -1906,16 +1907,17 @@
                     }
                 }
 
-                if (uptimeEl) uptimeEl.textContent = `${soilTotal}S · ${valveTotal}V`;
+                if (uptimeEl) {
+                    const sTxt = `${soilTotal} ${soilTotal === 1 ? 'sensor' : 'sensores'}`;
+                    const vTxt = `${valveTotal} ${valveTotal === 1 ? 'válvula' : 'válvulas'}`;
+                    uptimeEl.textContent = `${sTxt}\n${vTxt}`;
+                }
                 const uptimeMeta = document.getElementById('uptimeMeta');
-                setChips(uptimeMeta, [
-                    { k: 'Sensores', v: String(soilTotal), variant: (soilTotal > 0) ? 'neutral' : 'warn' },
-                    { k: 'Válvulas', v: String(valveTotal), variant: (valveTotal > 0) ? 'neutral' : 'warn' },
-                ]);
+                setChips(uptimeMeta, []);
             } catch {
                 if (uptimeEl) uptimeEl.textContent = '--';
                 const uptimeMeta = document.getElementById('uptimeMeta');
-                setChips(uptimeMeta, [{ k: 'Sensores', v: '--', variant: 'neutral' }, { k: 'Válvulas', v: '--', variant: 'neutral' }]);
+                setChips(uptimeMeta, []);
             }
 
             const ipEl = document.getElementById('ip');
@@ -2008,7 +2010,7 @@
 
                     panel.textContent =
                         `OLED ${timeTxt}\n` +
-                        `PL1 HUM ${humTxt}  THR ${thrTxt}\n` +
+                        `PL1 HUM ${humTxt}  UMBRAL ${thrTxt}\n` +
                         `VAL ${valveTxt}   V ${vTxt}\n` +
                         `WiFi ${rssiTxt}${ssid ? ` ${ssid.slice(0, 10)}` : ''}${ip ? `  IP ${ip}` : ''}`;
                 }
