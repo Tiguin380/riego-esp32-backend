@@ -255,6 +255,13 @@
         }
         .cmp-controls .cmp-select:hover { filter: brightness(1.05); }
         .cmp-controls .cmp-select:focus { outline: 2px solid rgba(56,189,248,0.40); outline-offset: 2px; }
+
+        .cmp-add-row .mini-btn.tiny {
+            background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(15,23,42,0.55));
+            border-color: rgba(255,255,255,0.14);
+            color: rgba(233,238,247,0.92);
+        }
+        .cmp-add-row .mini-btn.tiny:hover { filter: brightness(1.06); }
         .control-row input[type="range"] { -webkit-appearance: none; appearance: none; height: 8px; width: 100%; background: transparent; }
         .control-row input[type="range"]:focus { outline: none; }
         .control-row input[type="range"]::-webkit-slider-runnable-track { height: 8px; border-radius: 999px; background: linear-gradient(90deg, rgba(51,204,51,0.65), rgba(51,204,51,0.20)); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10); }
@@ -896,8 +903,10 @@
                 </div>
             </div>
 
-            <div style="display:flex; justify-content:flex-end; margin-top: 10px;">
-                <button class="mini-btn zones-global-btn" id="cmpAddBtn" type="button">Añadir gráfica (máx 8)</button>
+            <div class="cmp-add-row" style="display:flex; justify-content:flex-end; margin-top: 10px; gap: 10px; flex-wrap: wrap;">
+                <button class="mini-btn zones-global-btn" id="cmpAddBtn" type="button">Añadir +1 (máx 8)</button>
+                <button class="mini-btn tiny" id="cmpAdd2Btn" type="button">+2</button>
+                <button class="mini-btn tiny" id="cmpAdd4Btn" type="button">+4</button>
             </div>
         </div>
 
@@ -3434,6 +3443,8 @@
 
         function initCompareButtons() {
             const addBtn = document.getElementById('cmpAddBtn');
+            const add2Btn = document.getElementById('cmpAdd2Btn');
+            const add4Btn = document.getElementById('cmpAdd4Btn');
 
             for (const slot of CMP_SLOTS) {
                 const rm = document.getElementById(`cmpRemove${slot}`);
@@ -3448,14 +3459,28 @@
                 });
             }
 
-            if (addBtn) addBtn.addEventListener('click', () => {
-                for (const slot of CMP_SLOTS) {
-                    const box = document.getElementById(`cmpBox${slot}`);
-                    const visible = !!box && box.style.display !== 'none';
-                    if (!visible) { showCmpBox(slot, true); return; }
+            function addCompareCharts(n) {
+                let added = 0;
+                for (let i = 0; i < n; i++) {
+                    let opened = false;
+                    for (const slot of CMP_SLOTS) {
+                        const box = document.getElementById(`cmpBox${slot}`);
+                        const visible = !!box && box.style.display !== 'none';
+                        if (!visible) {
+                            showCmpBox(slot, true);
+                            opened = true;
+                            added += 1;
+                            break;
+                        }
+                    }
+                    if (!opened) break;
                 }
-                alert('Máximo 8 gráficas.');
-            });
+                if (added === 0) alert('Máximo 8 gráficas.');
+            }
+
+            if (addBtn) addBtn.addEventListener('click', () => addCompareCharts(1));
+            if (add2Btn) add2Btn.addEventListener('click', () => addCompareCharts(2));
+            if (add4Btn) add4Btn.addEventListener('click', () => addCompareCharts(4));
         }
 
         function sectionStorageKey(sec) {
