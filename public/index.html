@@ -311,9 +311,9 @@
         .status.offline { color: #ff3333; }
         .current-color { text-align: center; padding: 10px; background: #0f3460; border-radius: 8px; margin: 10px 0; }
         .current-color span { font-weight: bold; color: #4CAF50; }
-        /* Gráficas: en escritorio sin scroll; en móvil/tablet habilitamos scroll horizontal en modo DÍA */
+        /* Gráficas: 2 columnas en desktop amplio; 1 columna en móvil/tablet (igual que las mini) */
         .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        @media (max-width: 900px) {
+        @media (max-width: 1200px) {
             .charts-grid { grid-template-columns: 1fr; }
         }
         .chart-box { text-align: left; min-width: 0; }
@@ -3155,8 +3155,8 @@
                         ticks: {
                             color: '#fff',
                             autoSkip: viewMode === 'day' ? false : true,
-                            stepSize: viewMode === 'day' ? 120 : undefined,
-                            maxTicksLimit: viewMode === 'day' ? 13 : 10,
+                            stepSize: viewMode === 'day' ? (isSmallViewport() ? 60 : 120) : undefined,
+                            maxTicksLimit: viewMode === 'day' ? (isSmallViewport() ? 25 : 13) : 8,
                             includeBounds: viewMode === 'day' ? true : undefined,
                             callback: viewMode === 'day' ? (v) => minuteIndexToHHMM(v) : undefined,
                             maxRotation: 0,
@@ -3174,7 +3174,7 @@
         setTimeout(() => {
             try {
                 if (viewMode === 'day') {
-                    const cfg = mainChartsDayTickConfig();
+                    const cfg = dayTicksLikeMini();
                     humChart.options.scales.x.ticks.stepSize = cfg.stepSize;
                     humChart.options.scales.x.ticks.maxTicksLimit = cfg.maxTicksLimit;
                 }
@@ -3222,8 +3222,8 @@
                         ticks: {
                             color: '#fff',
                             autoSkip: viewMode === 'day' ? false : true,
-                            stepSize: viewMode === 'day' ? 120 : undefined,
-                            maxTicksLimit: viewMode === 'day' ? 13 : 10,
+                            stepSize: viewMode === 'day' ? (isSmallViewport() ? 60 : 120) : undefined,
+                            maxTicksLimit: viewMode === 'day' ? (isSmallViewport() ? 25 : 13) : 8,
                             includeBounds: viewMode === 'day' ? true : undefined,
                             callback: viewMode === 'day' ? (v) => minuteIndexToHHMM(v) : undefined,
                             maxRotation: 0,
@@ -3241,7 +3241,7 @@
         setTimeout(() => {
             try {
                 if (viewMode === 'day') {
-                    const cfg = mainChartsDayTickConfig();
+                    const cfg = dayTicksLikeMini();
                     valveChart.options.scales.x.ticks.stepSize = cfg.stepSize;
                     valveChart.options.scales.x.ticks.maxTicksLimit = cfg.maxTicksLimit;
                 }
@@ -3312,8 +3312,8 @@
                             ticks: {
                                 color: '#fff',
                                 autoSkip: viewMode === 'day' ? false : true,
-                                stepSize: viewMode === 'day' ? 120 : undefined,
-                                maxTicksLimit: viewMode === 'day' ? 13 : 10,
+                                stepSize: viewMode === 'day' ? (isSmallViewport() ? 60 : 120) : undefined,
+                                maxTicksLimit: viewMode === 'day' ? (isSmallViewport() ? 25 : 13) : 8,
                                 includeBounds: viewMode === 'day' ? true : undefined,
                                 callback: viewMode === 'day' ? (v) => minuteIndexToHHMM(v) : undefined,
                                 maxRotation: 0,
@@ -3443,18 +3443,12 @@
             try { return window.matchMedia && window.matchMedia('(max-width: 900px)').matches; } catch { return false; }
         }
 
-        function isTabletViewport() {
-            try {
-                return window.matchMedia && window.matchMedia('(min-width: 901px) and (max-width: 1200px)').matches;
-            } catch {
-                return false;
-            }
-        }
-
-        function mainChartsDayTickConfig() {
-            // Móvil y escritorio ya se ven bien con 2h. En tablet reducimos más para evitar solape.
-            if (isTabletViewport()) return { stepSize: 180, maxTicksLimit: 9 };
-            return { stepSize: 120, maxTicksLimit: 13 };
+        function dayTicksLikeMini() {
+            // EXACTAMENTE igual que en ensureMiniChart() en modo DÍA.
+            return {
+                stepSize: (isSmallViewport() ? 60 : 120),
+                maxTicksLimit: (isSmallViewport() ? 25 : 13)
+            };
         }
 
         // IMPORTANTE: el scroll DOM horizontal oculta el eje Y izquierdo (canvas se desplaza).
@@ -4764,7 +4758,7 @@
                     // En móvil, en principales mostramos menos etiquetas para que no se amontonen.
                     // (Mini-gráficas mantienen su propio stepSize.)
                     {
-                        const cfg = mainChartsDayTickConfig();
+                        const cfg = dayTicksLikeMini();
                         humChart.options.scales.x.ticks.stepSize = cfg.stepSize;
                         valveChart.options.scales.x.ticks.stepSize = cfg.stepSize;
                         humChart.options.scales.x.ticks.maxTicksLimit = cfg.maxTicksLimit;
@@ -4803,8 +4797,8 @@
                     delete valveChart.options.scales.x.max;
                     humChart.options.scales.x.ticks.autoSkip = true;
                     valveChart.options.scales.x.ticks.autoSkip = true;
-                    humChart.options.scales.x.ticks.maxTicksLimit = 10;
-                    valveChart.options.scales.x.ticks.maxTicksLimit = 10;
+                    humChart.options.scales.x.ticks.maxTicksLimit = 8;
+                    valveChart.options.scales.x.ticks.maxTicksLimit = 8;
                     humChart.options.scales.x.ticks.callback = undefined;
                     valveChart.options.scales.x.ticks.callback = undefined;
                     delete humChart.options.scales.x.ticks.stepSize;
@@ -4872,16 +4866,16 @@
                 t.includeBounds = true;
                 t.callback = (v) => minuteIndexToHHMM(v);
             } else if (mode === 'month') {
-                // En MES queremos ver 01..31 (aunque se solapen un poco)
-                t.autoSkip = false;
+                // Igual que mini: category con autoskip
+                t.autoSkip = true;
                 t.callback = undefined;
-                t.maxTicksLimit = undefined;
+                t.maxTicksLimit = 8;
                 delete t.stepSize;
                 delete t.includeBounds;
             } else {
                 t.autoSkip = true;
                 t.callback = undefined;
-                t.maxTicksLimit = 10;
+                t.maxTicksLimit = 8;
                 delete t.stepSize;
                 delete t.includeBounds;
             }
@@ -5555,7 +5549,7 @@
                     valveChart.options.scales.x.ticks.autoSkip = false;
                     // En móvil, en principales mostramos menos etiquetas para que no se amontonen.
                     {
-                        const cfg = mainChartsDayTickConfig();
+                        const cfg = dayTicksLikeMini();
                         humChart.options.scales.x.ticks.stepSize = cfg.stepSize;
                         valveChart.options.scales.x.ticks.stepSize = cfg.stepSize;
                         humChart.options.scales.x.ticks.maxTicksLimit = cfg.maxTicksLimit;
@@ -5682,7 +5676,7 @@
                         }
 
                         if (viewMode === 'day') {
-                            const cfg = mainChartsDayTickConfig();
+                            const cfg = dayTicksLikeMini();
                             try {
                                 humChart.options.scales.x.ticks.stepSize = cfg.stepSize;
                                 humChart.options.scales.x.ticks.maxTicksLimit = cfg.maxTicksLimit;
