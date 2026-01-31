@@ -3402,8 +3402,10 @@
                     try {
                         wrap.dataset.lastUserScroll = String(Date.now());
                         const max = Math.max(0, wrap.scrollWidth - wrap.clientWidth);
-                        const nearEnd = (max - wrap.scrollLeft) <= 24;
-                        wrap.dataset.follow = nearEnd ? '1' : '0';
+                        // Seguimos el BORDE IZQUIERDO (inicio): si el usuario se va a la derecha,
+                        // dejamos de auto-seguir hasta que vuelva al inicio.
+                        const nearStart = wrap.scrollLeft <= 24;
+                        wrap.dataset.follow = nearStart ? '1' : '0';
                     } catch {}
                 }, { passive: true });
             }
@@ -3447,8 +3449,10 @@
 
                 const ratio = Math.max(0, Math.min(1, minute / 1439));
                 const max = Math.max(0, s.wrap.scrollWidth - s.wrap.clientWidth);
+                // Colocar “ahora” cerca del BORDE IZQUIERDO para que el contenido
+                // “avance hacia la izquierda” al pasar el tiempo.
                 const xNow = ratio * (s.wrap.scrollWidth || 0);
-                const target = Math.max(0, Math.min(max, Math.round(xNow - s.wrap.clientWidth + 24)));
+                const target = Math.max(0, Math.min(max, Math.round(xNow - 24)));
                 s.wrap.scrollLeft = target;
             } catch {}
         }
