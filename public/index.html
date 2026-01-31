@@ -126,7 +126,7 @@
 
         /* Tarjetas del bloque DISPOSITIVO CONECTADO: más modernas y menos vacías */
         #connectedSection .sensor-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-        #connectedSection .sensor-card { position: relative; overflow: hidden; padding: 16px; }
+        #connectedSection .sensor-card { position: relative; overflow: hidden; padding: 54px 16px 16px; }
         #connectedSection .sensor-card::before {
             content: "";
             position: absolute;
@@ -137,6 +137,7 @@
             transform: rotate(18deg);
             pointer-events: none;
         }
+        #connectedSection .sensor-card.accent::after { top: 40px; }
         #connectedSection .sensor-label { font-size: 12px; letter-spacing: .03em; opacity: .96; }
         #connectedSection .sensor-value { font-size: clamp(22px, 5vw, 34px); }
         #connectedSection .sensor-value.small { font-size: 16px; }
@@ -386,8 +387,8 @@
         @media (min-width: 900px) { .device-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
         .device-actions .mini-btn { width: 100%; justify-content: center; }
 
-        /* Iconos en tarjetas (DISPOSITIVO CONECTADO) */
-        .sensor-card .card-ico { position: absolute; right: 12px; top: 12px; width: 22px; height: 22px; color: var(--accent); opacity: 0.92; filter: drop-shadow(0 0 14px var(--accent-soft)); pointer-events: none; }
+        /* Iconos en tarjetas (DISPOSITIVO CONECTADO): centrados arriba, sobre la línea de acento */
+        #connectedSection .sensor-card .card-ico { position: absolute; left: 50%; right: auto; top: 10px; transform: translateX(-50%); width: 22px; height: 22px; color: var(--accent); opacity: 0.92; filter: drop-shadow(0 0 14px var(--accent-soft)); pointer-events: none; }
         .sensor-card .card-ico svg { width: 100%; height: 100%; display: block; }
 
         /* Botón renombrar en selects de plantas */
@@ -784,6 +785,11 @@
                 zone: i + 1,
                 soil_channel_index: i === 0 ? 1 : null,
                 valve_channel_index: i === 0 ? 1 : null,
+                temperature_air_channel_index: null,
+                humidity_air_channel_index: null,
+                temperature_soil_channel_index: null,
+                ph_soil_channel_index: null,
+                ec_soil_channel_index: null,
                 humidity_low_threshold: t
             }));
         }
@@ -800,12 +806,22 @@
 
                 const soilIdx = z?.soil_channel_index == null ? null : Number(z.soil_channel_index);
                 const valveIdx = z?.valve_channel_index == null ? null : Number(z.valve_channel_index);
+                const tAirIdx = z?.temperature_air_channel_index == null ? null : Number(z.temperature_air_channel_index);
+                const hAirIdx = z?.humidity_air_channel_index == null ? null : Number(z.humidity_air_channel_index);
+                const tSoilIdx = z?.temperature_soil_channel_index == null ? null : Number(z.temperature_soil_channel_index);
+                const phIdx = z?.ph_soil_channel_index == null ? null : Number(z.ph_soil_channel_index);
+                const ecIdx = z?.ec_soil_channel_index == null ? null : Number(z.ec_soil_channel_index);
                 const thr = z?.humidity_low_threshold == null ? null : Number(z.humidity_low_threshold);
 
                 out[idx] = {
                     zone,
                     soil_channel_index: Number.isFinite(soilIdx) ? soilIdx : null,
                     valve_channel_index: Number.isFinite(valveIdx) ? valveIdx : null,
+                    temperature_air_channel_index: Number.isFinite(tAirIdx) ? tAirIdx : null,
+                    humidity_air_channel_index: Number.isFinite(hAirIdx) ? hAirIdx : null,
+                    temperature_soil_channel_index: Number.isFinite(tSoilIdx) ? tSoilIdx : null,
+                    ph_soil_channel_index: Number.isFinite(phIdx) ? phIdx : null,
+                    ec_soil_channel_index: Number.isFinite(ecIdx) ? ecIdx : null,
                     humidity_low_threshold: Number.isFinite(thr)
                         ? Math.max(0, Math.min(100, thr))
                         : out[idx].humidity_low_threshold
@@ -817,6 +833,11 @@
         function updateZoneSubtitles() {
             const soil = (channels || []).filter(c => c && c.kind === 'soil_sensor');
             const valves = (channels || []).filter(c => c && c.kind === 'valve');
+            const tAir = (channels || []).filter(c => c && c.kind === 'temperature_air');
+            const hAir = (channels || []).filter(c => c && c.kind === 'humidity_air');
+            const tSoil = (channels || []).filter(c => c && c.kind === 'temperature_soil');
+            const phSoil = (channels || []).filter(c => c && c.kind === 'ph_soil');
+            const ecSoil = (channels || []).filter(c => c && c.kind === 'ec_soil');
             const findName = (arr, idx) => {
                 const n = Number(idx);
                 const c = arr.find(x => Number(x.channel_index) === n);
@@ -832,7 +853,31 @@
                 const vName = z.valve_channel_index == null ? null : findName(valves, z.valve_channel_index);
                 const sTxt = z.soil_channel_index == null ? 'Sensor: (sin asignar)' : `Sensor: ${sName || '—'} (${z.soil_channel_index})`;
                 const vTxt = z.valve_channel_index == null ? 'Válvula: (sin asignar)' : `Válvula: ${vName || '—'} (${z.valve_channel_index})`;
-                el.textContent = `${sTxt} · ${vTxt} · Umbral: ${Math.round(Number(z.humidity_low_threshold ?? 25))}%`;
+
+                const extraParts = [];
+                if (z.temperature_air_channel_index != null) {
+                    const nm = findName(tAir, z.temperature_air_channel_index);
+                    extraParts.push(`TA: ${nm || '—'} (${z.temperature_air_channel_index})`);
+                }
+                if (z.humidity_air_channel_index != null) {
+                    const nm = findName(hAir, z.humidity_air_channel_index);
+                    extraParts.push(`HA: ${nm || '—'} (${z.humidity_air_channel_index})`);
+                }
+                if (z.temperature_soil_channel_index != null) {
+                    const nm = findName(tSoil, z.temperature_soil_channel_index);
+                    extraParts.push(`TS: ${nm || '—'} (${z.temperature_soil_channel_index})`);
+                }
+                if (z.ph_soil_channel_index != null) {
+                    const nm = findName(phSoil, z.ph_soil_channel_index);
+                    extraParts.push(`pH: ${nm || '—'} (${z.ph_soil_channel_index})`);
+                }
+                if (z.ec_soil_channel_index != null) {
+                    const nm = findName(ecSoil, z.ec_soil_channel_index);
+                    extraParts.push(`EC: ${nm || '—'} (${z.ec_soil_channel_index})`);
+                }
+
+                const thrTxt = `Umbral: ${Math.round(Number(z.humidity_low_threshold ?? 25))}%`;
+                el.textContent = [sTxt, vTxt, ...extraParts, thrTxt].join(' · ');
             }
         }
 
@@ -848,6 +893,26 @@
                 .filter(c => c && c.kind === 'valve')
                 .slice()
                 .sort((a, b) => Number(a.channel_index) - Number(b.channel_index));
+            const tAir = (channels || [])
+                .filter(c => c && c.kind === 'temperature_air')
+                .slice()
+                .sort((a, b) => Number(a.channel_index) - Number(b.channel_index));
+            const hAir = (channels || [])
+                .filter(c => c && c.kind === 'humidity_air')
+                .slice()
+                .sort((a, b) => Number(a.channel_index) - Number(b.channel_index));
+            const tSoil = (channels || [])
+                .filter(c => c && c.kind === 'temperature_soil')
+                .slice()
+                .sort((a, b) => Number(a.channel_index) - Number(b.channel_index));
+            const phSoil = (channels || [])
+                .filter(c => c && c.kind === 'ph_soil')
+                .slice()
+                .sort((a, b) => Number(a.channel_index) - Number(b.channel_index));
+            const ecSoil = (channels || [])
+                .filter(c => c && c.kind === 'ec_soil')
+                .slice()
+                .sort((a, b) => Number(a.channel_index) - Number(b.channel_index));
 
             // Importante: NO auto-asignar plantas 2..8.
             // Solo intentamos auto-asignar PLANTA 1 si está sin asignar.
@@ -860,18 +925,43 @@
             } catch {}
 
             function usedSetFor(kind, excludeIdx) {
+                const ZONE_PROP_BY_KIND = {
+                    soil: 'soil_channel_index',
+                    valve: 'valve_channel_index',
+                    temperature_air: 'temperature_air_channel_index',
+                    humidity_air: 'humidity_air_channel_index',
+                    temperature_soil: 'temperature_soil_channel_index',
+                    ph_soil: 'ph_soil_channel_index',
+                    ec_soil: 'ec_soil_channel_index'
+                };
+
+                const prop = ZONE_PROP_BY_KIND[kind];
+                if (!prop) return new Set();
                 const s = new Set();
                 for (let i = 0; i < 8; i++) {
                     if (i === excludeIdx) continue;
                     const z = zonesState[i];
                     if (!z) continue;
-                    const v = kind === 'soil' ? z.soil_channel_index : z.valve_channel_index;
+                    const v = z[prop];
                     if (v == null) continue;
                     const n = Number(v);
                     if (Number.isFinite(n)) s.add(n);
                 }
                 return s;
             }
+
+            const isAnyAssigned = (z) => {
+                if (!z) return false;
+                return (
+                    z.soil_channel_index != null ||
+                    z.valve_channel_index != null ||
+                    z.temperature_air_channel_index != null ||
+                    z.humidity_air_channel_index != null ||
+                    z.temperature_soil_channel_index != null ||
+                    z.ph_soil_channel_index != null ||
+                    z.ec_soil_channel_index != null
+                );
+            };
 
             function populateSelect(sel, list, currentValue, usedSet, kindLabel) {
                 if (!sel) return;
@@ -898,6 +988,55 @@
                 }
 
                 sel.value = currentValue == null ? '' : String(currentValue);
+            }
+
+            function refreshSelectsForKind({ selectIdPrefix, list, zoneProp, usedKindKey, kindLabel }) {
+                for (let zi = 0; zi < 8; zi++) {
+                    const zNum = zi + 1;
+                    const el = document.getElementById(`${selectIdPrefix}${zNum}`);
+                    populateSelect(el, list, zonesState[zi]?.[zoneProp] ?? null, usedSetFor(usedKindKey, zi), kindLabel);
+                }
+            }
+
+            function addKindSelector({ zoneNum, zoneIndex, zoneRow, labelText, selectIdPrefix, list, zoneProp, usedKindKey, kind, kindLabel }) {
+                const row = document.createElement('div');
+                row.className = 'control-row';
+                const label = document.createElement('label');
+                label.textContent = labelText;
+                const sel = document.createElement('select');
+                sel.id = `${selectIdPrefix}${zoneNum}`;
+                sel.title = `Seleccionar ${kindLabel.toLowerCase()} (canal)`;
+                populateSelect(sel, list, zonesState[zoneIndex]?.[zoneProp] ?? null, usedSetFor(usedKindKey, zoneIndex), kindLabel);
+
+                const renameBtn = document.createElement('button');
+                renameBtn.type = 'button';
+                renameBtn.className = 'mini-btn tiny zone-rename-btn';
+                renameBtn.textContent = 'Renombrar';
+                renameBtn.title = `Renombrar ${kindLabel.toLowerCase()} seleccionado`;
+
+                row.appendChild(label);
+                row.appendChild(sel);
+                row.appendChild(renameBtn);
+                zoneRow.appendChild(row);
+
+                renameBtn.addEventListener('click', async () => {
+                    const idx = sel.value === '' ? null : Number(sel.value);
+                    if (!Number.isFinite(idx)) return alert('Selecciona un canal para renombrar.');
+                    const ch = (channels || []).find(c => c && c.kind === kind && Number(c.channel_index) === idx);
+                    if (!ch || !ch.id) return alert('No se encontró el canal.');
+                    await renameChannel(ch.id, `${kindLabel.toLowerCase()} (planta ${zoneNum})`);
+                    await loadChannels();
+                });
+
+                sel.addEventListener('change', () => {
+                    const v = sel.value === '' ? null : Number(sel.value);
+                    zonesState[zoneIndex][zoneProp] = Number.isFinite(v) ? v : null;
+                    refreshSelectsForKind({ selectIdPrefix, list, zoneProp, usedKindKey, kindLabel });
+                    updateZoneSubtitles();
+                    const sec = document.getElementById(`zoneSec${zoneNum}`);
+                    const anyAssigned = isAnyAssigned(zonesState[zoneIndex]);
+                    if (sec) sec.classList.toggle('zone-off', !anyAssigned);
+                });
             }
 
             async function saveZoneConfig(zoneNum, btnEl) {
@@ -929,6 +1068,11 @@
                     zone: zoneNum,
                     soil_channel_index: z.soil_channel_index == null ? null : Number(z.soil_channel_index),
                     valve_channel_index: z.valve_channel_index == null ? null : Number(z.valve_channel_index),
+                    temperature_air_channel_index: z.temperature_air_channel_index == null ? null : Number(z.temperature_air_channel_index),
+                    humidity_air_channel_index: z.humidity_air_channel_index == null ? null : Number(z.humidity_air_channel_index),
+                    temperature_soil_channel_index: z.temperature_soil_channel_index == null ? null : Number(z.temperature_soil_channel_index),
+                    ph_soil_channel_index: z.ph_soil_channel_index == null ? null : Number(z.ph_soil_channel_index),
+                    ec_soil_channel_index: z.ec_soil_channel_index == null ? null : Number(z.ec_soil_channel_index),
                     humidity_low_threshold: z.humidity_low_threshold == null ? null : Number(z.humidity_low_threshold)
                 };
 
@@ -1042,10 +1186,72 @@
                         updateZoneSubtitles();
                         // Apagar visualmente si queda sin asignar
                         const sec = document.getElementById(`zoneSec${zoneNum}`);
-                        const anyAssigned = zonesState[i]?.soil_channel_index != null || zonesState[i]?.valve_channel_index != null;
+                        const anyAssigned = isAnyAssigned(zonesState[i]);
                         if (sec) sec.classList.toggle('zone-off', !anyAssigned);
                     });
                 }
+
+                // Sensores extra
+                addKindSelector({
+                    zoneNum,
+                    zoneIndex: i,
+                    zoneRow,
+                    labelText: 'Temperatura aire:',
+                    selectIdPrefix: 'zoneTAirSel',
+                    list: tAir,
+                    zoneProp: 'temperature_air_channel_index',
+                    usedKindKey: 'temperature_air',
+                    kind: 'temperature_air',
+                    kindLabel: 'Temperatura aire'
+                });
+                addKindSelector({
+                    zoneNum,
+                    zoneIndex: i,
+                    zoneRow,
+                    labelText: 'Humedad aire:',
+                    selectIdPrefix: 'zoneHAirSel',
+                    list: hAir,
+                    zoneProp: 'humidity_air_channel_index',
+                    usedKindKey: 'humidity_air',
+                    kind: 'humidity_air',
+                    kindLabel: 'Humedad aire'
+                });
+                addKindSelector({
+                    zoneNum,
+                    zoneIndex: i,
+                    zoneRow,
+                    labelText: 'Temperatura tierra:',
+                    selectIdPrefix: 'zoneTSoilSel',
+                    list: tSoil,
+                    zoneProp: 'temperature_soil_channel_index',
+                    usedKindKey: 'temperature_soil',
+                    kind: 'temperature_soil',
+                    kindLabel: 'Temperatura tierra'
+                });
+                addKindSelector({
+                    zoneNum,
+                    zoneIndex: i,
+                    zoneRow,
+                    labelText: 'pH tierra:',
+                    selectIdPrefix: 'zonePHSoilSel',
+                    list: phSoil,
+                    zoneProp: 'ph_soil_channel_index',
+                    usedKindKey: 'ph_soil',
+                    kind: 'ph_soil',
+                    kindLabel: 'pH tierra'
+                });
+                addKindSelector({
+                    zoneNum,
+                    zoneIndex: i,
+                    zoneRow,
+                    labelText: 'EC tierra:',
+                    selectIdPrefix: 'zoneECSoilSel',
+                    list: ecSoil,
+                    zoneProp: 'ec_soil_channel_index',
+                    usedKindKey: 'ec_soil',
+                    kind: 'ec_soil',
+                    kindLabel: 'EC tierra'
+                });
 
                 // Selector válvula
                 {
@@ -1087,7 +1293,7 @@
                         }
                         updateZoneSubtitles();
                         const sec = document.getElementById(`zoneSec${zoneNum}`);
-                        const anyAssigned = zonesState[i]?.soil_channel_index != null || zonesState[i]?.valve_channel_index != null;
+                        const anyAssigned = isAnyAssigned(zonesState[i]);
                         if (sec) sec.classList.toggle('zone-off', !anyAssigned);
                     });
                 }
@@ -1148,6 +1354,26 @@
                 humCard.className = 'sensor-card metric-neutral accent accent-green';
                 humCard.innerHTML = `<div class="sensor-label">Humedad (zona)</div><div class="sensor-value" id="zoneHum${zoneNum}">--</div><div class="sensor-unit">%</div>`;
 
+                const tSoilCard = document.createElement('div');
+                tSoilCard.className = 'sensor-card metric-neutral accent accent-purple';
+                tSoilCard.innerHTML = `<div class="sensor-label">Temp. tierra</div><div class="sensor-value" id="zoneTSoil${zoneNum}">--</div><div class="sensor-unit">°C</div>`;
+
+                const tAirCard = document.createElement('div');
+                tAirCard.className = 'sensor-card metric-neutral accent accent-blue';
+                tAirCard.innerHTML = `<div class="sensor-label">Temp. aire</div><div class="sensor-value" id="zoneTAir${zoneNum}">--</div><div class="sensor-unit">°C</div>`;
+
+                const hAirCard = document.createElement('div');
+                hAirCard.className = 'sensor-card metric-neutral accent accent-indigo';
+                hAirCard.innerHTML = `<div class="sensor-label">Humedad aire</div><div class="sensor-value" id="zoneHAir${zoneNum}">--</div><div class="sensor-unit">%</div>`;
+
+                const phCard = document.createElement('div');
+                phCard.className = 'sensor-card metric-neutral accent accent-amber';
+                phCard.innerHTML = `<div class="sensor-label">pH tierra</div><div class="sensor-value" id="zonePH${zoneNum}">--</div><div class="sensor-unit">pH</div>`;
+
+                const ecCard = document.createElement('div');
+                ecCard.className = 'sensor-card metric-neutral accent accent-cyan';
+                ecCard.innerHTML = `<div class="sensor-label">EC tierra</div><div class="sensor-value" id="zoneEC${zoneNum}">--</div><div class="sensor-unit">mS/cm</div>`;
+
                 const valveCard = document.createElement('div');
                 valveCard.className = 'sensor-card metric-neutral accent accent-red';
                 valveCard.innerHTML = `<div class="sensor-label">Válvula (zona)</div><div class="sensor-value" id="zoneValve${zoneNum}">--</div><div class="valve-indicator"><div class="valve-dot" id="zoneValveDot${zoneNum}"></div><div class="valve-text" id="zoneValveText${zoneNum}">--</div></div>`;
@@ -1157,6 +1383,11 @@
                 statusCard.innerHTML = `<div class="sensor-label">Estado</div><div class="sensor-value" id="zoneState${zoneNum}">--</div><div class="sensor-unit zone-mini" id="zoneAge${zoneNum}"></div>`;
 
                 grid.appendChild(humCard);
+                grid.appendChild(tSoilCard);
+                grid.appendChild(tAirCard);
+                grid.appendChild(hAirCard);
+                grid.appendChild(phCard);
+                grid.appendChild(ecCard);
                 grid.appendChild(valveCard);
                 grid.appendChild(statusCard);
 
@@ -1173,7 +1404,7 @@
                 const zoneNum = i + 1;
                 const sec = document.getElementById(`zoneSec${zoneNum}`);
                 const z = zonesState[i];
-                const anyAssigned = z?.soil_channel_index != null || z?.valve_channel_index != null;
+                const anyAssigned = isAnyAssigned(z);
                 if (sec) sec.classList.toggle('zone-off', !anyAssigned);
             }
         }
@@ -1184,11 +1415,21 @@
                 const z = zonesState[i];
                 const soilSel = document.getElementById(`zoneSoilSel${zoneNum}`);
                 const valveSel = document.getElementById(`zoneValveSel${zoneNum}`);
+                const tAirSel = document.getElementById(`zoneTAirSel${zoneNum}`);
+                const hAirSel = document.getElementById(`zoneHAirSel${zoneNum}`);
+                const tSoilSel = document.getElementById(`zoneTSoilSel${zoneNum}`);
+                const phSel = document.getElementById(`zonePHSoilSel${zoneNum}`);
+                const ecSel = document.getElementById(`zoneECSoilSel${zoneNum}`);
                 const thr = document.getElementById(`zoneThr${zoneNum}`);
                 const thrVal = document.getElementById(`zoneThrVal${zoneNum}`);
 
                 if (soilSel) soilSel.value = z.soil_channel_index == null ? '' : String(z.soil_channel_index);
                 if (valveSel) valveSel.value = z.valve_channel_index == null ? '' : String(z.valve_channel_index);
+                if (tAirSel) tAirSel.value = z.temperature_air_channel_index == null ? '' : String(z.temperature_air_channel_index);
+                if (hAirSel) hAirSel.value = z.humidity_air_channel_index == null ? '' : String(z.humidity_air_channel_index);
+                if (tSoilSel) tSoilSel.value = z.temperature_soil_channel_index == null ? '' : String(z.temperature_soil_channel_index);
+                if (phSel) phSel.value = z.ph_soil_channel_index == null ? '' : String(z.ph_soil_channel_index);
+                if (ecSel) ecSel.value = z.ec_soil_channel_index == null ? '' : String(z.ec_soil_channel_index);
                 if (thr) thr.value = String(Math.round(Number(z.humidity_low_threshold ?? 25)));
                 if (thrVal) thrVal.textContent = `${Math.round(Number(z.humidity_low_threshold ?? 25))}%`;
             }
@@ -1240,10 +1481,25 @@
 
                 const soilIdx = z.soil_channel_index;
                 const valveIdx = z.valve_channel_index;
+                const tAirIdx = z.temperature_air_channel_index;
+                const hAirIdx = z.humidity_air_channel_index;
+                const tSoilIdx = z.temperature_soil_channel_index;
+                const phIdx = z.ph_soil_channel_index;
+                const ecIdx = z.ec_soil_channel_index;
                 const soilLatest = soilIdx == null ? null : byKey.get(`soil_sensor:${soilIdx}`);
                 const valveLatest = valveIdx == null ? null : byKey.get(`valve:${valveIdx}`);
+                const tAirLatest = tAirIdx == null ? null : byKey.get(`temperature_air:${tAirIdx}`);
+                const hAirLatest = hAirIdx == null ? null : byKey.get(`humidity_air:${hAirIdx}`);
+                const tSoilLatest = tSoilIdx == null ? null : byKey.get(`temperature_soil:${tSoilIdx}`);
+                const phLatest = phIdx == null ? null : byKey.get(`ph_soil:${phIdx}`);
+                const ecLatest = ecIdx == null ? null : byKey.get(`ec_soil:${ecIdx}`);
 
                 const humEl = document.getElementById(`zoneHum${zoneNum}`);
+                const tAirEl = document.getElementById(`zoneTAir${zoneNum}`);
+                const hAirEl = document.getElementById(`zoneHAir${zoneNum}`);
+                const tSoilEl = document.getElementById(`zoneTSoil${zoneNum}`);
+                const phEl = document.getElementById(`zonePH${zoneNum}`);
+                const ecEl = document.getElementById(`zoneEC${zoneNum}`);
                 const valveEl = document.getElementById(`zoneValve${zoneNum}`);
                 const dotEl = document.getElementById(`zoneValveDot${zoneNum}`);
                 const txtEl = document.getElementById(`zoneValveText${zoneNum}`);
@@ -1252,13 +1508,49 @@
 
                 const soilAge = soilLatest?.age_minutes;
                 const valveAge = valveLatest?.age_minutes;
+                const tAirAge = tAirLatest?.age_minutes;
+                const hAirAge = hAirLatest?.age_minutes;
+                const tSoilAge = tSoilLatest?.age_minutes;
+                const phAge = phLatest?.age_minutes;
+                const ecAge = ecLatest?.age_minutes;
                 const soilOk = soilLatest && soilLatest.value != null && (soilAge == null || Number(soilAge) <= STALE_MIN);
                 const valveOk = valveLatest && valveLatest.state != null && (valveAge == null || Number(valveAge) <= STALE_MIN);
+                const tAirOk = tAirLatest && tAirLatest.value != null && (tAirAge == null || Number(tAirAge) <= STALE_MIN);
+                const hAirOk = hAirLatest && hAirLatest.value != null && (hAirAge == null || Number(hAirAge) <= STALE_MIN);
+                const tSoilOk = tSoilLatest && tSoilLatest.value != null && (tSoilAge == null || Number(tSoilAge) <= STALE_MIN);
+                const phOk = phLatest && phLatest.value != null && (phAge == null || Number(phAge) <= STALE_MIN);
+                const ecOk = ecLatest && ecLatest.value != null && (ecAge == null || Number(ecAge) <= STALE_MIN);
 
                 if (humEl) {
                     const v = soilLatest?.value;
                     const num = v == null ? null : Number(v);
                     humEl.textContent = soilOk && Number.isFinite(num) ? num.toFixed(1) : '--';
+                }
+
+                if (tAirEl) {
+                    const v = tAirLatest?.value;
+                    const num = v == null ? null : Number(v);
+                    tAirEl.textContent = tAirOk && Number.isFinite(num) ? num.toFixed(1) : '--';
+                }
+                if (hAirEl) {
+                    const v = hAirLatest?.value;
+                    const num = v == null ? null : Number(v);
+                    hAirEl.textContent = hAirOk && Number.isFinite(num) ? num.toFixed(1) : '--';
+                }
+                if (tSoilEl) {
+                    const v = tSoilLatest?.value;
+                    const num = v == null ? null : Number(v);
+                    tSoilEl.textContent = tSoilOk && Number.isFinite(num) ? num.toFixed(1) : '--';
+                }
+                if (phEl) {
+                    const v = phLatest?.value;
+                    const num = v == null ? null : Number(v);
+                    phEl.textContent = phOk && Number.isFinite(num) ? num.toFixed(2) : '--';
+                }
+                if (ecEl) {
+                    const v = ecLatest?.value;
+                    const num = v == null ? null : Number(v);
+                    ecEl.textContent = ecOk && Number.isFinite(num) ? num.toFixed(2) : '--';
                 }
 
                 if (valveEl || dotEl || txtEl) {
@@ -1270,12 +1562,21 @@
                     if (txtEl) txtEl.textContent = valveOk ? (isOn ? 'ENCENDIDA' : 'APAGADA') : 'SIN DATOS';
                 }
 
-                const anyAssigned = (soilIdx != null || valveIdx != null);
-                const anyOk = soilOk || valveOk;
+                const anyAssigned = (
+                    soilIdx != null || valveIdx != null ||
+                    tAirIdx != null || hAirIdx != null ||
+                    tSoilIdx != null || phIdx != null || ecIdx != null
+                );
+                const anyOk = soilOk || valveOk || tAirOk || hAirOk || tSoilOk || phOk || ecOk;
                 if (stateEl) stateEl.textContent = !anyAssigned ? 'SIN ASIGNAR' : (anyOk ? 'ACTIVA' : 'APAGADA');
 
                 const parts = [];
                 if (soilIdx != null) parts.push(`S${soilIdx}:${soilLatest?.age_minutes ?? '--'}m`);
+                if (tSoilIdx != null) parts.push(`TS${tSoilIdx}:${tSoilLatest?.age_minutes ?? '--'}m`);
+                if (tAirIdx != null) parts.push(`TA${tAirIdx}:${tAirLatest?.age_minutes ?? '--'}m`);
+                if (hAirIdx != null) parts.push(`HA${hAirIdx}:${hAirLatest?.age_minutes ?? '--'}m`);
+                if (phIdx != null) parts.push(`pH${phIdx}:${phLatest?.age_minutes ?? '--'}m`);
+                if (ecIdx != null) parts.push(`EC${ecIdx}:${ecLatest?.age_minutes ?? '--'}m`);
                 if (valveIdx != null) parts.push(`V${valveIdx}:${valveLatest?.age_minutes ?? '--'}m`);
                 if (ageEl) ageEl.textContent = parts.join(' · ');
 
@@ -3527,12 +3828,18 @@
                 const created = await r.json().catch(() => null);
                 const createdChannel = created && created.channel ? created.channel : null;
                 if (createdChannel && zonePicked && zonePicked >= 1) {
-                    // Si es humedad tierra, pre-asignarlo a la planta para que el cliente lo identifique rápido.
                     try {
-                        if (kind === 'soil_sensor') {
-                            if (zonesState && zonesState[zonePicked - 1]) {
-                                zonesState[zonePicked - 1].soil_channel_index = Number(createdChannel.channel_index);
-                            }
+                        const map = {
+                            soil_sensor: 'soil_channel_index',
+                            temperature_air: 'temperature_air_channel_index',
+                            humidity_air: 'humidity_air_channel_index',
+                            temperature_soil: 'temperature_soil_channel_index',
+                            ph_soil: 'ph_soil_channel_index',
+                            ec_soil: 'ec_soil_channel_index'
+                        };
+                        const prop = map[kind];
+                        if (prop && zonesState && zonesState[zonePicked - 1]) {
+                            zonesState[zonePicked - 1][prop] = Number(createdChannel.channel_index);
                         }
                     } catch {}
                 }
