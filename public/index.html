@@ -386,6 +386,14 @@
         @media (min-width: 900px) { .device-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
         .device-actions .mini-btn { width: 100%; justify-content: center; }
 
+        /* Iconos en tarjetas (DISPOSITIVO CONECTADO) */
+        .sensor-card .card-ico { position: absolute; right: 12px; top: 12px; width: 22px; height: 22px; color: var(--accent); opacity: 0.92; filter: drop-shadow(0 0 14px var(--accent-soft)); pointer-events: none; }
+        .sensor-card .card-ico svg { width: 100%; height: 100%; display: block; }
+
+        /* Botón renombrar en selects de plantas */
+        .zone-rename-btn { flex: 0 0 auto; }
+        @media (max-width: 640px) { .zone-rename-btn { width: 100%; } }
+
         /* Modal ligero (selector de tipo de sensor) */
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display:flex; align-items:center; justify-content:center; padding: 16px; z-index: 2200; }
         .modal { width: min(520px, 100%); background: rgba(22,33,62,0.98); border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; padding: 14px; box-shadow: 0 24px 70px rgba(0,0,0,0.55); }
@@ -495,36 +503,86 @@
             <h2> DISPOSITIVO CONECTADO</h2>
             <div class="sensor-grid">
                 <div class="sensor-card metric-neutral accent accent-green">
+                    <div class="card-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="4" y="5" width="16" height="11" rx="2" />
+                            <path d="M9 19h6" />
+                            <path d="M12 16v3" />
+                        </svg>
+                    </div>
                     <div class="sensor-label">Pantalla (tiempo real)</div>
                     <div class="chips" id="oledMeta"></div>
                     <div class="oled-panel" id="oledPanel">--</div>
                 </div>
                 <div class="sensor-card metric-neutral accent accent-cyan">
+                    <div class="card-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M7 7h10" />
+                            <path d="M7 12h10" />
+                            <path d="M7 17h10" />
+                            <circle cx="5" cy="7" r="1" />
+                            <circle cx="5" cy="12" r="1" />
+                            <circle cx="5" cy="17" r="1" />
+                        </svg>
+                    </div>
                     <div class="sensor-label">Sensores / Válvulas (activos)</div>
                     <div class="sensor-value small" id="uptime">--</div>
                     <div class="chips" id="uptimeMeta"></div>
                 </div>
                 <div class="sensor-card metric-neutral accent accent-blue">
+                    <div class="card-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 12a8 8 0 0 1 16 0" />
+                            <path d="M6 12a6 6 0 0 1 12 0" />
+                            <path d="M8 12a4 4 0 0 1 8 0" />
+                            <circle cx="12" cy="16" r="1" />
+                        </svg>
+                    </div>
                     <div class="sensor-label">IP</div>
                     <div class="sensor-value small" id="ip">--</div>
                     <div class="chips" id="ipMeta"></div>
                 </div>
                 <div class="sensor-card metric-neutral accent accent-purple">
+                    <div class="card-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="7" y="7" width="10" height="10" rx="2" />
+                            <path d="M9 3v3M15 3v3M9 18v3M15 18v3" />
+                            <path d="M3 9h3M3 15h3M18 9h3M18 15h3" />
+                        </svg>
+                    </div>
                     <div class="sensor-label">Memoria </div>
                     <div class="sensor-value" id="heap">--</div>
                     <div class="chips" id="heapMeta"></div>
                 </div>
                 <div class="sensor-card accent accent-amber">
+                    <div class="card-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M13 2L4 14h7l-1 8 10-14h-7z" />
+                        </svg>
+                    </div>
                     <div class="sensor-label">Voltaje</div>
                     <div class="sensor-value" id="voltage">--</div>
                     <div class="chips" id="voltageMeta"></div>
                 </div>
                 <div class="sensor-card accent accent-indigo">
+                    <div class="card-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 12.5a10 10 0 0 1 14 0" />
+                            <path d="M8 15.5a6 6 0 0 1 8 0" />
+                            <path d="M11 18.5a2 2 0 0 1 2 0" />
+                        </svg>
+                    </div>
                     <div class="sensor-label">WiFi</div>
                     <div class="sensor-value" id="rssi">--</div>
                     <div class="chips" id="wifiMeta"></div>
                 </div>
                 <div class="sensor-card accent accent-red">
+                    <div class="card-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12a9 9 0 1 1-3-6.7" />
+                            <path d="M21 3v6h-6" />
+                        </svg>
+                    </div>
                     <div class="sensor-label">Reinicios</div>
                     <div class="sensor-value" id="reboots">--</div>
                     <div class="chips" id="rebootsMeta"></div>
@@ -953,9 +1011,24 @@
                     sel.id = `zoneSoilSel${zoneNum}`;
                     sel.title = 'Seleccionar sensor de humedad (canal)';
                     populateSelect(sel, soil, zonesState[i]?.soil_channel_index ?? null, usedSetFor('soil', i), 'Sensor');
+                    const renameBtn = document.createElement('button');
+                    renameBtn.type = 'button';
+                    renameBtn.className = 'mini-btn tiny zone-rename-btn';
+                    renameBtn.textContent = 'Renombrar';
+                    renameBtn.title = 'Renombrar el sensor seleccionado';
                     row.appendChild(label);
                     row.appendChild(sel);
+                    row.appendChild(renameBtn);
                     zoneRow.appendChild(row);
+
+                    renameBtn.addEventListener('click', async () => {
+                        const idx = sel.value === '' ? null : Number(sel.value);
+                        if (!Number.isFinite(idx)) return alert('Selecciona un sensor para renombrar.');
+                        const ch = (channels || []).find(c => c && c.kind === 'soil_sensor' && Number(c.channel_index) === idx);
+                        if (!ch || !ch.id) return alert('No se encontró el canal.');
+                        await renameChannel(ch.id, `el sensor (planta ${zoneNum})`);
+                        await loadChannels();
+                    });
 
                     sel.addEventListener('change', () => {
                         const v = sel.value === '' ? null : Number(sel.value);
@@ -984,9 +1057,24 @@
                     sel.id = `zoneValveSel${zoneNum}`;
                     sel.title = 'Seleccionar válvula (canal)';
                     populateSelect(sel, valves, zonesState[i]?.valve_channel_index ?? null, usedSetFor('valve', i), 'Válvula');
+                    const renameBtn = document.createElement('button');
+                    renameBtn.type = 'button';
+                    renameBtn.className = 'mini-btn tiny zone-rename-btn';
+                    renameBtn.textContent = 'Renombrar';
+                    renameBtn.title = 'Renombrar la válvula seleccionada';
                     row.appendChild(label);
                     row.appendChild(sel);
+                    row.appendChild(renameBtn);
                     zoneRow.appendChild(row);
+
+                    renameBtn.addEventListener('click', async () => {
+                        const idx = sel.value === '' ? null : Number(sel.value);
+                        if (!Number.isFinite(idx)) return alert('Selecciona una válvula para renombrar.');
+                        const ch = (channels || []).find(c => c && c.kind === 'valve' && Number(c.channel_index) === idx);
+                        if (!ch || !ch.id) return alert('No se encontró el canal.');
+                        await renameChannel(ch.id, `la válvula (planta ${zoneNum})`);
+                        await loadChannels();
+                    });
 
                     sel.addEventListener('change', () => {
                         const v = sel.value === '' ? null : Number(sel.value);
@@ -3333,6 +3421,61 @@
             });
         }
 
+        function pickZoneModal({ title = '¿Para qué planta?' } = {}) {
+            return new Promise((resolve) => {
+                const overlay = document.createElement('div');
+                overlay.className = 'modal-overlay';
+                overlay.innerHTML = `
+                    <div class="modal" role="dialog" aria-modal="true" aria-label="Seleccionar planta">
+                        <div class="modal-title">${escapeHtml(title)}</div>
+                        <div class="choice-grid">
+                            ${Array.from({ length: 8 }).map((_, i) => {
+                                const z = i + 1;
+                                return `<button class="mini-btn" type="button" data-zone="${z}">Planta ${z}</button>`;
+                            }).join('')}
+                            <button class="mini-btn" type="button" data-zone="0">(sin asignar)</button>
+                        </div>
+                        <div class="modal-actions">
+                            <button class="mini-btn" type="button" data-cancel="1">Cancelar</button>
+                        </div>
+                    </div>
+                `;
+
+                const cleanup = () => {
+                    try { document.removeEventListener('keydown', onKeyDown); } catch {}
+                    overlay.remove();
+                };
+                const onKeyDown = (e) => {
+                    if (e.key === 'Escape') {
+                        cleanup();
+                        resolve(null);
+                    }
+                };
+
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay) {
+                        cleanup();
+                        resolve(null);
+                    }
+                });
+
+                overlay.querySelectorAll('button[data-zone]').forEach((b) => {
+                    b.addEventListener('click', () => {
+                        const z = Number(b.getAttribute('data-zone'));
+                        cleanup();
+                        resolve(Number.isFinite(z) ? z : null);
+                    });
+                });
+                overlay.querySelector('button[data-cancel]')?.addEventListener('click', () => {
+                    cleanup();
+                    resolve(null);
+                });
+
+                document.addEventListener('keydown', onKeyDown);
+                document.body.appendChild(overlay);
+            });
+        }
+
         document.getElementById('btnAddSensor')?.addEventListener('click', () => {
             (async () => {
                 const btn = document.getElementById('btnAddSensor');
@@ -3341,13 +3484,18 @@
                 if (!picked) return;
                 const kind = picked.kind;
 
+                const zonePicked = await pickZoneModal({ title: `¿En qué planta va este sensor? (${picked.label})` });
+                if (zonePicked === null) return; // cancel
+
                 const current = (channels || []).filter(c => c && c.kind === kind).length;
                 if (current >= 8) {
                     alert('Máximo 8 sensores de este tipo por dispositivo.');
                     return;
                 }
 
-                const suggested = `${picked.label} ${current + 1}`;
+                const suggested = (zonePicked && zonePicked >= 1)
+                    ? `P${zonePicked} · ${picked.label}`
+                    : `${picked.label} ${current + 1}`;
                 const nameRaw = prompt(`Nombre del nuevo sensor (${picked.label}):`, suggested);
                 if (nameRaw === null) return; // Cancel
                 const name = String(nameRaw || '').trim();
@@ -3375,6 +3523,20 @@
                     }
                 }
                 if (!r.ok) return alert('No se pudo añadir el sensor');
+
+                const created = await r.json().catch(() => null);
+                const createdChannel = created && created.channel ? created.channel : null;
+                if (createdChannel && zonePicked && zonePicked >= 1) {
+                    // Si es humedad tierra, pre-asignarlo a la planta para que el cliente lo identifique rápido.
+                    try {
+                        if (kind === 'soil_sensor') {
+                            if (zonesState && zonesState[zonePicked - 1]) {
+                                zonesState[zonePicked - 1].soil_channel_index = Number(createdChannel.channel_index);
+                            }
+                        }
+                    } catch {}
+                }
+
                 await loadChannels();
                 scheduleChartsRebuild();
                 alert('Sensor añadido. Aparecerá cuando el ESP32 envíe datos de ese sensor.');
