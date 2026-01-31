@@ -2740,7 +2740,7 @@ app.get('/api/channels/:device_code/latest', async (req, res) => {
          dc.channel_index,
          dc.name,
          s.ts AS ts_raw,
-         (EXTRACT(EPOCH FROM (s.ts AT TIME ZONE current_setting('TIMEZONE'))) * 1000)::bigint AS ts_ms,
+         (s.ts AT TIME ZONE current_setting('TIMEZONE')) AS ts,
          s.value,
          s.state
        FROM device_channels dc
@@ -2757,8 +2757,12 @@ app.get('/api/channels/:device_code/latest', async (req, res) => {
     );
 
     const out = r.rows.map((row) => {
-      const tsMs = Number(row.ts_ms || 0);
-      const ts = epochMsToDate(tsMs);
+      const ts = (() => {
+        const raw = row.ts;
+        if (!raw) return null;
+        const d = raw instanceof Date ? raw : new Date(raw);
+        return Number.isNaN(d.getTime()) ? null : d;
+      })();
       return {
         id: row.id,
         kind: row.kind,
@@ -2799,7 +2803,7 @@ app.get('/api/channels/:device_code/latest', async (req, res) => {
              dc.channel_index,
              dc.name,
              s.ts AS ts_raw,
-             (EXTRACT(EPOCH FROM (s.ts AT TIME ZONE current_setting('TIMEZONE'))) * 1000)::bigint AS ts_ms,
+             (s.ts AT TIME ZONE current_setting('TIMEZONE')) AS ts,
              s.value,
              s.state
            FROM device_channels dc
@@ -2815,8 +2819,12 @@ app.get('/api/channels/:device_code/latest', async (req, res) => {
           [dev.id]
         );
         const out = r.rows.map((row) => {
-          const tsMs = Number(row.ts_ms || 0);
-          const ts = epochMsToDate(tsMs);
+          const ts = (() => {
+            const raw = row.ts;
+            if (!raw) return null;
+            const d = raw instanceof Date ? raw : new Date(raw);
+            return Number.isNaN(d.getTime()) ? null : d;
+          })();
           return {
             id: row.id,
             kind: row.kind,
