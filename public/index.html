@@ -97,6 +97,7 @@
         }
         #connectedSection .sensor-label { font-size: 12px; letter-spacing: .03em; opacity: .96; }
         #connectedSection .sensor-value { font-size: clamp(22px, 5vw, 34px); }
+        #connectedSection .sensor-value.small { font-size: 16px; }
 
         /* Zonas / Plantas */
         .zone-off { opacity: 0.62; }
@@ -1894,32 +1895,25 @@
             // Sensores/válvulas activos (dato reciente) según /api/channels/:device_code/latest
             try {
                 const ch = Array.isArray(lastChannelsLatestPayload?.channels) ? lastChannelsLatestPayload.channels : [];
-                const STALE_MIN = 10;
                 let soilTotal = 0;
                 let valveTotal = 0;
-                let soilActive = 0;
-                let valveActive = 0;
                 for (const c of ch) {
                     const kind = String(c?.kind || '');
-                    const age = c?.latest?.age_minutes;
-                    const okAge = (age == null) || (Number(age) <= STALE_MIN);
                     if (kind === 'soil_sensor') {
                         soilTotal++;
-                        if (okAge && c?.latest?.value != null) soilActive++;
                     }
                     if (kind === 'valve') {
                         valveTotal++;
-                        if (okAge && c?.latest?.state != null) valveActive++;
                     }
                 }
                 const uptimeMeta = document.getElementById('uptimeMeta');
                 setChips(uptimeMeta, [
-                    { k: 'Sens', v: `${soilActive}/${soilTotal}`, variant: (soilTotal > 0 && soilActive === soilTotal) ? 'ok' : 'neutral' },
-                    { k: 'Valv', v: `${valveActive}/${valveTotal}`, variant: (valveTotal > 0 && valveActive === valveTotal) ? 'ok' : 'neutral' },
+                    { k: 'Sensores', v: String(soilTotal), variant: (soilTotal > 0) ? 'neutral' : 'warn' },
+                    { k: 'Válvulas', v: String(valveTotal), variant: (valveTotal > 0) ? 'neutral' : 'warn' },
                 ]);
             } catch {
                 const uptimeMeta = document.getElementById('uptimeMeta');
-                setChips(uptimeMeta, [{ k: 'Sens', v: '--', variant: 'neutral' }, { k: 'Valv', v: '--', variant: 'neutral' }]);
+                setChips(uptimeMeta, [{ k: 'Sensores', v: '--', variant: 'neutral' }, { k: 'Válvulas', v: '--', variant: 'neutral' }]);
             }
 
             const ipEl = document.getElementById('ip');
@@ -1953,12 +1947,19 @@
                 const ssid = ssidRaw == null ? '' : String(ssidRaw).trim();
                 const rssi = (data?.wifi_rssi == null ? null : Number(data.wifi_rssi));
                 const rssiOk = !(rssi == null || Number.isNaN(rssi) || rssi === 0);
+                const rssiEl = document.getElementById('rssi');
+                if (rssiEl) {
+                    // Mostrar el SSID grande (lo que el usuario quiere ver)
+                    rssiEl.textContent = ssid ? ssid : '--';
+                    // Evitar que una red larga rompa layout
+                    rssiEl.style.wordBreak = 'break-word';
+                }
                 const wifiMeta = document.getElementById('wifiMeta');
                 const rssiTxt = rssiOk ? `${Math.trunc(rssi)} dBm` : '-- dBm';
                 const rssiVariant = !rssiOk ? 'neutral' : (rssi >= -60 ? 'ok' : (rssi >= -75 ? 'warn' : 'bad'));
                 setChips(wifiMeta, [
                     { k: 'RSSI', v: rssiTxt, variant: rssiVariant },
-                    { k: 'SSID', v: ssid ? (ssid.length > 16 ? (ssid.slice(0, 16) + '…') : ssid) : '--', variant: 'neutral', title: ssid || '' },
+                    { k: 'Red', v: ssid ? 'OK' : '--', variant: ssid ? 'ok' : 'neutral', title: ssid || '' },
                 ]);
             }
 
@@ -2886,7 +2887,6 @@
 
                 const rssi = (data.wifi_rssi == null ? null : Number(data.wifi_rssi));
                 const rssiOk = !(rssi == null || Number.isNaN(rssi) || rssi === 0);
-                document.getElementById('rssi').textContent = (!rssiOk ? '--' : String(Math.trunc(rssi)));
 
                 const rbRaw = (data.reboot_count_display != null ? data.reboot_count_display : data.reboot_count);
                 const rb = (rbRaw == null ? null : Number(rbRaw));
