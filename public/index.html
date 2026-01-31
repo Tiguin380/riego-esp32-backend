@@ -4105,9 +4105,19 @@
             const entry = zoneMiniCharts.get(canvasId);
             if (!entry) return;
             if (entry.mode && entry.mode !== 'day') return;
-            const d = parseTsToDate(latest?.ts || latest?.ts_raw || latest?.ts_madrid);
-            if (!d) return;
-            const tsMs = d.getTime();
+            const tsMs = (() => {
+                const d = parseTsToDate(latest?.ts);
+                if (d) return d.getTime();
+                // Fallback robusto: si el backend nos da edad, reconstruimos el instante
+                const ageMin = Number(latest?.age_minutes);
+                if (Number.isFinite(ageMin) && ageMin >= 0) {
+                    return nowAdjusted().getTime() - Math.round(ageMin) * 60000;
+                }
+                // Último recurso (evita quedarnos clavados por parseos raros)
+                const d2 = parseTsToDate(latest?.ts_raw || latest?.ts_madrid);
+                return d2 ? d2.getTime() : null;
+            })();
+            if (tsMs == null || !Number.isFinite(tsMs)) return;
             if (entry.lastTsMs != null && tsMs <= entry.lastTsMs) return;
 
             const val = (kind === 'valve')
@@ -4143,8 +4153,12 @@
 
             // Escribir el dato en su minuto del día (00:00..23:59)
             const pNow = getMadridParts(nowAdjusted());
-            const idx = madridMinuteIndexForTs(tsMs, pNow);
-            if (idx == null) return;
+            let idx = madridMinuteIndexForTs(tsMs, pNow);
+            if (idx == null) {
+                // Si el timestamp viene en una TZ rara o hay desfase, al menos dibujamos “ahora”
+                idx = (Number(pNow?.h) * 60 + Number(pNow?.mi));
+                if (!Number.isFinite(idx) || idx < 0 || idx >= 1440) return;
+            }
 
             // Inicializar si venía de una versión anterior sin eje completo
             const needsInit = (() => {
