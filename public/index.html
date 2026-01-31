@@ -521,7 +521,7 @@
               onerror="this.style.display='none'"
             />
         </div>
-        <div class="status" style="margin-bottom: 12px;">UI vRt1548E</div>
+        <div class="status" style="margin-bottom: 12px;">UI vRt1548F</div>
 
         <div class="top-nav">
             <button class="mini-btn active" id="navDevices" type="button">Dispositivos</button>
@@ -2632,6 +2632,8 @@
             const sections = Array.from(document.querySelectorAll('.section'));
             for (const sec of sections) {
                 if (sec.id === 'deviceSection') continue;
+                // La sección de PLANTAS debe estar siempre visible (no colapsable)
+                if (sec.id === 'zonesSection') continue;
                 if (sec.dataset.collapsibleInit === '1') continue;
 
                 const h2 = sec.querySelector('h2');
