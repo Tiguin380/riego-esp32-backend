@@ -3150,24 +3150,8 @@
                     x: {
                         type: viewMode === 'day' ? 'linear' : 'category',
                         reverse: false,
-                        min: (() => {
-                            if (viewMode !== 'day') return undefined;
-                            const nowIdx = getNowMinuteIndexMadrid();
-                            if (isMobileDayWindow('day') && nowIdx != null) {
-                                const win = computeMobileDayWindow(nowIdx);
-                                return win ? win.minIdx : 0;
-                            }
-                            return 0;
-                        })(),
-                        max: (() => {
-                            if (viewMode !== 'day') return undefined;
-                            const nowIdx = getNowMinuteIndexMadrid();
-                            if (isMobileDayWindow('day') && nowIdx != null) {
-                                const win = computeMobileDayWindow(nowIdx);
-                                return win ? win.maxIdx : 1439;
-                            }
-                            return 1439;
-                        })(),
+                        min: viewMode === 'day' ? 0 : undefined,
+                        max: viewMode === 'day' ? 1439 : undefined,
                         ticks: {
                             color: '#fff',
                             autoSkip: viewMode === 'day' ? false : true,
@@ -3186,8 +3170,10 @@
             }
         });
 
-        // Ventana móvil (si aplica)
-        try { applyMobileDayWindowToChart(humChart, viewMode); humChart.update('none'); } catch {}
+        // Ventana móvil (si aplica). Diferido para evitar TDZ (const aún no inicializadas).
+        setTimeout(() => {
+            try { applyMobileDayWindowToChart(humChart, viewMode); humChart.update('none'); } catch {}
+        }, 0);
 
         const valveChart = new Chart(document.getElementById('valveChart'), {
             type: 'line',
@@ -3223,24 +3209,8 @@
                     x: {
                         type: viewMode === 'day' ? 'linear' : 'category',
                         reverse: false,
-                        min: (() => {
-                            if (viewMode !== 'day') return undefined;
-                            const nowIdx = getNowMinuteIndexMadrid();
-                            if (isMobileDayWindow('day') && nowIdx != null) {
-                                const win = computeMobileDayWindow(nowIdx);
-                                return win ? win.minIdx : 0;
-                            }
-                            return 0;
-                        })(),
-                        max: (() => {
-                            if (viewMode !== 'day') return undefined;
-                            const nowIdx = getNowMinuteIndexMadrid();
-                            if (isMobileDayWindow('day') && nowIdx != null) {
-                                const win = computeMobileDayWindow(nowIdx);
-                                return win ? win.maxIdx : 1439;
-                            }
-                            return 1439;
-                        })(),
+                        min: viewMode === 'day' ? 0 : undefined,
+                        max: viewMode === 'day' ? 1439 : undefined,
                         ticks: {
                             color: '#fff',
                             autoSkip: viewMode === 'day' ? false : true,
@@ -3259,8 +3229,10 @@
             }
         });
 
-        // Ventana móvil (si aplica)
-        try { applyMobileDayWindowToChart(valveChart, viewMode); valveChart.update('none'); } catch {}
+        // Ventana móvil (si aplica). Diferido para evitar TDZ (const aún no inicializadas).
+        setTimeout(() => {
+            try { applyMobileDayWindowToChart(valveChart, viewMode); valveChart.update('none'); } catch {}
+        }, 0);
 
         // --- Comparador (máx 8 gráficas en la sección: 2 base + 6 extra) ---
         const CMP_SLOTS = [3, 4, 5, 6, 7, 8];
@@ -3319,24 +3291,8 @@
                         x: {
                             type: viewMode === 'day' ? 'linear' : 'category',
                             reverse: false,
-                            min: (() => {
-                                if (viewMode !== 'day') return undefined;
-                                const nowIdx = getNowMinuteIndexMadrid();
-                                if (isMobileDayWindow('day') && nowIdx != null) {
-                                    const win = computeMobileDayWindow(nowIdx);
-                                    return win ? win.minIdx : 0;
-                                }
-                                return 0;
-                            })(),
-                            max: (() => {
-                                if (viewMode !== 'day') return undefined;
-                                const nowIdx = getNowMinuteIndexMadrid();
-                                if (isMobileDayWindow('day') && nowIdx != null) {
-                                    const win = computeMobileDayWindow(nowIdx);
-                                    return win ? win.maxIdx : 1439;
-                                }
-                                return 1439;
-                            })(),
+                            min: viewMode === 'day' ? 0 : undefined,
+                            max: viewMode === 'day' ? 1439 : undefined,
                             ticks: {
                                 color: '#fff',
                                 autoSkip: viewMode === 'day' ? false : true,
@@ -3361,13 +3317,15 @@
             cmpChartsBySlot[slot] = createCompareChart(`cmpChart${slot}`, cmpLabelsBySlot[slot], cmpSeriesBySlot[slot], pal);
         }
 
-        // Ventana móvil para comparador (si aplica)
-        try {
-            for (const slot of CMP_SLOTS) {
-                const ch = cmpChartsBySlot[slot];
-                if (ch) { applyMobileDayWindowToChart(ch, viewMode); ch.update('none'); }
-            }
-        } catch {}
+        // Ventana móvil para comparador (si aplica). Diferido para evitar TDZ.
+        setTimeout(() => {
+            try {
+                for (const slot of CMP_SLOTS) {
+                    const ch = cmpChartsBySlot[slot];
+                    if (ch) { applyMobileDayWindowToChart(ch, viewMode); ch.update('none'); }
+                }
+            } catch {}
+        }, 0);
 
         // --- Mini charts por planta (por tarjeta) ---
         const zoneMiniCharts = new Map();
