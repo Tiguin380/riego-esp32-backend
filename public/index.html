@@ -904,9 +904,7 @@
             </div>
 
             <div class="cmp-add-row" style="display:flex; justify-content:flex-end; margin-top: 10px; gap: 10px; flex-wrap: wrap;">
-                <button class="mini-btn zones-global-btn" id="cmpAddBtn" type="button">Añadir +1 (máx 8)</button>
-                <button class="mini-btn tiny" id="cmpAdd2Btn" type="button">+2</button>
-                <button class="mini-btn tiny" id="cmpAdd4Btn" type="button">+4</button>
+                <button class="mini-btn zones-global-btn" id="cmpAddBtn" type="button">Añadir gráfica (máx 8)</button>
             </div>
         </div>
 
@@ -3443,8 +3441,6 @@
 
         function initCompareButtons() {
             const addBtn = document.getElementById('cmpAddBtn');
-            const add2Btn = document.getElementById('cmpAdd2Btn');
-            const add4Btn = document.getElementById('cmpAdd4Btn');
 
             for (const slot of CMP_SLOTS) {
                 const rm = document.getElementById(`cmpRemove${slot}`);
@@ -3459,28 +3455,44 @@
                 });
             }
 
-            function addCompareCharts(n) {
-                let added = 0;
-                for (let i = 0; i < n; i++) {
-                    let opened = false;
-                    for (const slot of CMP_SLOTS) {
-                        const box = document.getElementById(`cmpBox${slot}`);
-                        const visible = !!box && box.style.display !== 'none';
-                        if (!visible) {
-                            showCmpBox(slot, true);
-                            opened = true;
-                            added += 1;
-                            break;
-                        }
-                    }
-                    if (!opened) break;
+            async function addCompareChartByModal() {
+                const picked = await pickCompareGraphModal().catch(() => null);
+                if (!picked) return;
+
+                let slotToUse = null;
+                for (const slot of CMP_SLOTS) {
+                    const box = document.getElementById(`cmpBox${slot}`);
+                    const visible = !!box && box.style.display !== 'none';
+                    if (!visible) { slotToUse = slot; break; }
                 }
-                if (added === 0) alert('Máximo 8 gráficas.');
+                if (!slotToUse) {
+                    alert('Máximo 8 gráficas.');
+                    return;
+                }
+
+                const slot = slotToUse;
+                showCmpBox(slot, true);
+
+                // Aplicar planta + sensor a este slot (y persistir)
+                cmpZoneBySlot[slot] = picked.zone;
+                saveCmpZone(slot, picked.zone);
+
+                const zoneSel = document.getElementById(`cmpZoneSelect${slot}`);
+                const chSel = document.getElementById(`cmpChannelSelect${slot}`);
+                if (zoneSel) zoneSel.value = picked.zone == null ? '' : String(picked.zone);
+
+                // Repoblar sensores según planta
+                populateCompareSelect(chSel, picked.zone);
+                if (chSel) chSel.value = String(picked.channelId);
+
+                cmpChannelIdBySlot[slot] = String(picked.channelId);
+                saveCmpChannel(slot, String(picked.channelId));
+
+                scheduleChartsRebuild();
+                try { document.getElementById(`cmpBox${slot}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {}
             }
 
-            if (addBtn) addBtn.addEventListener('click', () => addCompareCharts(1));
-            if (add2Btn) add2Btn.addEventListener('click', () => addCompareCharts(2));
-            if (add4Btn) add4Btn.addEventListener('click', () => addCompareCharts(4));
+            if (addBtn) addBtn.addEventListener('click', () => { addCompareChartByModal(); });
         }
 
         function sectionStorageKey(sec) {
@@ -3732,10 +3744,15 @@
 
             let step = 'raw';
             let limit = 900;
-            if (mode === 'day') { step = 'raw'; limit = 1200; }
+            if (mode === 'day') { step = '1m'; limit = 2000; }
             else { step = '1h'; limit = 2500; }
 
-            const url = `/api/channel/history/${encodeURIComponent(deviceCode)}/${encodeURIComponent(channelId)}?step=${encodeURIComponent(step)}&limit=${limit}`;
+            const range = rangeForMode(mode);
+            const rangeQs = (range && range.from && range.to)
+                ? `&from=${encodeURIComponent(range.from.toISOString())}&to=${encodeURIComponent(range.to.toISOString())}`
+                : '';
+
+            const url = `/api/channel/history/${encodeURIComponent(deviceCode)}/${encodeURIComponent(channelId)}?step=${encodeURIComponent(step)}&limit=${limit}${rangeQs}`;
             const r = await fetch(url, { credentials: 'include' });
             if (!r.ok) return;
             const payload = await r.json().catch(() => null);
@@ -4235,8 +4252,8 @@
 
         function rangeForMode(mode) {
             const now = nowAdjusted();
-            // DÍA: usar RAW para que se vea en tiempo real (segundos) y no “a saltos” por minuto.
-            if (mode === 'day') return { from: null, to: null, step: 'raw', bucketMs: null };
+            // DÍA: rango completo (últimas 24h) y step por minuto para que no se recorte a ~20 min.
+            if (mode === 'day') return { from: new Date(now.getTime() - 24 * 3600000), to: now, step: '1m', bucketMs: 60000 };
             if (mode === 'month') return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now, step: '1h', bucketMs: 3600000 };
             return { from: new Date(now.getFullYear(), 0, 1), to: now, step: '1h', bucketMs: 3600000 }; // year
         }
@@ -4320,7 +4337,7 @@
 
             let step;
             let limit;
-            if (viewMode === 'day') { step = 'raw'; limit = 1500; }
+            if (viewMode === 'day') { step = '1m'; limit = 2000; }
             else if (viewMode === 'month') { step = '1h'; limit = 2000; }
             else { step = '1h'; limit = 4000; }
 
@@ -4420,7 +4437,7 @@
             const range = rangeForMode(viewMode);
             let step;
             let limit;
-            if (viewMode === 'day') { step = 'raw'; limit = 1500; }
+            if (viewMode === 'day') { step = '1m'; limit = 2000; }
             else if (viewMode === 'month') { step = '1h'; limit = 2000; }
             else { step = '1h'; limit = 4000; }
 
@@ -5472,6 +5489,131 @@
 
                 document.addEventListener('keydown', onKeyDown);
                 document.body.appendChild(overlay);
+            });
+        }
+
+        function pickCompareGraphModal() {
+            return new Promise((resolve) => {
+                const overlay = document.createElement('div');
+                overlay.className = 'modal-overlay';
+
+                const lastZoneKey = `ui:cmpAdd:lastZone:${deviceCode}`;
+                let lastZone = '';
+                try {
+                    const raw = localStorage.getItem(lastZoneKey);
+                    if (raw === '' || raw == null) lastZone = '';
+                    else {
+                        const v = Number(raw);
+                        lastZone = (Number.isFinite(v) && v >= 1 && v <= 8) ? String(v) : '';
+                    }
+                } catch {}
+
+                overlay.innerHTML = `
+                    <div class="modal" role="dialog" aria-modal="true" aria-label="Añadir gráfica al comparador">
+                        <div class="modal-title">Añadir gráfica</div>
+                        <div class="muted" style="margin-top:-6px; margin-bottom: 10px; font-size:12px; color:#8fa3bf; line-height:1.35;">
+                            Elige la planta y el sensor para crear una nueva gráfica en tiempo real (máx. 8).
+                        </div>
+                        <div class="cmp-controls" style="margin: 0;">
+                            <div class="control-row" style="margin: 0 0 10px;">
+                                <label style="flex: 0 0 auto; min-width: 84px;">Planta:</label>
+                                <select class="cmp-select" id="cmpModalZone" title="Seleccionar planta"></select>
+                            </div>
+                            <div class="control-row" style="margin: 0;">
+                                <label style="flex: 0 0 auto; min-width: 84px;">Sensor:</label>
+                                <select class="cmp-select" id="cmpModalChannel" title="Seleccionar sensor"></select>
+                            </div>
+                        </div>
+                        <div class="modal-actions">
+                            <button class="mini-btn" type="button" data-cancel="1">Cancelar</button>
+                            <button class="mini-btn primary" type="button" data-create="1">Crear</button>
+                        </div>
+                    </div>
+                `;
+
+                const zoneSel = overlay.querySelector('#cmpModalZone');
+                const chSel = overlay.querySelector('#cmpModalChannel');
+                const createBtn = overlay.querySelector('button[data-create]');
+
+                const cleanup = () => {
+                    try { document.removeEventListener('keydown', onKeyDown); } catch {}
+                    overlay.remove();
+                };
+
+                const onKeyDown = (e) => {
+                    if (e.key === 'Escape') {
+                        cleanup();
+                        resolve(null);
+                    }
+                };
+
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay) {
+                        cleanup();
+                        resolve(null);
+                    }
+                });
+
+                // Planta: '' = todas (sin filtrar) + 1..8
+                if (zoneSel) {
+                    zoneSel.innerHTML = '';
+                    const all = document.createElement('option');
+                    all.value = '';
+                    all.textContent = 'Todas';
+                    zoneSel.appendChild(all);
+                    for (let z = 1; z <= 8; z++) {
+                        const opt = document.createElement('option');
+                        opt.value = String(z);
+                        opt.textContent = `Planta ${z}`;
+                        zoneSel.appendChild(opt);
+                    }
+                    zoneSel.value = String(lastZone);
+                }
+
+                const refreshChannels = () => {
+                    const z = zoneSel ? Number(zoneSel.value) : NaN;
+                    const zoneNum = (Number.isFinite(z) && z >= 1 && z <= 8) ? z : null;
+                    populateCompareSelect(chSel, zoneNum);
+
+                    const hasRealChoice = !!(chSel && chSel.querySelector('option[value]:not([value=""])'));
+                    if (createBtn) createBtn.disabled = !hasRealChoice;
+                };
+
+                zoneSel?.addEventListener('change', () => {
+                    try { localStorage.setItem(lastZoneKey, String(zoneSel.value || '')); } catch {}
+                    refreshChannels();
+                });
+
+                chSel?.addEventListener('change', () => {
+                    const ok = !!(chSel && String(chSel.value || '').trim());
+                    if (createBtn) createBtn.disabled = !ok;
+                });
+
+                overlay.querySelector('button[data-cancel]')?.addEventListener('click', () => {
+                    cleanup();
+                    resolve(null);
+                });
+
+                overlay.querySelector('button[data-create]')?.addEventListener('click', () => {
+                    const z = zoneSel ? Number(zoneSel.value) : NaN;
+                    const zone = (Number.isFinite(z) && z >= 1 && z <= 8) ? z : null;
+                    const channelId = chSel ? String(chSel.value || '').trim() : '';
+                    if (!channelId) {
+                        alert('Selecciona un sensor.');
+                        return;
+                    }
+                    cleanup();
+                    resolve({ zone, channelId });
+                });
+
+                document.addEventListener('keydown', onKeyDown);
+                document.body.appendChild(overlay);
+
+                // Inicial
+                refreshChannels();
+                // Si ya hay un valor válido, habilitar
+                const ok = !!(chSel && String(chSel.value || '').trim());
+                if (createBtn) createBtn.disabled = !ok;
             });
         }
 
