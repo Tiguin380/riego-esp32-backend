@@ -5502,17 +5502,66 @@
             setSeries(humLabels, humSeries, labels, hum);
             setSeries(valveLabels, valveSeries, labels, valve);
             try {
-                humChart.options.scales.x.ticks.autoSkip = true;
-                humChart.options.scales.x.ticks.callback = viewMode === 'day' ? tickEvery30Minutes : undefined;
-                humChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 49 : 10;
+                if (viewMode === 'day') {
+                    // Igual que mini: X lineal (minutos) y puntos {x,y}
+                    setDayPoints(humDayPoints, hum);
+                    setDayPoints(valveDayPoints, valve);
+                    humChart.data.labels = [];
+                    valveChart.data.labels = [];
+                    humChart.data.datasets[0].data = humDayPoints;
+                    valveChart.data.datasets[0].data = valveDayPoints;
+
+                    humChart.options.scales.x.type = 'linear';
+                    valveChart.options.scales.x.type = 'linear';
+                    humChart.options.scales.x.reverse = false;
+                    valveChart.options.scales.x.reverse = false;
+
+                    humChart.options.scales.x.ticks.autoSkip = false;
+                    valveChart.options.scales.x.ticks.autoSkip = false;
+                    humChart.options.scales.x.ticks.stepSize = (isSmallViewport() ? 60 : 120);
+                    valveChart.options.scales.x.ticks.stepSize = (isSmallViewport() ? 60 : 120);
+                    humChart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
+                    valveChart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
+                    humChart.options.scales.x.ticks.includeBounds = true;
+                    valveChart.options.scales.x.ticks.includeBounds = true;
+                    humChart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
+                    valveChart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
+
+                    // Bounds: en escritorio día completo; en móvil ventana (igual que mini)
+                    humChart.options.scales.x.min = 0;
+                    humChart.options.scales.x.max = 1439;
+                    valveChart.options.scales.x.min = 0;
+                    valveChart.options.scales.x.max = 1439;
+                } else {
+                    // Mes/año: category como estaba
+                    humChart.data.labels = humLabels;
+                    valveChart.data.labels = valveLabels;
+                    humChart.data.datasets[0].data = humSeries;
+                    valveChart.data.datasets[0].data = valveSeries;
+                    humChart.options.scales.x.type = 'category';
+                    valveChart.options.scales.x.type = 'category';
+                    delete humChart.options.scales.x.min;
+                    delete humChart.options.scales.x.max;
+                    delete valveChart.options.scales.x.min;
+                    delete valveChart.options.scales.x.max;
+
+                    humChart.options.scales.x.ticks.autoSkip = true;
+                    valveChart.options.scales.x.ticks.autoSkip = true;
+                    delete humChart.options.scales.x.ticks.stepSize;
+                    delete valveChart.options.scales.x.ticks.stepSize;
+                    delete humChart.options.scales.x.ticks.includeBounds;
+                    delete valveChart.options.scales.x.ticks.includeBounds;
+                    humChart.options.scales.x.ticks.callback = undefined;
+                    valveChart.options.scales.x.ticks.callback = undefined;
+                    humChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'year' ? 12 : 10;
+                    valveChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'year' ? 12 : 10;
+                }
+
                 humChart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
                 humChart.options.scales.x.ticks.showLabelBackdrop = false;
                 humChart.options.scales.x.ticks.maxRotation = 0;
                 humChart.options.scales.x.ticks.minRotation = 0;
 
-                valveChart.options.scales.x.ticks.autoSkip = true;
-                valveChart.options.scales.x.ticks.callback = viewMode === 'day' ? tickEvery30Minutes : undefined;
-                valveChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 49 : 10;
                 valveChart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
                 valveChart.options.scales.x.ticks.showLabelBackdrop = false;
                 valveChart.options.scales.x.ticks.maxRotation = 0;
