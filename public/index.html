@@ -3762,6 +3762,8 @@
                             e.chart.options.scales.x.max = 1439;
                             e.chart.options.scales.x.ticks.autoSkip = false;
                             e.chart.options.scales.x.ticks.stepSize = 30;
+                            e.chart.options.scales.x.ticks.maxTicksLimit = 49;
+                            e.chart.options.scales.x.ticks.includeBounds = true;
                             e.chart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
                         } else {
                             e.chart.options.scales.x.type = 'category';
@@ -3771,6 +3773,7 @@
                             e.chart.options.scales.x.ticks.maxTicksLimit = 8;
                             e.chart.options.scales.x.ticks.callback = undefined;
                             delete e.chart.options.scales.x.ticks.stepSize;
+                            delete e.chart.options.scales.x.ticks.includeBounds;
                         }
 
                         e.chart.options.scales.x.ticks.maxRotation = 0;
@@ -3848,7 +3851,8 @@
                                 color: '#fff',
                                 autoSkip: mode === 'day' ? false : true,
                                 stepSize: mode === 'day' ? 30 : undefined,
-                                maxTicksLimit: mode === 'day' ? undefined : 8,
+                                maxTicksLimit: mode === 'day' ? 49 : 8,
+                                includeBounds: mode === 'day' ? true : undefined,
                                 callback: mode === 'day' ? (v) => minuteIndexToHHMM(v) : undefined,
                                 maxRotation: 0,
                                 minRotation: 0,
