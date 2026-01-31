@@ -561,18 +561,44 @@ async function ensureDeviceProvisionedFromToken(device_code, token) {
 
 async function ensureDefaultChannels(device_id) {
   // Crea canal por defecto para compatibilidad: Sensor 1 (humedad) y Válvula 1
-  await pool.query(
-    `INSERT INTO device_channels (id, device_id, kind, channel_index, name)
-     VALUES ($1, $2, 'soil_sensor', 1, 'Sensor 1')
-     ON CONFLICT (device_id, kind, channel_index) DO NOTHING`,
-    [uuidv4(), device_id]
-  );
-  await pool.query(
-    `INSERT INTO device_channels (id, device_id, kind, channel_index, name)
-     VALUES ($1, $2, 'valve', 1, 'Válvula 1')
-     ON CONFLICT (device_id, kind, channel_index) DO NOTHING`,
-    [uuidv4(), device_id]
-  );
+  try {
+    await pool.query(
+      `INSERT INTO device_channels (id, device_id, kind, channel_index, name)
+       VALUES ($1, $2, 'soil_sensor', 1, 'Sensor 1')
+       ON CONFLICT (device_id, kind, channel_index)
+       DO UPDATE SET deleted_at = NULL`,
+      [uuidv4(), device_id]
+    );
+    await pool.query(
+      `INSERT INTO device_channels (id, device_id, kind, channel_index, name)
+       VALUES ($1, $2, 'valve', 1, 'Válvula 1')
+       ON CONFLICT (device_id, kind, channel_index)
+       DO UPDATE SET deleted_at = NULL`,
+      [uuidv4(), device_id]
+    );
+  } catch (e) {
+    // En despliegues con esquema antiguo, initDB aún no habrá creado deleted_at.
+    if (/column .*deleted_at.* does not exist|column .* does not exist/i.test(String(e.message))) {
+      try { await initDB(); } catch {}
+      // Reintentar una vez
+      await pool.query(
+        `INSERT INTO device_channels (id, device_id, kind, channel_index, name)
+         VALUES ($1, $2, 'soil_sensor', 1, 'Sensor 1')
+         ON CONFLICT (device_id, kind, channel_index)
+         DO UPDATE SET deleted_at = NULL`,
+        [uuidv4(), device_id]
+      );
+      await pool.query(
+        `INSERT INTO device_channels (id, device_id, kind, channel_index, name)
+         VALUES ($1, $2, 'valve', 1, 'Válvula 1')
+         ON CONFLICT (device_id, kind, channel_index)
+         DO UPDATE SET deleted_at = NULL`,
+        [uuidv4(), device_id]
+      );
+      return;
+    }
+    throw e;
+  }
 }
 
 async function getChannelId(device_id, kind, channel_index) {
@@ -583,13 +609,39 @@ async function getChannelId(device_id, kind, channel_index) {
   return r.rows[0]?.id || null;
 }
 
+async function getChannelRow(device_id, kind, channel_index) {
+  const r = await pool.query(
+    `SELECT id, deleted_at
+     FROM device_channels
+     WHERE device_id = $1 AND kind = $2 AND channel_index = $3
+     LIMIT 1`,
+    [device_id, kind, channel_index]
+  );
+  return r.rows[0] || null;
+}
+
 async function ensureChannel(device_id, kind, channel_index) {
   if (kind !== 'soil_sensor' && kind !== 'valve') return null;
   const idx = Number(channel_index);
   if (!Number.isInteger(idx) || idx < 1 || idx > 32) return null;
 
-  const existing = await getChannelId(device_id, kind, idx);
-  if (existing) return existing;
+  let existing;
+  try {
+    existing = await getChannelRow(device_id, kind, idx);
+  } catch (e) {
+    if (/column .*deleted_at.* does not exist|column .* does not exist/i.test(String(e.message))) {
+      try { await initDB(); } catch {}
+      existing = await getChannelRow(device_id, kind, idx);
+    } else {
+      throw e;
+    }
+  }
+  // Si el canal existe pero está marcado como borrado, NO lo re-creamos automáticamente
+  // y además ignoramos sus muestras (para que no “reviva solo” en la UI).
+  if (existing && existing.id) {
+    if (existing.deleted_at) return null;
+    return existing.id;
+  }
 
   const id = uuidv4();
   const name = kind === 'valve' ? `Válvula ${idx}` : `Sensor ${idx}`;
@@ -885,6 +937,7 @@ async function initDB() {
         kind VARCHAR(20) NOT NULL, -- 'soil_sensor' | 'valve'
         channel_index INTEGER NOT NULL,
         name VARCHAR(80) NOT NULL,
+        deleted_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (device_id, kind, channel_index)
       )
@@ -949,6 +1002,9 @@ async function initDB() {
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS notify_webhook_url TEXT`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS notify_telegram_chat_id TEXT`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS zones_json JSONB`);
+
+    // Soft-delete de canales: evita que el ESP32 los “recree” en cuanto envía lecturas
+    await pool.query(`ALTER TABLE device_channels ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`);
 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sensor_device_time ON sensor_data(device_id, created_at DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_alert_events_device_time ON alert_events(device_id, created_at DESC)`);
@@ -2602,12 +2658,31 @@ app.get('/api/channels/:device_code', async (req, res) => {
     const r = await pool.query(
       `SELECT id, kind, channel_index, name, created_at
        FROM device_channels
-       WHERE device_id = $1
+       WHERE device_id = $1 AND deleted_at IS NULL
        ORDER BY kind ASC, channel_index ASC`,
       [dev.id]
     );
     res.json({ device_code, channels: r.rows });
   } catch (e) {
+    if (/column .*deleted_at.* does not exist|column .* does not exist/i.test(String(e.message))) {
+      try {
+        await initDB();
+        const { device_code } = req.params;
+        const dev = await requireUserDevice(req, res, device_code);
+        if (!dev) return;
+        await ensureDefaultChannels(dev.id);
+        const r = await pool.query(
+          `SELECT id, kind, channel_index, name, created_at
+           FROM device_channels
+           WHERE device_id = $1 AND deleted_at IS NULL
+           ORDER BY kind ASC, channel_index ASC`,
+          [dev.id]
+        );
+        return res.json({ device_code, channels: r.rows });
+      } catch (ie) {
+        console.warn('initDB retry failed:', ie.message);
+      }
+    }
     console.error(e);
     res.status(500).json({ error: e.message });
   }
@@ -2642,7 +2717,7 @@ app.get('/api/channels/:device_code/latest', async (req, res) => {
          ORDER BY ts DESC
          LIMIT 1
        ) s ON TRUE
-       WHERE dc.device_id = $1
+       WHERE dc.device_id = $1 AND dc.deleted_at IS NULL
        ORDER BY dc.kind ASC, dc.channel_index ASC`,
       [dev.id]
     );
@@ -2673,6 +2748,66 @@ app.get('/api/channels/:device_code/latest', async (req, res) => {
       channels: out
     });
   } catch (e) {
+    if (/column .*deleted_at.* does not exist|column .* does not exist/i.test(String(e.message))) {
+      try {
+        await initDB();
+        const { device_code } = req.params;
+        const dev = await requireUserDevice(req, res, device_code);
+        if (!dev) return;
+        await ensureDefaultChannels(dev.id);
+
+        const serverNow = new Date();
+        const nowMs = serverNow.getTime();
+        const r = await pool.query(
+          `SELECT
+             dc.id,
+             dc.kind,
+             dc.channel_index,
+             dc.name,
+             s.ts AS ts_raw,
+             (EXTRACT(EPOCH FROM (s.ts AT TIME ZONE current_setting('TIMEZONE'))) * 1000)::bigint AS ts_ms,
+             s.value,
+             s.state
+           FROM device_channels dc
+           LEFT JOIN LATERAL (
+             SELECT ts, value, state
+             FROM channel_samples
+             WHERE channel_id = dc.id
+             ORDER BY ts DESC
+             LIMIT 1
+           ) s ON TRUE
+           WHERE dc.device_id = $1 AND dc.deleted_at IS NULL
+           ORDER BY dc.kind ASC, dc.channel_index ASC`,
+          [dev.id]
+        );
+        const out = r.rows.map((row) => {
+          const tsMs = Number(row.ts_ms || 0);
+          const ts = epochMsToDate(tsMs);
+          return {
+            id: row.id,
+            kind: row.kind,
+            channel_index: row.channel_index,
+            name: row.name,
+            latest: {
+              ts_raw: row.ts_raw ?? null,
+              ts: ts ? ts.toISOString() : null,
+              ts_madrid: ts ? fmtEsLabel.format(ts) : null,
+              age_minutes: ts ? Math.round(Math.max(0, nowMs - ts.getTime()) / 60000) : null,
+              value: row.value ?? null,
+              state: row.state ?? null
+            }
+          };
+        });
+        return res.json({
+          device_code,
+          server_now: serverNow.toISOString(),
+          server_now_madrid: fmtEsLabel.format(serverNow),
+          channels: out
+        });
+      } catch (ie) {
+        console.warn('initDB retry failed:', ie.message);
+      }
+    }
     console.error(e);
     res.status(500).json({ error: e.message });
   }
@@ -2694,10 +2829,31 @@ app.post('/api/channels/:device_code', async (req, res) => {
     }
 
     await ensureDefaultChannels(dev.id);
+    // Si hay un índice borrado, lo “revivimos” para no ir creciendo (2,3,4...)
+    const reuseR = await pool.query(
+      `SELECT id, channel_index
+       FROM device_channels
+       WHERE device_id = $1 AND kind = $2 AND deleted_at IS NOT NULL
+       ORDER BY channel_index ASC
+       LIMIT 1`,
+      [dev.id, kind]
+    );
+
+    if (reuseR.rows.length > 0) {
+      const id = reuseR.rows[0].id;
+      const channel_index = Number(reuseR.rows[0].channel_index);
+      const finalName = String(name || (kind === 'valve' ? `Válvula ${channel_index}` : `Sensor ${channel_index}`)).slice(0, 80);
+      await pool.query(
+        `UPDATE device_channels SET name = $1, deleted_at = NULL WHERE id = $2 AND device_id = $3`,
+        [finalName, id, dev.id]
+      );
+      return res.json({ status: 'OK', device_code, channel: { id, kind, channel_index, name: finalName } });
+    }
+
     const nextIdxR = await pool.query(
       `SELECT COALESCE(MAX(channel_index), 0) + 1 AS next
        FROM device_channels
-       WHERE device_id = $1 AND kind = $2`,
+       WHERE device_id = $1 AND kind = $2 AND deleted_at IS NULL`,
       [dev.id, kind]
     );
     const channel_index = Number(nextIdxR.rows[0]?.next || 1);
@@ -2731,7 +2887,7 @@ app.patch('/api/channels/:device_code/:channel_id', async (req, res) => {
     if (!finalName) return res.status(400).json({ error: 'name requerido' });
 
     const owned = await pool.query(
-      `SELECT id FROM device_channels WHERE id = $1 AND device_id = $2`,
+      `SELECT id FROM device_channels WHERE id = $1 AND device_id = $2 AND deleted_at IS NULL`,
       [channel_id, dev.id]
     );
     if (owned.rows.length === 0) return res.status(404).json({ error: 'Canal no encontrado' });
@@ -2772,7 +2928,10 @@ app.delete('/api/channels/:device_code/:channel_id', async (req, res) => {
     }
 
     await pool.query('DELETE FROM channel_samples WHERE channel_id = $1', [channel_id]);
-    await pool.query('DELETE FROM device_channels WHERE id = $1 AND device_id = $2', [channel_id, dev.id]);
+    await pool.query(
+      'UPDATE device_channels SET deleted_at = NOW() WHERE id = $1 AND device_id = $2',
+      [channel_id, dev.id]
+    );
     res.json({ status: 'OK', device_code, channel_id });
   } catch (e) {
     console.error(e);
@@ -3641,7 +3800,8 @@ app.get('/api/debug/channels/:device_code', async (req, res) => {
     const channels = await pool.query(
       `SELECT id, kind, channel_index, name
        FROM device_channels
-       WHERE device_id = $1 AND ((kind = 'soil_sensor' AND channel_index = 1) OR (kind = 'valve' AND channel_index = 1))`,
+       WHERE device_id = $1 AND deleted_at IS NULL
+         AND ((kind = 'soil_sensor' AND channel_index = 1) OR (kind = 'valve' AND channel_index = 1))`,
       [dev.id]
     );
 
