@@ -321,6 +321,29 @@
         .chart-wrap canvas { width: 100% !important; height: 100% !important; display: block; }
         /* Las gráficas de tarjetas usan el mismo tamaño que las principales */
         .mini-chart-wrap { height: clamp(160px, 24vh, 260px); margin-top: 10px; }
+
+        /* Mini-gráficas por planta: en modo DÍA se muestran 49 etiquetas (cada 30 min).
+           Para que no quede todo amontonado, habilitamos scroll horizontal y un ancho interno grande. */
+        .mini-chart-scroll {
+            width: 100%;
+            height: 100%;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        .mini-chart-inner {
+            height: 100%;
+            width: 100%;
+            min-width: 520px;
+        }
+        .mini-chart-scroll::-webkit-scrollbar { height: 10px; }
+        .mini-chart-scroll::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.35);
+            border-radius: 999px;
+        }
+        .mini-chart-scroll::-webkit-scrollbar-track {
+            background: rgba(2, 6, 23, 0.25);
+            border-radius: 999px;
+        }
         .sensor-card.card-off .chart-wrap { opacity: 0.25; }
         .sensor-card.card-off .sensor-value { opacity: 0.75; }
         .btn.active { outline: 2px solid rgba(255,255,255,0.35); opacity: 0.95; }
@@ -519,7 +542,7 @@
               onerror="this.style.display='none'"
             />
         </div>
-        <div class="status" style="margin-bottom: 12px;">UI vRt1548B</div>
+        <div class="status" style="margin-bottom: 12px;">UI vRt1548C</div>
 
         <div class="top-nav">
             <button class="mini-btn active" id="navDevices" type="button">Dispositivos</button>
@@ -1699,31 +1722,31 @@
 
                 const humCard = document.createElement('div');
                 humCard.className = 'sensor-card metric-neutral accent accent-green';
-                humCard.innerHTML = `<div class="sensor-label">Humedad (zona)</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneHumName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneHumAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneHumLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneHum${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap"><canvas id="zoneHumChart${zoneNum}"></canvas></div>`;
+                humCard.innerHTML = `<div class="sensor-label">Humedad (zona)</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneHumName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneHumAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneHumLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneHum${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap mini-chart-wrap"><div class="mini-chart-scroll"><div class="mini-chart-inner"><canvas id="zoneHumChart${zoneNum}"></canvas></div></div></div>`;
 
                 const tSoilCard = document.createElement('div');
                 tSoilCard.className = 'sensor-card metric-neutral accent accent-purple';
-                tSoilCard.innerHTML = `<div class="sensor-label">Temp. tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneTSoilName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneTSoilAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneTSoilLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneTSoil${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap"><canvas id="zoneTSoilChart${zoneNum}"></canvas></div>`;
+                tSoilCard.innerHTML = `<div class="sensor-label">Temp. tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneTSoilName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneTSoilAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneTSoilLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneTSoil${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap mini-chart-wrap"><div class="mini-chart-scroll"><div class="mini-chart-inner"><canvas id="zoneTSoilChart${zoneNum}"></canvas></div></div></div>`;
 
                 const tAirCard = document.createElement('div');
                 tAirCard.className = 'sensor-card metric-neutral accent accent-blue';
-                tAirCard.innerHTML = `<div class="sensor-label">Temp. aire</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneTAirName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneTAirAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneTAirLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneTAir${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap"><canvas id="zoneTAirChart${zoneNum}"></canvas></div>`;
+                tAirCard.innerHTML = `<div class="sensor-label">Temp. aire</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneTAirName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneTAirAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneTAirLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneTAir${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap mini-chart-wrap"><div class="mini-chart-scroll"><div class="mini-chart-inner"><canvas id="zoneTAirChart${zoneNum}"></canvas></div></div></div>`;
 
                 const hAirCard = document.createElement('div');
                 hAirCard.className = 'sensor-card metric-neutral accent accent-indigo';
-                hAirCard.innerHTML = `<div class="sensor-label">Humedad aire</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneHAirName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneHAirAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneHAirLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneHAir${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap"><canvas id="zoneHAirChart${zoneNum}"></canvas></div>`;
+                hAirCard.innerHTML = `<div class="sensor-label">Humedad aire</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneHAirName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneHAirAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneHAirLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneHAir${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap mini-chart-wrap"><div class="mini-chart-scroll"><div class="mini-chart-inner"><canvas id="zoneHAirChart${zoneNum}"></canvas></div></div></div>`;
 
                 const phCard = document.createElement('div');
                 phCard.className = 'sensor-card metric-neutral accent accent-amber';
-                phCard.innerHTML = `<div class="sensor-label">pH tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zonePHName${zoneNum}">—</div><div class="sensor-meta-avg" id="zonePHAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zonePHLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zonePH${zoneNum}">--</div><div class="sensor-unit">pH</div><div class="chart-wrap"><canvas id="zonePHChart${zoneNum}"></canvas></div>`;
+                phCard.innerHTML = `<div class="sensor-label">pH tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zonePHName${zoneNum}">—</div><div class="sensor-meta-avg" id="zonePHAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zonePHLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zonePH${zoneNum}">--</div><div class="sensor-unit">pH</div><div class="chart-wrap mini-chart-wrap"><div class="mini-chart-scroll"><div class="mini-chart-inner"><canvas id="zonePHChart${zoneNum}"></canvas></div></div></div>`;
 
                 const ecCard = document.createElement('div');
                 ecCard.className = 'sensor-card metric-neutral accent accent-cyan';
-                ecCard.innerHTML = `<div class="sensor-label">EC tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneECName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneECAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneECLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneEC${zoneNum}">--</div><div class="sensor-unit">mS/cm</div><div class="chart-wrap"><canvas id="zoneECChart${zoneNum}"></canvas></div>`;
+                ecCard.innerHTML = `<div class="sensor-label">EC tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneECName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneECAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneECLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneEC${zoneNum}">--</div><div class="sensor-unit">mS/cm</div><div class="chart-wrap mini-chart-wrap"><div class="mini-chart-scroll"><div class="mini-chart-inner"><canvas id="zoneECChart${zoneNum}"></canvas></div></div></div>`;
 
                 const valveCard = document.createElement('div');
                 valveCard.className = 'sensor-card metric-neutral accent accent-red';
-                valveCard.innerHTML = `<div class="sensor-label">Válvula (zona)</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneValveName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneValveAvg${zoneNum}"><span class="meta-label">ON:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneValveLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneValve${zoneNum}">--</div><div class="valve-indicator"><div class="valve-dot" id="zoneValveDot${zoneNum}"></div><div class="valve-text" id="zoneValveText${zoneNum}">--</div></div><div class="chart-wrap"><canvas id="zoneValveChart${zoneNum}"></canvas></div>`;
+                valveCard.innerHTML = `<div class="sensor-label">Válvula (zona)</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneValveName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneValveAvg${zoneNum}"><span class="meta-label">ON:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneValveLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneValve${zoneNum}">--</div><div class="valve-indicator"><div class="valve-dot" id="zoneValveDot${zoneNum}"></div><div class="valve-text" id="zoneValveText${zoneNum}">--</div></div><div class="chart-wrap mini-chart-wrap"><div class="mini-chart-scroll"><div class="mini-chart-inner"><canvas id="zoneValveChart${zoneNum}"></canvas></div></div></div>`;
 
                 const statusCard = document.createElement('div');
                 statusCard.className = 'sensor-card metric-neutral accent accent-cyan';
@@ -3734,6 +3757,13 @@
         function ensureMiniChart(canvasId, { stepped = false, yMin = undefined, yMax = undefined, yTickCb = undefined, yTickStep = undefined, mode = 'day' } = {}) {
             const canvas = document.getElementById(canvasId);
             if (!canvas) return null;
+
+            // Ajuste de anchura para evitar “amontonado” en el eje X en modo DÍA
+            try {
+                const inner = canvas.closest('.mini-chart-inner');
+                if (inner) inner.style.width = (mode === 'day') ? '1120px' : '100%';
+            } catch {}
+
             if (zoneMiniCharts.has(canvasId)) {
                 const e = zoneMiniCharts.get(canvasId);
                 try {
@@ -3781,6 +3811,7 @@
                         e.chart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
                         e.chart.options.scales.x.ticks.showLabelBackdrop = false;
                         e.mode = mode;
+                        try { e.chart.resize(); } catch {}
                     }
                 } catch {}
                 return e;
