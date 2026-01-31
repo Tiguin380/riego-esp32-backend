@@ -1010,8 +1010,15 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     <script>
         let config = { threshold: 25, colorB: 'Rojo', colorG: 'Verde' };
+
+        // chartjs-plugin-zoom (pan/pinch) para “scroll” horizontal sin desplazar el eje izquierdo.
+        try {
+            const zoomPlugin = window.ChartZoom || window.zoomPlugin || window.ZoomPlugin || window['chartjs-plugin-zoom'];
+            if (zoomPlugin) Chart.register(zoomPlugin);
+        } catch {}
 
         const DEFAULT_AUTO_CONFIG = {
             wet_v: 1.10,
@@ -3405,9 +3412,110 @@
             }
         }
 
-        // --- Scroll horizontal en móvil/tablet (modo DÍA) ---
+        // --- Móvil/tablet: DÍA con paneo + auto-follow (sin mover el canvas) ---
         function isSmallViewport() {
             try { return window.matchMedia && window.matchMedia('(max-width: 900px)').matches; } catch { return false; }
+        }
+
+        function isDayPanMode(mode) {
+            return mode === 'day' && isSmallViewport();
+        }
+
+        const DAY_WINDOW_MINUTES = 900; // 15h visibles aprox
+        function getNowMinuteIndexMadrid() {
+            try {
+                const p = getMadridParts(nowAdjusted());
+                const h = Number(p?.h);
+                const mi = Number(p?.mi);
+                if (!Number.isFinite(h) || !Number.isFinite(mi)) return null;
+                const idx = h * 60 + mi;
+                return (idx >= 0 && idx <= 1439) ? idx : null;
+            } catch {
+                return null;
+            }
+        }
+
+        function ensureDayPanAndFollowOptions(chart, mode) {
+            if (!chart?.options?.scales?.x) return;
+            if (!isDayPanMode(mode)) {
+                try { if (chart.options.plugins && chart.options.plugins.zoom) delete chart.options.plugins.zoom; } catch {}
+                return;
+            }
+
+            const x = chart.options.scales.x;
+            x.type = 'linear';
+            const t = x.ticks || (x.ticks = {});
+            t.color = '#fff';
+            t.autoSkip = true;
+            t.maxTicksLimit = 9;
+            t.callback = (v) => minuteIndexToHHMM(v);
+            t.maxRotation = 0;
+            t.minRotation = 0;
+            t.backdropColor = 'rgba(0,0,0,0)';
+            t.showLabelBackdrop = false;
+
+            chart.options.plugins = chart.options.plugins || {};
+            chart.options.plugins.zoom = {
+                limits: { x: { min: 0, max: 1439 } },
+                pan: {
+                    enabled: true,
+                    mode: 'x',
+                    threshold: 8,
+                    onPanComplete: ({ chart: c }) => {
+                        try {
+                            if (!c) return;
+                            c.$lastUserPanAt = Date.now();
+                            const nowIdx = getNowMinuteIndexMadrid();
+                            const maxNow = Number(c?.scales?.x?.max);
+                            if (nowIdx == null || !Number.isFinite(maxNow)) { c.$followX = false; return; }
+                            c.$followX = maxNow >= (nowIdx - 3);
+                        } catch {}
+                    }
+                },
+                zoom: {
+                    wheel: { enabled: false },
+                    pinch: { enabled: true },
+                    mode: 'x',
+                    onZoomComplete: ({ chart: c }) => {
+                        try {
+                            if (!c) return;
+                            c.$lastUserPanAt = Date.now();
+                            const nowIdx = getNowMinuteIndexMadrid();
+                            const maxNow = Number(c?.scales?.x?.max);
+                            if (nowIdx == null || !Number.isFinite(maxNow)) { c.$followX = false; return; }
+                            c.$followX = maxNow >= (nowIdx - 3);
+                        } catch {}
+                    }
+                }
+            };
+
+            if (chart.$followX == null) chart.$followX = true;
+        }
+
+        function followChartToNowMadrid(chart, mode) {
+            if (!chart?.options?.scales?.x) return;
+            if (!isDayPanMode(mode)) return;
+            if (chart.$followX === false) return;
+
+            const lastUser = Number(chart.$lastUserPanAt || 0);
+            if (Number.isFinite(lastUser) && lastUser > 0 && (Date.now() - lastUser) < 1200) return;
+
+            const nowIdx = getNowMinuteIndexMadrid();
+            if (nowIdx == null) return;
+            const desiredMax = Math.min(1439, Math.max(0, nowIdx + 1));
+            const desiredMin = Math.max(0, desiredMax - DAY_WINDOW_MINUTES);
+
+            const x = chart.options.scales.x;
+            const curMin = Number(x.min);
+            const curMax = Number(x.max);
+            const same = Number.isFinite(curMin) && Number.isFinite(curMax)
+                && Math.abs(curMin - desiredMin) < 0.5
+                && Math.abs(curMax - desiredMax) < 0.5;
+            if (same) return;
+
+            x.min = desiredMin;
+            x.max = desiredMax;
+            try { chart.update('none'); } catch {}
         }
 
         function ensureChartScrollDomForCanvas(canvas) {
@@ -3446,40 +3554,15 @@
             const s = ensureChartScrollDomForCanvas(canvas);
             if (!s) return;
 
-            const enable = isSmallViewport() && mode === 'day';
+            // IMPORTANTE: ya no usamos scroll del canvas para DÍA en móvil, porque oculta la parte izquierda.
+            const enable = false;
             s.wrap.classList.toggle('scroll-x', !!enable);
-
-            if (enable) {
-                // Más horas visibles: menos “zoom” que antes
-                const base = 720; // px aprox como referencia visual
-                const w = Math.max(base, Math.round((s.wrap.clientWidth || 0) * 1.10));
-                s.inner.style.width = `${w}px`;
-            } else {
-                s.inner.style.width = '100%';
-                try { s.wrap.scrollLeft = 0; } catch {}
-                try { s.wrap.dataset.follow = '1'; } catch {}
-            }
+            s.inner.style.width = '100%';
         }
 
         function scrollCanvasToNowIfFollowing(canvas, mode) {
-            if (!(isSmallViewport() && mode === 'day')) return;
-            const s = ensureChartScrollDomForCanvas(canvas);
-            if (!s) return;
-            if (s.wrap.dataset.follow === '0') return;
-            const lastUser = Number(s.wrap.dataset.lastUserScroll || 0);
-            if (Number.isFinite(lastUser) && lastUser > 0 && (Date.now() - lastUser) < 5000) return;
-
-            try {
-                const p = getMadridParts(nowAdjusted());
-                const minute = (Number(p?.h) * 60 + Number(p?.mi));
-                if (!Number.isFinite(minute)) return;
-
-                const ratio = Math.max(0, Math.min(1, minute / 1439));
-                const max = Math.max(0, s.wrap.scrollWidth - s.wrap.clientWidth);
-                const xNow = ratio * (s.wrap.scrollWidth || 0);
-                const target = Math.max(0, Math.min(max, Math.round(xNow - s.wrap.clientWidth + 24)));
-                s.wrap.scrollLeft = target;
-            } catch {}
+            // Compat: la lógica vieja de auto-scroll por DOM ya no aplica.
+            return;
         }
 
         function buildMadridDayAxisLabels(pNow) {
@@ -3890,13 +3973,13 @@
 
                         if (mode === 'day') {
                             e.chart.options.scales.x.type = 'linear';
-                            e.chart.options.scales.x.min = 0;
-                            e.chart.options.scales.x.max = 1439;
-                            e.chart.options.scales.x.ticks.autoSkip = false;
-                            e.chart.options.scales.x.ticks.stepSize = (isSmallViewport() ? 60 : 120);
-                            e.chart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
-                            e.chart.options.scales.x.ticks.includeBounds = true;
+                            e.chart.options.scales.x.ticks.autoSkip = true;
+                            e.chart.options.scales.x.ticks.maxTicksLimit = 9;
                             e.chart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
+                            delete e.chart.options.scales.x.ticks.stepSize;
+                            delete e.chart.options.scales.x.ticks.includeBounds;
+                            ensureDayPanAndFollowOptions(e.chart, 'day');
+                            followChartToNowMadrid(e.chart, 'day');
                         } else {
                             e.chart.options.scales.x.type = 'category';
                             delete e.chart.options.scales.x.min;
@@ -3906,6 +3989,7 @@
                             e.chart.options.scales.x.ticks.callback = undefined;
                             delete e.chart.options.scales.x.ticks.stepSize;
                             delete e.chart.options.scales.x.ticks.includeBounds;
+                            try { if (e.chart.options.plugins && e.chart.options.plugins.zoom) delete e.chart.options.plugins.zoom; } catch {}
                         }
 
                         e.chart.options.scales.x.ticks.maxRotation = 0;
@@ -3979,14 +4063,10 @@
                         },
                         x: {
                             type: mode === 'day' ? 'linear' : 'category',
-                            min: mode === 'day' ? 0 : undefined,
-                            max: mode === 'day' ? 1439 : undefined,
                             ticks: {
                                 color: '#fff',
-                                autoSkip: mode === 'day' ? false : true,
-                                stepSize: mode === 'day' ? 120 : undefined,
-                                maxTicksLimit: mode === 'day' ? 13 : 8,
-                                includeBounds: mode === 'day' ? true : undefined,
+                                autoSkip: true,
+                                maxTicksLimit: mode === 'day' ? 9 : 8,
                                 callback: mode === 'day' ? (v) => minuteIndexToHHMM(v) : undefined,
                                 maxRotation: 0,
                                 minRotation: 0,
@@ -4001,7 +4081,7 @@
 
             // Reaplicar scroll (por si el canvas se reparentó en el DOM)
             applyTimelineScrollForCanvas(canvas, mode);
-            scrollCanvasToNowIfFollowing(canvas, mode);
+            try { ensureDayPanAndFollowOptions(chart, mode); followChartToNowMadrid(chart, mode); } catch {}
 
             const entry = {
                 chart,
@@ -4220,6 +4300,10 @@
             }
 
             entry.chart.update('none');
+
+            try { ensureDayPanAndFollowOptions(entry.chart, 'day'); followChartToNowMadrid(entry.chart, 'day'); } catch {}
+
+            try { ensureDayPanAndFollowOptions(entry.chart, mode); followChartToNowMadrid(entry.chart, mode); } catch {}
 
             try {
                 const m = String(canvasId).match(/^zone(Hum|Valve)Chart(\d+)$/);
@@ -4619,15 +4703,78 @@
                 setMetaValue('lastPoint', txt, { muted: txt === '--' });
             }
 
-            setSeries(humLabels, humSeries, labels, hum);
-            setSeries(valveLabels, valveSeries, labels, valve);
+            if (viewMode === 'day' && isDayPanMode(viewMode)) {
+                const humPts = new Array(1440);
+                const valvePts = new Array(1440);
+                for (let i = 0; i < 1440; i++) {
+                    humPts[i] = { x: i, y: hum[i] };
+                    valvePts[i] = { x: i, y: valve[i] };
+                }
+                setSeries(humLabels, humSeries, [], humPts);
+                setSeries(valveLabels, valveSeries, [], valvePts);
+                try {
+                    ensureDayPanAndFollowOptions(humChart, 'day');
+                    ensureDayPanAndFollowOptions(valveChart, 'day');
+                } catch {}
+            } else {
+                setSeries(humLabels, humSeries, labels, hum);
+                setSeries(valveLabels, valveSeries, labels, valve);
+                try {
+                    if (humChart?.options?.scales?.x) {
+                        humChart.options.scales.x.type = 'category';
+                        const ht = humChart.options.scales.x.ticks || (humChart.options.scales.x.ticks = {});
+                        if (viewMode === 'day') {
+                            ht.autoSkip = true;
+                            ht.callback = isSmallViewport() ? tickEveryHour : tickEvery30Minutes;
+                            ht.maxTicksLimit = isSmallViewport() ? 25 : 16;
+                        } else if (viewMode === 'month') {
+                            ht.autoSkip = false;
+                            ht.callback = undefined;
+                            ht.maxTicksLimit = undefined;
+                        } else {
+                            ht.autoSkip = true;
+                            ht.callback = undefined;
+                            ht.maxTicksLimit = 10;
+                        }
+                        ht.backdropColor = 'rgba(0,0,0,0)';
+                        ht.showLabelBackdrop = false;
+                        ht.maxRotation = 0;
+                        ht.minRotation = 0;
+                        delete humChart.options.scales.x.min;
+                        delete humChart.options.scales.x.max;
+                    }
+                    if (valveChart?.options?.scales?.x) {
+                        valveChart.options.scales.x.type = 'category';
+                        const vt = valveChart.options.scales.x.ticks || (valveChart.options.scales.x.ticks = {});
+                        if (viewMode === 'day') {
+                            vt.autoSkip = true;
+                            vt.callback = isSmallViewport() ? tickEveryHour : tickEvery30Minutes;
+                            vt.maxTicksLimit = isSmallViewport() ? 25 : 16;
+                        } else if (viewMode === 'month') {
+                            vt.autoSkip = false;
+                            vt.callback = undefined;
+                            vt.maxTicksLimit = undefined;
+                        } else {
+                            vt.autoSkip = true;
+                            vt.callback = undefined;
+                            vt.maxTicksLimit = 10;
+                        }
+                        vt.backdropColor = 'rgba(0,0,0,0)';
+                        vt.showLabelBackdrop = false;
+                        vt.maxRotation = 0;
+                        vt.minRotation = 0;
+                        delete valveChart.options.scales.x.min;
+                        delete valveChart.options.scales.x.max;
+                    }
+                    try { if (humChart.options.plugins && humChart.options.plugins.zoom) delete humChart.options.plugins.zoom; } catch {}
+                    try { if (valveChart.options.plugins && valveChart.options.plugins.zoom) delete valveChart.options.plugins.zoom; } catch {}
+                } catch {}
+            }
             humChart.update('none');
             valveChart.update('none');
             try {
-                applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
-                applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
-                scrollCanvasToNowIfFollowing(document.getElementById('humChart'), viewMode);
-                scrollCanvasToNowIfFollowing(document.getElementById('valveChart'), viewMode);
+                followChartToNowMadrid(humChart, viewMode);
+                followChartToNowMadrid(valveChart, viewMode);
             } catch {}
 
             const valveDotChart = document.getElementById('valveDotChart');
@@ -4673,19 +4820,37 @@
             if (!chart || !chart.options || !chart.options.scales || !chart.options.scales.x) return;
             const t = chart.options.scales.x.ticks || (chart.options.scales.x.ticks = {});
             t.color = '#fff';
-            if (mode === 'day') {
+            if (mode === 'day' && isDayPanMode(mode)) {
+                chart.options.scales.x.type = 'linear';
                 t.autoSkip = true;
-                t.callback = isSmallViewport() ? tickEveryHour : tickEvery30Minutes;
-                t.maxTicksLimit = isSmallViewport() ? 25 : 16;
+                t.callback = (v) => minuteIndexToHHMM(v);
+                t.maxTicksLimit = 9;
+                ensureDayPanAndFollowOptions(chart, 'day');
+            } else if (mode === 'day') {
+                chart.options.scales.x.type = 'category';
+                t.autoSkip = true;
+                t.callback = tickEvery30Minutes;
+                t.maxTicksLimit = 16;
+                try { if (chart.options.plugins && chart.options.plugins.zoom) delete chart.options.plugins.zoom; } catch {}
+                delete chart.options.scales.x.min;
+                delete chart.options.scales.x.max;
             } else if (mode === 'month') {
+                chart.options.scales.x.type = 'category';
                 // En MES queremos ver 01..31 (aunque se solapen un poco)
                 t.autoSkip = false;
                 t.callback = undefined;
                 t.maxTicksLimit = undefined;
+                try { if (chart.options.plugins && chart.options.plugins.zoom) delete chart.options.plugins.zoom; } catch {}
+                delete chart.options.scales.x.min;
+                delete chart.options.scales.x.max;
             } else {
+                chart.options.scales.x.type = 'category';
                 t.autoSkip = true;
                 t.callback = undefined;
                 t.maxTicksLimit = 10;
+                try { if (chart.options.plugins && chart.options.plugins.zoom) delete chart.options.plugins.zoom; } catch {}
+                delete chart.options.scales.x.min;
+                delete chart.options.scales.x.max;
             }
             t.maxRotation = 0;
             t.minRotation = 0;
@@ -4770,7 +4935,6 @@
 
             if (viewMode === 'day') {
                 const pNow = getMadridParts(nowAdjusted());
-                const axis = buildMadridDayAxisLabels(pNow);
                 const sArr = new Array(1440).fill(null);
 
                 for (const row of rows) {
@@ -4785,8 +4949,13 @@
                     }
                 }
 
-                for (const x of axis) labels.push(withDiaPrefixLabel(x));
-                for (const y of sArr) series.push(y);
+                if (isDayPanMode(viewMode)) {
+                    for (let i = 0; i < 1440; i++) series.push({ x: i, y: sArr[i] });
+                } else {
+                    const axis = buildMadridDayAxisLabels(pNow);
+                    for (const x of axis) labels.push(withDiaPrefixLabel(x));
+                    for (const y of sArr) series.push(y);
+                }
             } else if (viewMode === 'month') {
                 const byDay = {};
                 for (const row of rows) {
@@ -4844,10 +5013,10 @@
             }
 
             setSeries(labelsArr, seriesArr, labels, series);
+            try { ensureDayPanAndFollowOptions(chart, viewMode); } catch {}
             chart.update('none');
             try {
-                applyTimelineScrollForCanvas(chart?.canvas, viewMode);
-                scrollCanvasToNowIfFollowing(chart?.canvas, viewMode);
+                followChartToNowMadrid(chart, viewMode);
             } catch {}
         }
 
@@ -5050,52 +5219,42 @@
                     setMetaValue('lastPoint', txt, { muted: txt === '--' });
                 }
 
-                setSeries(humLabels, humSeries, labels, hum);
-                setSeries(valveLabels, valveSeries, labels, valve);
-                try {
-                    if (viewMode === 'day') {
-                        humChart.options.scales.x.ticks.autoSkip = true;
-                        humChart.options.scales.x.ticks.callback = isSmallViewport() ? tickEveryHour : tickEvery30Minutes;
-                        humChart.options.scales.x.ticks.maxTicksLimit = isSmallViewport() ? 25 : 16;
-                    } else if (viewMode === 'month') {
-                        humChart.options.scales.x.ticks.autoSkip = false;
-                        humChart.options.scales.x.ticks.callback = undefined;
-                        humChart.options.scales.x.ticks.maxTicksLimit = undefined;
-                    } else {
-                        humChart.options.scales.x.ticks.autoSkip = true;
-                        humChart.options.scales.x.ticks.callback = undefined;
-                        humChart.options.scales.x.ticks.maxTicksLimit = 12;
+                if (viewMode === 'day' && isDayPanMode(viewMode)) {
+                    const humPts = new Array(1440);
+                    const valvePts = new Array(1440);
+                    for (let i = 0; i < 1440; i++) {
+                        humPts[i] = { x: i, y: hum[i] };
+                        valvePts[i] = { x: i, y: valve[i] };
                     }
-                    humChart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
-                    humChart.options.scales.x.ticks.showLabelBackdrop = false;
-                    humChart.options.scales.x.ticks.maxRotation = 0;
-                    humChart.options.scales.x.ticks.minRotation = 0;
-
-                    if (viewMode === 'day') {
-                        valveChart.options.scales.x.ticks.autoSkip = true;
-                        valveChart.options.scales.x.ticks.callback = isSmallViewport() ? tickEveryHour : tickEvery30Minutes;
-                        valveChart.options.scales.x.ticks.maxTicksLimit = isSmallViewport() ? 25 : 16;
-                    } else if (viewMode === 'month') {
-                        valveChart.options.scales.x.ticks.autoSkip = false;
-                        valveChart.options.scales.x.ticks.callback = undefined;
-                        valveChart.options.scales.x.ticks.maxTicksLimit = undefined;
-                    } else {
-                        valveChart.options.scales.x.ticks.autoSkip = true;
-                        valveChart.options.scales.x.ticks.callback = undefined;
-                        valveChart.options.scales.x.ticks.maxTicksLimit = 12;
-                    }
-                    valveChart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
-                    valveChart.options.scales.x.ticks.showLabelBackdrop = false;
-                    valveChart.options.scales.x.ticks.maxRotation = 0;
-                    valveChart.options.scales.x.ticks.minRotation = 0;
-                } catch {}
+                    setSeries(humLabels, humSeries, [], humPts);
+                    setSeries(valveLabels, valveSeries, [], valvePts);
+                    try {
+                        ensureDayPanAndFollowOptions(humChart, 'day');
+                        ensureDayPanAndFollowOptions(valveChart, 'day');
+                    } catch {}
+                } else {
+                    setSeries(humLabels, humSeries, labels, hum);
+                    setSeries(valveLabels, valveSeries, labels, valve);
+                    try {
+                        if (humChart?.options?.scales?.x) {
+                            humChart.options.scales.x.type = 'category';
+                            delete humChart.options.scales.x.min;
+                            delete humChart.options.scales.x.max;
+                        }
+                        if (valveChart?.options?.scales?.x) {
+                            valveChart.options.scales.x.type = 'category';
+                            delete valveChart.options.scales.x.min;
+                            delete valveChart.options.scales.x.max;
+                        }
+                        try { if (humChart.options.plugins && humChart.options.plugins.zoom) delete humChart.options.plugins.zoom; } catch {}
+                        try { if (valveChart.options.plugins && valveChart.options.plugins.zoom) delete valveChart.options.plugins.zoom; } catch {}
+                    } catch {}
+                }
                 humChart.update('none');
                 valveChart.update('none');
                 try {
-                    applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
-                    applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
-                    scrollCanvasToNowIfFollowing(document.getElementById('humChart'), viewMode);
-                    scrollCanvasToNowIfFollowing(document.getElementById('valveChart'), viewMode);
+                    followChartToNowMadrid(humChart, viewMode);
+                    followChartToNowMadrid(valveChart, viewMode);
                 } catch {}
             }
 
@@ -5289,43 +5448,67 @@
                 setMetaValue('lastPoint', txt, { muted: txt === '--' });
             }
 
-            setSeries(humLabels, humSeries, labels, hum);
-            setSeries(valveLabels, valveSeries, labels, valve);
-            try {
-                humChart.options.scales.x.ticks.autoSkip = true;
-                humChart.options.scales.x.ticks.callback = viewMode === 'day' ? tickEvery30Minutes : undefined;
-                humChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 49 : 10;
-                humChart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
-                humChart.options.scales.x.ticks.showLabelBackdrop = false;
-                humChart.options.scales.x.ticks.maxRotation = 0;
-                humChart.options.scales.x.ticks.minRotation = 0;
-
-                valveChart.options.scales.x.ticks.autoSkip = true;
-                valveChart.options.scales.x.ticks.callback = viewMode === 'day' ? tickEvery30Minutes : undefined;
-                valveChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 49 : 10;
-                valveChart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
-                valveChart.options.scales.x.ticks.showLabelBackdrop = false;
-                valveChart.options.scales.x.ticks.maxRotation = 0;
-                valveChart.options.scales.x.ticks.minRotation = 0;
-            } catch {}
+            if (viewMode === 'day' && isDayPanMode(viewMode)) {
+                const humPts = new Array(1440);
+                const valvePts = new Array(1440);
+                for (let i = 0; i < 1440; i++) {
+                    humPts[i] = { x: i, y: hum[i] };
+                    valvePts[i] = { x: i, y: valve[i] };
+                }
+                setSeries(humLabels, humSeries, [], humPts);
+                setSeries(valveLabels, valveSeries, [], valvePts);
+                try {
+                    ensureDayPanAndFollowOptions(humChart, 'day');
+                    ensureDayPanAndFollowOptions(valveChart, 'day');
+                } catch {}
+            } else {
+                setSeries(humLabels, humSeries, labels, hum);
+                setSeries(valveLabels, valveSeries, labels, valve);
+                try {
+                    if (humChart?.options?.scales?.x) {
+                        humChart.options.scales.x.type = 'category';
+                        humChart.options.scales.x.ticks.autoSkip = true;
+                        humChart.options.scales.x.ticks.callback = viewMode === 'day' ? tickEvery30Minutes : undefined;
+                        humChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 49 : 10;
+                        humChart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
+                        humChart.options.scales.x.ticks.showLabelBackdrop = false;
+                        humChart.options.scales.x.ticks.maxRotation = 0;
+                        humChart.options.scales.x.ticks.minRotation = 0;
+                        delete humChart.options.scales.x.min;
+                        delete humChart.options.scales.x.max;
+                    }
+                    if (valveChart?.options?.scales?.x) {
+                        valveChart.options.scales.x.type = 'category';
+                        valveChart.options.scales.x.ticks.autoSkip = true;
+                        valveChart.options.scales.x.ticks.callback = viewMode === 'day' ? tickEvery30Minutes : undefined;
+                        valveChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 49 : 10;
+                        valveChart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
+                        valveChart.options.scales.x.ticks.showLabelBackdrop = false;
+                        valveChart.options.scales.x.ticks.maxRotation = 0;
+                        valveChart.options.scales.x.ticks.minRotation = 0;
+                        delete valveChart.options.scales.x.min;
+                        delete valveChart.options.scales.x.max;
+                    }
+                    try { if (humChart.options.plugins && humChart.options.plugins.zoom) delete humChart.options.plugins.zoom; } catch {}
+                    try { if (valveChart.options.plugins && valveChart.options.plugins.zoom) delete valveChart.options.plugins.zoom; } catch {}
+                } catch {}
+            }
             humChart.update('none');
             valveChart.update('none');
             try {
-                applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
-                applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
-                scrollCanvasToNowIfFollowing(document.getElementById('humChart'), viewMode);
-                scrollCanvasToNowIfFollowing(document.getElementById('valveChart'), viewMode);
+                followChartToNowMadrid(humChart, viewMode);
+                followChartToNowMadrid(valveChart, viewMode);
             } catch {}
         }
 
         function rebuildCharts(storeOpt) {
             try {
-                applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
-                applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
-                for (const slot of CMP_SLOTS) applyTimelineScrollForCanvas(document.getElementById(`cmpChart${slot}`), viewMode);
-                scrollCanvasToNowIfFollowing(document.getElementById('humChart'), viewMode);
-                scrollCanvasToNowIfFollowing(document.getElementById('valveChart'), viewMode);
-                for (const slot of CMP_SLOTS) scrollCanvasToNowIfFollowing(document.getElementById(`cmpChart${slot}`), viewMode);
+                ensureDayPanAndFollowOptions(humChart, viewMode);
+                ensureDayPanAndFollowOptions(valveChart, viewMode);
+                for (const slot of CMP_SLOTS) ensureDayPanAndFollowOptions(cmpChartsBySlot?.[slot], viewMode);
+                followChartToNowMadrid(humChart, viewMode);
+                followChartToNowMadrid(valveChart, viewMode);
+                for (const slot of CMP_SLOTS) followChartToNowMadrid(cmpChartsBySlot?.[slot], viewMode);
             } catch {}
             if (storeOpt) {
                 rebuildChartsFromStore(storeOpt);
@@ -5346,26 +5529,31 @@
         tickClock();
         setInterval(tickClock, 1000);
 
-        function tickChartAutoScroll() {
+        function tickChartAutoFollow() {
             try {
                 // Principales
-                scrollCanvasToNowIfFollowing(document.getElementById('humChart'), viewMode);
-                scrollCanvasToNowIfFollowing(document.getElementById('valveChart'), viewMode);
+                ensureDayPanAndFollowOptions(humChart, viewMode);
+                ensureDayPanAndFollowOptions(valveChart, viewMode);
+                followChartToNowMadrid(humChart, viewMode);
+                followChartToNowMadrid(valveChart, viewMode);
 
                 // Comparador
                 for (const slot of CMP_SLOTS) {
-                    scrollCanvasToNowIfFollowing(document.getElementById(`cmpChart${slot}`), viewMode);
+                    const ch = cmpChartsBySlot?.[slot];
+                    ensureDayPanAndFollowOptions(ch, viewMode);
+                    followChartToNowMadrid(ch, viewMode);
                 }
 
                 // Mini-gráficas (solo las que estén en modo DÍA)
-                for (const [canvasId, entry] of zoneMiniCharts.entries()) {
+                for (const entry of zoneMiniCharts.values()) {
                     if (!entry || entry.mode !== 'day') continue;
-                    scrollCanvasToNowIfFollowing(document.getElementById(canvasId), 'day');
+                    ensureDayPanAndFollowOptions(entry.chart, 'day');
+                    followChartToNowMadrid(entry.chart, 'day');
                 }
             } catch {}
         }
-        tickChartAutoScroll();
-        setInterval(tickChartAutoScroll, 30000);
+        tickChartAutoFollow();
+        setInterval(tickChartAutoFollow, 20000);
 
         let _scrollResizeTimer = null;
         window.addEventListener('resize', () => {
@@ -5373,14 +5561,7 @@
                 if (_scrollResizeTimer) clearTimeout(_scrollResizeTimer);
                 _scrollResizeTimer = setTimeout(() => {
                     try {
-                        applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
-                        applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
-                        for (const slot of CMP_SLOTS) applyTimelineScrollForCanvas(document.getElementById(`cmpChart${slot}`), viewMode);
-                        for (const [canvasId, entry] of zoneMiniCharts.entries()) {
-                            if (!entry) continue;
-                            applyTimelineScrollForCanvas(document.getElementById(canvasId), entry.mode || 'day');
-                        }
-                        tickChartAutoScroll();
+                        tickChartAutoFollow();
                     } catch {}
                 }, 160);
             } catch {}
