@@ -412,7 +412,7 @@
                     <div class="oled-panel" id="oledPanel">--</div>
                 </div>
                 <div class="sensor-card metric-neutral">
-                    <div class="sensor-label">Tiempo encendido</div>
+                    <div class="sensor-label">Sensores / Válvulas (añadidos)</div>
                     <div class="sensor-value small" id="uptime">--</div>
                     <div class="chips" id="uptimeMeta"></div>
                 </div>
@@ -1890,7 +1890,6 @@
             ]);
 
             const uptimeEl = document.getElementById('uptime');
-            if (uptimeEl) uptimeEl.textContent = formatUptimeSeconds(data?.uptime_s);
 
             // Sensores/válvulas activos (dato reciente) según /api/channels/:device_code/latest
             try {
@@ -1906,12 +1905,15 @@
                         valveTotal++;
                     }
                 }
+
+                if (uptimeEl) uptimeEl.textContent = `${soilTotal}S · ${valveTotal}V`;
                 const uptimeMeta = document.getElementById('uptimeMeta');
                 setChips(uptimeMeta, [
                     { k: 'Sensores', v: String(soilTotal), variant: (soilTotal > 0) ? 'neutral' : 'warn' },
                     { k: 'Válvulas', v: String(valveTotal), variant: (valveTotal > 0) ? 'neutral' : 'warn' },
                 ]);
             } catch {
+                if (uptimeEl) uptimeEl.textContent = '--';
                 const uptimeMeta = document.getElementById('uptimeMeta');
                 setChips(uptimeMeta, [{ k: 'Sensores', v: '--', variant: 'neutral' }, { k: 'Válvulas', v: '--', variant: 'neutral' }]);
             }
@@ -1948,9 +1950,10 @@
                 const rssi = (data?.wifi_rssi == null ? null : Number(data.wifi_rssi));
                 const rssiOk = !(rssi == null || Number.isNaN(rssi) || rssi === 0);
                 const rssiEl = document.getElementById('rssi');
+                const wifiConnected = !!ssid || rssiOk;
                 if (rssiEl) {
                     // Mostrar el SSID grande (lo que el usuario quiere ver)
-                    rssiEl.textContent = ssid ? ssid : '--';
+                    rssiEl.textContent = ssid ? ssid : (rssiOk ? `${Math.trunc(rssi)} dBm` : 'SIN WIFI');
                     // Evitar que una red larga rompa layout
                     rssiEl.style.wordBreak = 'break-word';
                 }
@@ -1959,7 +1962,7 @@
                 const rssiVariant = !rssiOk ? 'neutral' : (rssi >= -60 ? 'ok' : (rssi >= -75 ? 'warn' : 'bad'));
                 setChips(wifiMeta, [
                     { k: 'RSSI', v: rssiTxt, variant: rssiVariant },
-                    { k: 'Red', v: ssid ? 'OK' : '--', variant: ssid ? 'ok' : 'neutral', title: ssid || '' },
+                    { k: 'Estado', v: wifiConnected ? 'OK' : 'NO', variant: wifiConnected ? 'ok' : 'bad' },
                 ]);
             }
 
