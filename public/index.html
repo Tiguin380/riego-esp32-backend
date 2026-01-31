@@ -1010,14 +1010,20 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <!-- Hammer.js es requerido por chartjs-plugin-zoom para gestos (pinch) -->
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
     <script>
         let config = { threshold: 25, colorB: 'Rojo', colorG: 'Verde' };
 
         // chartjs-plugin-zoom (pan/pinch) para “scroll” horizontal sin desplazar el eje izquierdo.
         try {
-            const zoomPlugin = window.ChartZoom || window.zoomPlugin || window.ZoomPlugin || window['chartjs-plugin-zoom'];
-            if (zoomPlugin) Chart.register(zoomPlugin);
+            const cand = window.ChartZoom || window.zoomPlugin || window.ZoomPlugin || window['chartjs-plugin-zoom'];
+            const list = Array.isArray(cand) ? cand : [cand];
+            for (const item of list) {
+                const plugin = item && item.default ? item.default : item;
+                if (plugin) Chart.register(plugin);
+            }
         } catch {}
 
         const DEFAULT_AUTO_CONFIG = {
