@@ -3665,7 +3665,14 @@
             if (box) box.style.display = show ? '' : 'none';
             setCmpVisible(slot, show);
             try {
-                if (show) cmpChartsBySlot?.[slot]?.resize();
+                if (show) {
+                    const ch = cmpChartsBySlot?.[slot];
+                    if (ch) {
+                        requestAnimationFrame(() => {
+                            try { ch.resize(); } catch {}
+                        });
+                    }
+                }
             } catch {}
         }
 
@@ -4003,7 +4010,7 @@
                         e.chart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
                         e.chart.options.scales.x.ticks.showLabelBackdrop = false;
                         e.mode = mode;
-                        try { e.chart.resize(); } catch {}
+                        try { e.chart.update('none'); } catch {}
                     }
                 } catch {}
                 return e;
