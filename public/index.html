@@ -313,7 +313,7 @@
         .current-color span { font-weight: bold; color: #4CAF50; }
         /* Gráficas: 2 columnas en desktop amplio; 1 columna en móvil/tablet (igual que las mini) */
         .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        @media (max-width: 1200px) {
+        @media (max-width: 1400px) {
             .charts-grid { grid-template-columns: 1fr; }
         }
         .chart-box { text-align: left; min-width: 0; }
@@ -532,7 +532,7 @@
               onerror="this.style.display='none'"
             />
         </div>
-        <div class="status" style="margin-bottom: 12px;">UI vRt1548F</div>
+        <div class="status" style="margin-bottom: 12px;">UI 2026-01-31d</div>
 
         <div class="top-nav">
             <button class="mini-btn active" id="navDevices" type="button">Dispositivos</button>
@@ -5686,6 +5686,15 @@
                                 valveChart.update('none');
                             } catch {}
                         }
+
+                        try {
+                            for (const slot of CMP_SLOTS) {
+                                const ch = cmpChartsBySlot[slot];
+                                if (!ch) continue;
+                                applyCompareXAxisTicks(ch, viewMode);
+                                ch.update('none');
+                            }
+                        } catch {}
                         tickChartAutoScroll();
                     } catch {}
                 }, 160);
