@@ -3003,14 +3003,14 @@
             if (saved) headers['X-Device-Token'] = saved;
 
             let r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}/${encodeURIComponent(channelId)}`,
-                { method: 'PATCH', headers, body: JSON.stringify({ name: newName }) });
+                { method: 'PATCH', headers, credentials: 'include', body: JSON.stringify({ name: newName }) });
 
             if ((r.status === 401 || r.status === 403) && !saved) {
                 const t = (prompt('Este dispositivo requiere token para renombrar. Pégalo aquí:') || '').trim();
                 if (t) {
                     saveToken(deviceCode, t);
                     r = await fetch(`/api/channels/${encodeURIComponent(deviceCode)}/${encodeURIComponent(channelId)}`,
-                        { method: 'PATCH', headers: { ...headers, 'X-Device-Token': t }, body: JSON.stringify({ name: newName }) });
+                        { method: 'PATCH', headers: { ...headers, 'X-Device-Token': t }, credentials: 'include', body: JSON.stringify({ name: newName }) });
                 }
             }
             if (!r.ok) return alert('No se pudo renombrar');
@@ -3047,7 +3047,7 @@
 
             const doDelete = async (headers) => {
                 return fetch(`/api/channels/${encodeURIComponent(deviceCode)}/${encodeURIComponent(target.id)}`,
-                    { method: 'DELETE', headers });
+                    { method: 'DELETE', headers, credentials: 'include' });
             };
 
             const baseHeaders = { 'Content-Type': 'application/json' };
