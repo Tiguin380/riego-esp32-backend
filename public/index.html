@@ -3458,9 +3458,17 @@
             // Mantener horas en orden natural (izq -> der)
             x.reverse = false;
 
-            // Para lineal: minutos (0..1439). Para category: índices de label (0..1439)
-            x.min = win.minIdx;
-            x.max = win.maxIdx;
+            if (xType === 'linear') {
+                // Para lineal: minutos (0..1439)
+                x.min = win.minIdx;
+                x.max = win.maxIdx;
+            } else {
+                // Para category: usar el VALOR (label) para que Chart.js pinte bien los ticks
+                const labels = chart.data && Array.isArray(chart.data.labels) ? chart.data.labels : null;
+                if (!labels || !labels.length) return;
+                x.min = labels[win.minIdx] ?? labels[0];
+                x.max = labels[win.maxIdx] ?? labels[labels.length - 1];
+            }
         }
 
         function ensureChartScrollDomForCanvas(canvas) {
