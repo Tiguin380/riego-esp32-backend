@@ -4419,7 +4419,22 @@ app.use((err, req, res, next) => {
   }
 });
 
-app.use(express.static('public'));
+app.use(express.static('public', {
+  etag: false,
+  lastModified: false,
+  maxAge: 0,
+  setHeaders: (res, path) => {
+    try {
+      if (String(path).endsWith('index.html')) {
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
+      } else {
+        res.set('Cache-Control', 'no-store');
+      }
+    } catch {}
+  }
+}));
 
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => {
