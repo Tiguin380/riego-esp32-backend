@@ -5299,13 +5299,19 @@
                             valveChart.options.scales.x.max = 1439;
                         }
                     } else if (viewMode === 'month') {
-                        humChart.options.scales.x.ticks.autoSkip = false;
-                        humChart.options.scales.x.ticks.callback = undefined;
-                        humChart.options.scales.x.ticks.maxTicksLimit = undefined;
-                    } else {
+                        // Igual que mini en category
                         humChart.options.scales.x.ticks.autoSkip = true;
                         humChart.options.scales.x.ticks.callback = undefined;
-                        humChart.options.scales.x.ticks.maxTicksLimit = 12;
+                        humChart.options.scales.x.ticks.maxTicksLimit = 8;
+                        delete humChart.options.scales.x.ticks.stepSize;
+                        delete humChart.options.scales.x.ticks.includeBounds;
+                    } else {
+                        // Igual que mini en category
+                        humChart.options.scales.x.ticks.autoSkip = true;
+                        humChart.options.scales.x.ticks.callback = undefined;
+                        humChart.options.scales.x.ticks.maxTicksLimit = 8;
+                        delete humChart.options.scales.x.ticks.stepSize;
+                        delete humChart.options.scales.x.ticks.includeBounds;
                     }
                     humChart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
                     humChart.options.scales.x.ticks.showLabelBackdrop = false;
@@ -5315,13 +5321,19 @@
                     if (viewMode === 'day') {
                         // ya configurado arriba
                     } else if (viewMode === 'month') {
-                        valveChart.options.scales.x.ticks.autoSkip = false;
-                        valveChart.options.scales.x.ticks.callback = undefined;
-                        valveChart.options.scales.x.ticks.maxTicksLimit = undefined;
-                    } else {
+                        // Igual que mini en category
                         valveChart.options.scales.x.ticks.autoSkip = true;
                         valveChart.options.scales.x.ticks.callback = undefined;
-                        valveChart.options.scales.x.ticks.maxTicksLimit = 12;
+                        valveChart.options.scales.x.ticks.maxTicksLimit = 8;
+                        delete valveChart.options.scales.x.ticks.stepSize;
+                        delete valveChart.options.scales.x.ticks.includeBounds;
+                    } else {
+                        // Igual que mini en category
+                        valveChart.options.scales.x.ticks.autoSkip = true;
+                        valveChart.options.scales.x.ticks.callback = undefined;
+                        valveChart.options.scales.x.ticks.maxTicksLimit = 8;
+                        delete valveChart.options.scales.x.ticks.stepSize;
+                        delete valveChart.options.scales.x.ticks.includeBounds;
                     }
                     valveChart.options.scales.x.ticks.backdropColor = 'rgba(0,0,0,0)';
                     valveChart.options.scales.x.ticks.showLabelBackdrop = false;
