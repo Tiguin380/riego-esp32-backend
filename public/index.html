@@ -3800,6 +3800,20 @@
                 mode,
                 meta: { sum: 0, count: 0, valveOnMs: 0, lastDateMs: null, lastLabel: '' }
             };
+
+            // En modo DÍA queremos eje completo 00:00..23:59 siempre
+            if (mode === 'day') {
+                try {
+                    const pNow = getMadridParts(nowAdjusted());
+                    const axis = buildMadridDayAxisLabels(pNow).map(withDiaPrefixLabel);
+                    labels.length = 0;
+                    series.length = 0;
+                    ts.length = 0;
+                    for (const x of axis) labels.push(x);
+                    for (let i = 0; i < 1440; i++) series.push(null);
+                    for (let i = 0; i < 1440; i++) ts.push(null);
+                } catch {}
+            }
             zoneMiniCharts.set(canvasId, entry);
             return entry;
         }
@@ -3837,6 +3851,10 @@
             let totalValveOnMs = 0;
 
             if (mode === 'day') {
+                const pNow = getMadridParts(nowAdjusted());
+                const axis = buildMadridDayAxisLabels(pNow);
+                const sArr = new Array(1440).fill(null);
+
                 let prevT = null;
                 let prevOn = false;
 
@@ -3846,11 +3864,13 @@
                     const tsMs = d.getTime();
                     lastTsMs = tsMs;
                     tsArr.push(tsMs);
-                    labels.push(miniLabelForDate(d, 'day'));
+
+                    const idx = madridMinuteIndexForTs(row?.ts, pNow);
+                    if (idx == null) continue;
 
                     if (kind === 'valve') {
                         const onNow = Number(row?.state || 0) >= 1;
-                        series.push(onNow ? 1 : 0);
+                        sArr[idx] = onNow ? 1 : 0;
 
                         if (prevT != null) {
                             const dt = Math.max(0, tsMs - prevT);
@@ -3861,9 +3881,12 @@
                     } else {
                         const v = row?.value == null ? null : Number(row.value);
                         if (Number.isFinite(v)) { totalSum += v; totalCount += 1; }
-                        series.push(Number.isFinite(v) ? v : null);
+                        sArr[idx] = Number.isFinite(v) ? v : null;
                     }
                 }
+
+                for (const x of axis) labels.push(withDiaPrefixLabel(x));
+                for (const y of sArr) series.push(y);
             } else if (mode === 'month') {
                 // Agrupar por día
                 if (kind === 'valve') {
@@ -3970,7 +3993,12 @@
             entry.meta.count = totalCount;
             entry.meta.valveOnMs = totalValveOnMs;
             entry.meta.lastDateMs = lastTsMs;
-            entry.meta.lastLabel = labels.length ? String(labels[labels.length - 1]) : '';
+            if (mode === 'day' && lastTsMs != null) {
+                const pLast = getMadridPartsFull(new Date(lastTsMs));
+                entry.meta.lastLabel = withDiaPrefixLabel(`día ${pLast.d} ${pLast.h}:${pLast.mi}`);
+            } else {
+                entry.meta.lastLabel = labels.length ? String(labels[labels.length - 1]) : '';
+            }
 
             entry.chart.update('none');
 
@@ -3995,9 +4023,18 @@
 
             entry.meta = entry.meta || { sum: 0, count: 0, valveOnMs: 0, lastDateMs: null, lastLabel: '' };
             if (kind === 'valve') {
-                const prevIdx = entry.ts.length - 1;
-                if (prevIdx >= 0) {
-                    const prevT = Number(entry.ts[prevIdx]);
+                // Tiempo ON basado en delta con el último timestamp real
+                const prevT = Number(entry.lastTsMs);
+                const prevIdx = (() => {
+                    try {
+                        const pNow = getMadridParts(nowAdjusted());
+                        const lastIdx = (entry.lastTsMs != null) ? madridMinuteIndexForTs(entry.lastTsMs, pNow) : null;
+                        return lastIdx;
+                    } catch {
+                        return null;
+                    }
+                })();
+                if (Number.isFinite(prevT) && prevIdx != null) {
                     const prevOn = Number(entry.series[prevIdx]) >= 0.5;
                     const dt = Math.max(0, tsMs - prevT);
                     if (prevOn) entry.meta.valveOnMs = (Number(entry.meta.valveOnMs) || 0) + dt;
@@ -4010,18 +4047,31 @@
                 }
             }
 
-            entry.labels.push(miniLabelForDate(d, 'day'));
-            entry.series.push((val == null || !Number.isFinite(val)) ? null : val);
-            entry.ts.push(tsMs);
+            // Escribir el dato en su minuto del día (00:00..23:59)
+            const pNow = getMadridParts(nowAdjusted());
+            const idx = madridMinuteIndexForTs(tsMs, pNow);
+            if (idx == null) return;
+
+            // Inicializar si venía de una versión anterior sin eje completo
+            if (!Array.isArray(entry.labels) || entry.labels.length !== 1440) {
+                try {
+                    const axis = buildMadridDayAxisLabels(pNow).map(withDiaPrefixLabel);
+                    entry.labels.length = 0;
+                    entry.series.length = 0;
+                    entry.ts.length = 0;
+                    for (const x of axis) entry.labels.push(x);
+                    for (let i = 0; i < 1440; i++) entry.series.push(null);
+                    for (let i = 0; i < 1440; i++) entry.ts.push(null);
+                } catch {}
+            }
+
+            entry.series[idx] = (val == null || !Number.isFinite(val)) ? null : val;
+            entry.ts[idx] = tsMs;
             entry.lastTsMs = tsMs;
             entry.meta.lastDateMs = tsMs;
-            entry.meta.lastLabel = entry.labels.length ? String(entry.labels[entry.labels.length - 1]) : '';
-
-            const MAX_POINTS = 600;
-            if (entry.labels.length > MAX_POINTS) {
-                entry.labels.splice(0, entry.labels.length - MAX_POINTS);
-                entry.series.splice(0, entry.series.length - MAX_POINTS);
-                entry.ts.splice(0, entry.ts.length - MAX_POINTS);
+            {
+                const pLast = getMadridPartsFull(new Date(tsMs));
+                entry.meta.lastLabel = withDiaPrefixLabel(`día ${pLast.d} ${pLast.h}:${pLast.mi}`);
             }
 
             entry.chart.update('none');
