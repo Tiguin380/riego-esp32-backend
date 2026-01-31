@@ -6,7 +6,7 @@
     <title>AgroSense · Panel</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background: #0b1220; color: #e9eef7; padding: 16px; min-height: 100vh; }
+        body { font-family: Arial, sans-serif; background: #0b1220; color: #e9eef7; padding: 8px; min-height: 100vh; }
         .container { width: 100%; max-width: none; margin: 0; }
         h1 { color: #dff7e3; margin-bottom: 6px; text-align: center; font-size: 18px; }
         :root {
@@ -23,7 +23,7 @@
         .brand-header { display:flex; align-items:center; justify-content:center; margin: 6px 0 10px; }
         .brand-header img { width: var(--logo-w); max-width: 100%; height: auto; object-fit: contain; display:block; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.55)); }
         .brand-title { display:none; }
-        .section { background: #16213e; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+        .section { background: #16213e; padding: 12px; border-radius: 12px; margin-bottom: 12px; }
         /* DISPOSITIVO: no sticky (molesta al hacer scroll) */
         #deviceSection { position: relative; z-index: 1; backdrop-filter: blur(8px); background: rgba(22,33,62,0.92); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 18px 40px rgba(0,0,0,0.30); }
         #deviceSection h2 { margin-bottom: 10px; }
@@ -38,8 +38,8 @@
         .pill { display:inline-flex; gap: 8px; align-items:center; padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.10); background: rgba(0,0,0,0.10); font-size: 12px; color:#c9d1d9; }
         .section h2 { color: #4CAF50; font-size: 16px; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
         /* Rejilla responsive: evita que en móvil se “salgan” las tarjetas */
-        .sensor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 15px; }
-        .sensor-card { --accent: #4CAF50; --accent-soft: rgba(76,175,80,0.18); background: #0f3460; padding: 15px; border-radius: 8px; text-align: center; min-width: 0; border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 10px 26px rgba(0,0,0,0.25); transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease; }
+        .sensor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+        .sensor-card { --accent: #4CAF50; --accent-soft: rgba(76,175,80,0.18); background: #0f3460; padding: 12px; border-radius: 8px; text-align: center; min-width: 0; border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 10px 26px rgba(0,0,0,0.25); transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease; }
         .sensor-card:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.12); box-shadow: 0 14px 32px rgba(0,0,0,0.30); }
         .sensor-label { font-size: 11px; color: #ffffff; text-transform: uppercase; margin-bottom: 5px; margin-top: 5px; }
         .sensor-value { font-size: clamp(22px, 6vw, 32px); font-weight: bold; color: var(--accent); }
@@ -312,7 +312,7 @@
         .current-color { text-align: center; padding: 10px; background: #0f3460; border-radius: 8px; margin: 10px 0; }
         .current-color span { font-weight: bold; color: #4CAF50; }
         /* Gráficas: en escritorio sin scroll; en móvil/tablet habilitamos scroll horizontal en modo DÍA */
-        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         @media (max-width: 900px) {
             .charts-grid { grid-template-columns: 1fr; }
         }
@@ -324,7 +324,14 @@
         .chart-wrap.scroll-x { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
         .chart-wrap.scroll-x { scrollbar-color: rgba(255,255,255,0.35) rgba(255,255,255,0.08); }
         /* Las gráficas de tarjetas usan el mismo tamaño que las principales */
-        .mini-chart-wrap { height: clamp(160px, 24vh, 260px); margin-top: 10px; }
+        .mini-chart-wrap { height: clamp(160px, 24vh, 260px); margin-top: 6px; }
+
+        @media (max-width: 900px) {
+            body { padding: 6px; }
+            .section { padding: 10px; margin-bottom: 10px; }
+            .sensor-grid { gap: 8px; }
+            .charts-grid { gap: 8px; }
+        }
 
         /* Mini-gráficas por planta: en móvil/tablet modo DÍA pueden hacer scroll horizontal. */
         .sensor-card.card-off .chart-wrap { opacity: 0.25; }
@@ -2447,9 +2454,6 @@
 
                 const current = list.find(d => d.device_code === deviceCode);
                 const lastSeen = current?.last_seen_madrid || (current?.last_seen ? new Date(current.last_seen).toLocaleString('es-ES', { timeZone: TZ, hour12: false }) : '--');
-                const lastSeenDate = current?.last_seen ? parseTsToDate(current.last_seen) : null;
-                const ageMin = lastSeenDate ? Math.max(0, Math.round((nowAdjusted().getTime() - lastSeenDate.getTime()) / 60000)) : null;
-                const ageText = ageMin == null ? '' : ` (hace ${ageMin} min)`;
                 meta.textContent = `${current?.name || deviceCode}${current?.location ? ' · ' + current.location : ''}`;
 
                 select.addEventListener('change', () => {
@@ -3415,8 +3419,11 @@
             s.wrap.classList.toggle('scroll-x', !!enable);
 
             if (enable) {
-                const base = 1440; // px aprox como referencia visual
-                const w = Math.max(base, Math.round((s.wrap.clientWidth || 0) * 1.8));
+                // Menos “zoom” en mini-gráficas de tarjetas: se ven más horas a la vez.
+                const isCardMini = !!canvas.closest('.sensor-card');
+                const base = isCardMini ? 720 : 1440; // px aprox como referencia visual
+                const mult = isCardMini ? 1.25 : 1.8;
+                const w = Math.max(base, Math.round((s.wrap.clientWidth || 0) * mult));
                 s.inner.style.width = `${w}px`;
             } else {
                 s.inner.style.width = '100%';
@@ -3808,7 +3815,7 @@
                     const base = formatLastPointText('day', new Date(lastMs), entry.meta.lastLabel || '');
                     const ageMin = Math.max(0, Math.round((nowAdjusted().getTime() - lastMs) / 60000));
                     const stale = Number.isFinite(ageMin) && ageMin > 10;
-                    const txt = `${base}${Number.isFinite(ageMin) ? ` (hace ${ageMin} min)` : ''}${stale ? ' · DATOS ANTIGUOS' : ''}`;
+                    const txt = `${base}${stale ? ' · DATOS ANTIGUOS' : ''}`;
                     setMetaValue(lastElId, txt, { muted: stale });
                 } else {
                     setMetaValue(lastElId, '--', { muted: true });
@@ -4464,7 +4471,7 @@
                     const base = formatLastPointText(mode, new Date(lastMs), fallbackLabel);
                     const ageMin = Math.max(0, Math.round((nowAdjusted().getTime() - lastMs) / 60000));
                     const stale = Number.isFinite(ageMin) && ageMin > 10;
-                    lastEl.textContent = `${base}${Number.isFinite(ageMin) ? ` (hace ${ageMin} min)` : ''}${stale ? ' · DATOS ANTIGUOS' : ''}`;
+                    lastEl.textContent = `${base}${stale ? ' · DATOS ANTIGUOS' : ''}`;
                 }
             }
         }
