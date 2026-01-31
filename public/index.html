@@ -56,6 +56,22 @@
         .metric-bad  { border-color: rgba(255,77,77,0.30); box-shadow: 0 12px 28px rgba(255,77,77,0.10), 0 10px 26px rgba(0,0,0,0.25); }
         .metric-neutral { border-color: rgba(255,255,255,0.08); }
 
+        /* Mini “pantalla OLED” dentro de tarjeta */
+        .oled-panel {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(34,197,94,0.22);
+            background: radial-gradient(120% 140% at 10% 0%, rgba(34,197,94,0.10), rgba(0,0,0,0.18));
+            box-shadow: 0 14px 30px rgba(0,0,0,0.20), inset 0 0 0 1px rgba(255,255,255,0.04);
+            color: rgba(187,247,208,0.95);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.35;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
         /* Zonas / Plantas */
         .zone-off { opacity: 0.62; }
         .zone-subtitle { color:#8fa3bf; font-size: 12px; margin-top: -6px; margin-bottom: 8px; overflow-wrap: anywhere; word-break: break-word; }
@@ -359,14 +375,15 @@
             <h2> DISPOSITIVO CONECTADO</h2>
             <div class="sensor-grid">
                 <div class="sensor-card metric-neutral">
-                    <div class="sensor-label">Intervalo de envío</div>
+                    <div class="sensor-label">Pantalla OLED (tiempo real)</div>
                     <div class="sensor-value" id="sendInterval">--</div>
                     <div class="sensor-unit" id="sendIntervalHint">--</div>
+                    <div class="oled-panel" id="oledPanel">--</div>
                 </div>
                 <div class="sensor-card metric-neutral">
                     <div class="sensor-label">Tiempo encendido</div>
                     <div class="sensor-value small" id="uptime">--</div>
-                    <div class="sensor-unit">uptime</div>
+                    <div class="sensor-unit" id="uptimeMeta">--</div>
                 </div>
                 <div class="sensor-card metric-neutral">
                     <div class="sensor-label">IP</div>
@@ -384,9 +401,9 @@
                     <div class="sensor-unit">V</div>
                 </div>
                 <div class="sensor-card">
-                    <div class="sensor-label">WiFi RSSI</div>
+                    <div class="sensor-label">WiFi</div>
                     <div class="sensor-value" id="rssi">--</div>
-                    <div class="sensor-unit">dBm</div>
+                    <div class="sensor-unit" id="wifiMeta">dBm · --</div>
                 </div>
                 <div class="sensor-card">
                     <div class="sensor-label">Reinicios</div>
@@ -971,6 +988,7 @@
         }
 
         function updateZonesFromLatestPayload(payload) {
+            lastChannelsLatestPayload = payload || null;
             const ch = Array.isArray(payload?.channels) ? payload.channels : [];
             const byKey = new Map();
             for (const c of ch) {
@@ -1621,6 +1639,9 @@
             }
         }
 
+        // Cache del último payload de /api/channels/:device_code/latest
+        let lastChannelsLatestPayload = null;
+
         function setStatusText(text) {
             const st = document.getElementById('status');
             const top = document.getElementById('topStatusText');
@@ -1803,10 +1824,42 @@
             }
             if (createdMs != null) lastSampleMsForInterval = createdMs;
             if (sendIntervalEl) sendIntervalEl.textContent = deltaSec == null ? '--' : formatIntervalSeconds(deltaSec);
-            if (sendIntervalHintEl) sendIntervalHintEl.textContent = createdAtLabel === '--' ? '--' : `último: ${createdAtLabel}`;
+            if (sendIntervalHintEl) {
+                const nowTxt = fmtNowEs.format(nowAdjusted());
+                const lastTxt = createdAtLabel === '--' ? '--' : createdAtLabel;
+                sendIntervalHintEl.textContent = `intervalo: ${deltaSec == null ? '--' : formatIntervalSeconds(deltaSec)} · último: ${lastTxt} · ahora: ${nowTxt}`;
+            }
 
             const uptimeEl = document.getElementById('uptime');
             if (uptimeEl) uptimeEl.textContent = formatUptimeSeconds(data?.uptime_s);
+
+            // Sensores/válvulas activos (dato reciente) según /api/channels/:device_code/latest
+            try {
+                const ch = Array.isArray(lastChannelsLatestPayload?.channels) ? lastChannelsLatestPayload.channels : [];
+                const STALE_MIN = 10;
+                let soilTotal = 0;
+                let valveTotal = 0;
+                let soilActive = 0;
+                let valveActive = 0;
+                for (const c of ch) {
+                    const kind = String(c?.kind || '');
+                    const age = c?.latest?.age_minutes;
+                    const okAge = (age == null) || (Number(age) <= STALE_MIN);
+                    if (kind === 'soil_sensor') {
+                        soilTotal++;
+                        if (okAge && c?.latest?.value != null) soilActive++;
+                    }
+                    if (kind === 'valve') {
+                        valveTotal++;
+                        if (okAge && c?.latest?.state != null) valveActive++;
+                    }
+                }
+                const uptimeMeta = document.getElementById('uptimeMeta');
+                if (uptimeMeta) uptimeMeta.textContent = `Sensores: ${soilActive}/${soilTotal} · Válvulas: ${valveActive}/${valveTotal}`;
+            } catch {
+                const uptimeMeta = document.getElementById('uptimeMeta');
+                if (uptimeMeta) uptimeMeta.textContent = '--';
+            }
 
             const ipEl = document.getElementById('ip');
             if (ipEl) {
@@ -1819,6 +1872,68 @@
                 const hb = (data?.heap_free == null ? null : Number(data.heap_free));
                 const kb = (hb == null || Number.isNaN(hb)) ? null : Math.max(0, Math.round(hb / 1024));
                 heapEl.textContent = kb == null ? '--' : String(kb);
+            }
+
+            // WiFi: SSID + RSSI
+            {
+                const ssidRaw = (data && (data.wifi_ssid != null ? data.wifi_ssid : (data.ssid != null ? data.ssid : null)));
+                const ssid = ssidRaw == null ? '' : String(ssidRaw).trim();
+                const rssi = (data?.wifi_rssi == null ? null : Number(data.wifi_rssi));
+                const rssiOk = !(rssi == null || Number.isNaN(rssi) || rssi === 0);
+                const wifiMeta = document.getElementById('wifiMeta');
+                if (wifiMeta) {
+                    const rssiTxt = rssiOk ? `${Math.trunc(rssi)} dBm` : '-- dBm';
+                    wifiMeta.textContent = `${rssiTxt} · ${ssid ? ssid : '--'}`;
+                }
+            }
+
+            // Pantalla OLED (aprox: como OLED para PLANTA 1)
+            try {
+                const panel = document.getElementById('oledPanel');
+                if (panel) {
+                    const z0 = zonesState && zonesState[0] ? zonesState[0] : null;
+                    const soilIdx = (z0 && z0.soil_channel_index != null) ? Number(z0.soil_channel_index) : 1;
+                    const valveIdx = (z0 && z0.valve_channel_index != null) ? Number(z0.valve_channel_index) : 1;
+                    const thr = (z0 && z0.humidity_low_threshold != null) ? Number(z0.humidity_low_threshold) : null;
+
+                    const ch = Array.isArray(lastChannelsLatestPayload?.channels) ? lastChannelsLatestPayload.channels : [];
+                    const byKey = new Map();
+                    for (const c of ch) {
+                        const kind = String(c?.kind || '');
+                        const idx = Number(c?.channel_index);
+                        if (!kind || !Number.isFinite(idx)) continue;
+                        byKey.set(`${kind}:${idx}`, c?.latest || null);
+                    }
+
+                    const soilLatest = byKey.get(`soil_sensor:${soilIdx}`) || null;
+                    const valveLatest = byKey.get(`valve:${valveIdx}`) || null;
+
+                    const hum = soilLatest?.value == null ? null : Number(soilLatest.value);
+                    const humTxt = Number.isFinite(hum) ? `${hum.toFixed(1)}%` : '--%';
+                    const thrTxt = Number.isFinite(thr) ? `${Math.round(thr)}%` : '--%';
+
+                    const st = valveLatest?.state == null ? null : Number(valveLatest.state);
+                    const valveTxt = (st == null || Number.isNaN(st)) ? '--' : (st >= 1 ? 'ON' : 'OFF');
+
+                    const v = (data?.voltage == null ? null : Number(data.voltage));
+                    const vTxt = (v == null || Number.isNaN(v)) ? '--.-V' : `${v.toFixed(2)}V`;
+                    const rssi = (data?.wifi_rssi == null ? null : Number(data.wifi_rssi));
+                    const rssiTxt = (rssi == null || Number.isNaN(rssi) || rssi === 0) ? '--dBm' : `${Math.trunc(rssi)}dBm`;
+
+                    const now = nowAdjusted();
+                    const p = getMadridPartsFull(now);
+                    const timeTxt = `${p.h}:${p.mi}:${p.s}`;
+                    const ip = (data && data.ip != null) ? String(data.ip).trim() : '';
+
+                    panel.textContent =
+                        `OLED ${timeTxt}\n` +
+                        `PL1 HUM ${humTxt}  THR ${thrTxt}\n` +
+                        `VAL ${valveTxt}   V ${vTxt}\n` +
+                        `WiFi ${rssiTxt}${ip ? `  IP ${ip}` : ''}`;
+                }
+            } catch {
+                const panel = document.getElementById('oledPanel');
+                if (panel) panel.textContent = '--';
             }
         }
 

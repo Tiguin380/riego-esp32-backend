@@ -748,6 +748,9 @@ const SensorDataSchema = z
     reboot_count: z.coerce.number().int().optional().nullable(),
     heap_free: z.coerce.number().int().optional().nullable(),
     ip: z.string().optional().nullable(),
+    wifi_ssid: z.string().max(80).optional().nullable(),
+    // Alias por compatibilidad si el firmware envía "ssid"
+    ssid: z.string().max(80).optional().nullable(),
 
     // Nuevo: canales múltiples (sensores/válvulas). Retrocompatible.
     channels: z
@@ -986,6 +989,7 @@ async function initDB() {
 
     await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS voltage DECIMAL(6,3)`);
     await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS wifi_rssi INTEGER`);
+    await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS wifi_ssid VARCHAR(80)`);
     await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS uptime_s INTEGER`);
     await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS reboot_count INTEGER`);
     await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS heap_free INTEGER`);
@@ -2354,6 +2358,7 @@ app.post('/api/sensor/data', async (req, res) => {
       reboot_count,
       heap_free,
       ip,
+      wifi_ssid,
       channels
     } = parsed.data;
     if (!isValidDeviceToken(deviceToken)) {
@@ -2373,13 +2378,20 @@ app.post('/api/sensor/data', async (req, res) => {
 
     const resolved_valve_state = valve_state || led_status || null;
 
+    const wifiSsid = (() => {
+      const raw = wifi_ssid != null ? wifi_ssid : (parsed.data && parsed.data.ssid != null ? parsed.data.ssid : null);
+      if (raw == null) return null;
+      const s = String(raw).trim();
+      return s ? s.slice(0, 80) : null;
+    })();
+
     await pool.query(
       `INSERT INTO sensor_data (
           device_id, temperature, humidity, rain_level, led_status, valve_state,
-          voltage, wifi_rssi, uptime_s, reboot_count, heap_free, ip,
+          voltage, wifi_rssi, uptime_s, reboot_count, heap_free, ip, wifi_ssid,
           humidity_low_threshold, humidity_low_color, humidity_good_color
         )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
       [
         device_id,
         temperature,
@@ -2393,6 +2405,7 @@ app.post('/api/sensor/data', async (req, res) => {
         reboot_count,
         heap_free,
         ip,
+        wifiSsid,
         humidity_low_threshold,
         humidity_low_color,
         humidity_good_color
@@ -2483,6 +2496,7 @@ app.post('/api/sensor/data', async (req, res) => {
       valve_state: resolved_valve_state,
       voltage,
       wifi_rssi,
+      wifi_ssid: wifiSsid,
       uptime_s,
       reboot_count,
       heap_free,
