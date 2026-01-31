@@ -148,6 +148,7 @@
 
         /* Zonas / Plantas */
         .zone-off { opacity: 0.62; }
+        .sensor-card.card-off { opacity: 0.55; filter: saturate(0.7); }
         .zone-subtitle { color:#8fa3bf; font-size: 12px; margin-top: -6px; margin-bottom: 8px; overflow-wrap: anywhere; word-break: break-word; }
         .zone-row { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
         .zone-row .control-row { margin-bottom: 0; flex: 1 1 320px; }
@@ -963,6 +964,26 @@
                 );
             };
 
+            function setCardOffByValueId(valueId, isOff) {
+                const el = document.getElementById(valueId);
+                const card = el ? el.closest('.sensor-card') : null;
+                if (!card) return;
+                card.classList.toggle('card-off', !!isOff);
+            }
+
+            function updateZoneCardsOff(zoneNum) {
+                const zi = zoneNum - 1;
+                const z = zonesState?.[zi];
+                if (!z) return;
+                setCardOffByValueId(`zoneHum${zoneNum}`, z.soil_channel_index == null);
+                setCardOffByValueId(`zoneTSoil${zoneNum}`, z.temperature_soil_channel_index == null);
+                setCardOffByValueId(`zoneTAir${zoneNum}`, z.temperature_air_channel_index == null);
+                setCardOffByValueId(`zoneHAir${zoneNum}`, z.humidity_air_channel_index == null);
+                setCardOffByValueId(`zonePH${zoneNum}`, z.ph_soil_channel_index == null);
+                setCardOffByValueId(`zoneEC${zoneNum}`, z.ec_soil_channel_index == null);
+                setCardOffByValueId(`zoneValve${zoneNum}`, z.valve_channel_index == null);
+            }
+
             function populateSelect(sel, list, currentValue, usedSet, kindLabel) {
                 if (!sel) return;
                 sel.innerHTML = '';
@@ -1033,6 +1054,7 @@
                     zonesState[zoneIndex][zoneProp] = Number.isFinite(v) ? v : null;
                     refreshSelectsForKind({ selectIdPrefix, list, zoneProp, usedKindKey, kindLabel });
                     updateZoneSubtitles();
+                    updateZoneCardsOff(zoneNum);
                     const sec = document.getElementById(`zoneSec${zoneNum}`);
                     const anyAssigned = isAnyAssigned(zonesState[zoneIndex]);
                     if (sec) sec.classList.toggle('zone-off', !anyAssigned);
@@ -1184,6 +1206,7 @@
                             populateSelect(sSel, soil, zonesState[zi]?.soil_channel_index ?? null, usedSetFor('soil', zi), 'Sensor');
                         }
                         updateZoneSubtitles();
+                        updateZoneCardsOff(zoneNum);
                         // Apagar visualmente si queda sin asignar
                         const sec = document.getElementById(`zoneSec${zoneNum}`);
                         const anyAssigned = isAnyAssigned(zonesState[i]);
@@ -1292,6 +1315,7 @@
                             populateSelect(vSel, valves, zonesState[zi]?.valve_channel_index ?? null, usedSetFor('valve', zi), 'Válvula');
                         }
                         updateZoneSubtitles();
+                        updateZoneCardsOff(zoneNum);
                         const sec = document.getElementById(`zoneSec${zoneNum}`);
                         const anyAssigned = isAnyAssigned(zonesState[i]);
                         if (sec) sec.classList.toggle('zone-off', !anyAssigned);
@@ -1393,6 +1417,9 @@
 
                 sec.appendChild(grid);
                 container.appendChild(sec);
+
+                // Tarjetas visibles siempre, pero apagadas si su canal no está asignado
+                updateZoneCardsOff(zoneNum);
             }
 
             applyZonesStateToUI();
