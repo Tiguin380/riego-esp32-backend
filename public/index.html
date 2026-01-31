@@ -172,9 +172,12 @@
 
         .sensor-meta { margin-top: 6px; margin-bottom: 8px; display:flex; flex-direction: column; gap: 4px; }
         .sensor-meta-top { display:flex; align-items: center; justify-content: space-between; gap: 8px; }
-        .sensor-meta-name { font-size: 11px; color: rgba(232,255,200,0.92); font-weight: 900; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 0 14px rgba(163,255,18,0.14); }
-        .sensor-meta-avg { font-size: 11px; color: rgba(232,255,200,0.92); font-weight: 900; white-space: nowrap; text-shadow: 0 0 14px rgba(163,255,18,0.14); }
-        .sensor-meta-last { font-size: 11px; color: rgba(163,255,18,0.98); font-weight: 900; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 0 16px rgba(163,255,18,0.22); }
+        .sensor-meta-name { font-size: 11px; color: #33cc33; font-weight: 900; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 0 14px rgba(51,204,51,0.18); }
+        .sensor-meta-avg, .sensor-meta-last { font-size: 11px; color: rgba(255,255,255,0.92); font-weight: 900; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .meta-label { color: rgba(255,255,255,0.92); font-weight: 900; }
+        .meta-value { color: #33cc33; font-weight: 900; text-shadow: 0 0 16px rgba(51,204,51,0.20); }
+        .meta-muted { color: rgba(233,238,247,0.60); text-shadow: none; }
+        .sensor-card.card-off .meta-value { color: rgba(233,238,247,0.55); text-shadow: none; }
 
         .sensor-card .chart-wrap { position: relative; }
         .sensor-card.card-off .chart-wrap::after {
@@ -212,8 +215,13 @@
         .control-row input:focus, .control-row select:focus, .control-row textarea:focus { outline: 2px solid rgba(76,175,80,0.35); outline-offset: 2px; }
         .control-row.textarea-row { align-items: flex-start; }
         .control-row.textarea-row label { padding-top: 10px; }
-        .control-row input[type="range"] { -webkit-appearance: none; appearance: none; height: 8px; }
-        .control-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: #4CAF50; border-radius: 50%; cursor: pointer; }
+        .control-row input[type="range"] { -webkit-appearance: none; appearance: none; height: 8px; width: 100%; background: transparent; }
+        .control-row input[type="range"]:focus { outline: none; }
+        .control-row input[type="range"]::-webkit-slider-runnable-track { height: 8px; border-radius: 999px; background: linear-gradient(90deg, rgba(51,204,51,0.65), rgba(51,204,51,0.20)); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10); }
+        .control-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: radial-gradient(circle at 30% 30%, rgba(51,204,51,1), rgba(22,163,74,1)); border-radius: 50%; cursor: pointer; margin-top: -6px; box-shadow: 0 10px 18px rgba(0,0,0,0.35), 0 0 0 2px rgba(255,255,255,0.12); }
+        .control-row input[type="range"]::-moz-range-track { height: 8px; border-radius: 999px; background: linear-gradient(90deg, rgba(51,204,51,0.65), rgba(51,204,51,0.20)); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10); }
+        .control-row input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border: 0; background: radial-gradient(circle at 30% 30%, rgba(51,204,51,1), rgba(22,163,74,1)); border-radius: 50%; cursor: pointer; box-shadow: 0 10px 18px rgba(0,0,0,0.35), 0 0 0 2px rgba(255,255,255,0.12); }
+        .control-row input[type="range"]::-moz-focus-outer { border: 0; }
         .btn-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 15px 0; }
         .btn {
             display: inline-flex;
@@ -732,6 +740,38 @@
                         <canvas id="valveChart"></canvas>
                     </div>
                 </div>
+
+                <div class="sensor-card chart-box accent accent-indigo" id="cmpBox3" style="display:none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap: 10px;">
+                        <div class="sensor-label" id="cmpTitle3">Comparación 3</div>
+                        <button class="mini-btn tiny danger" id="cmpRemove3" type="button">Quitar</button>
+                    </div>
+                    <div class="control-row" style="margin: 10px 0 6px;">
+                        <label style="flex: 0 0 auto; min-width: 58px;">Sensor:</label>
+                        <select id="cmpChannelSelect3" title="Seleccionar canal para comparar"></select>
+                    </div>
+                    <div class="chart-wrap">
+                        <canvas id="cmpChart3"></canvas>
+                    </div>
+                </div>
+
+                <div class="sensor-card chart-box accent accent-purple" id="cmpBox4" style="display:none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap: 10px;">
+                        <div class="sensor-label" id="cmpTitle4">Comparación 4</div>
+                        <button class="mini-btn tiny danger" id="cmpRemove4" type="button">Quitar</button>
+                    </div>
+                    <div class="control-row" style="margin: 10px 0 6px;">
+                        <label style="flex: 0 0 auto; min-width: 58px;">Sensor:</label>
+                        <select id="cmpChannelSelect4" title="Seleccionar canal para comparar"></select>
+                    </div>
+                    <div class="chart-wrap">
+                        <canvas id="cmpChart4"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; margin-top: 10px;">
+                <button class="mini-btn zones-global-btn" id="cmpAddBtn" type="button">Añadir gráfica (máx 4)</button>
             </div>
         </div>
 
@@ -1526,31 +1566,31 @@
 
                 const humCard = document.createElement('div');
                 humCard.className = 'sensor-card metric-neutral accent accent-green';
-                humCard.innerHTML = `<div class="sensor-label">Humedad (zona)</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneHumName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneHumAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneHumLast${zoneNum}">Actualizado: --</div></div><div class="sensor-value" id="zoneHum${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap"><canvas id="zoneHumChart${zoneNum}"></canvas></div>`;
+                humCard.innerHTML = `<div class="sensor-label">Humedad (zona)</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneHumName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneHumAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneHumLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneHum${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap"><canvas id="zoneHumChart${zoneNum}"></canvas></div>`;
 
                 const tSoilCard = document.createElement('div');
                 tSoilCard.className = 'sensor-card metric-neutral accent accent-purple';
-                tSoilCard.innerHTML = `<div class="sensor-label">Temp. tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneTSoilName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneTSoilAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneTSoilLast${zoneNum}">Actualizado: --</div></div><div class="sensor-value" id="zoneTSoil${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap"><canvas id="zoneTSoilChart${zoneNum}"></canvas></div>`;
+                tSoilCard.innerHTML = `<div class="sensor-label">Temp. tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneTSoilName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneTSoilAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneTSoilLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneTSoil${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap"><canvas id="zoneTSoilChart${zoneNum}"></canvas></div>`;
 
                 const tAirCard = document.createElement('div');
                 tAirCard.className = 'sensor-card metric-neutral accent accent-blue';
-                tAirCard.innerHTML = `<div class="sensor-label">Temp. aire</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneTAirName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneTAirAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneTAirLast${zoneNum}">Actualizado: --</div></div><div class="sensor-value" id="zoneTAir${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap"><canvas id="zoneTAirChart${zoneNum}"></canvas></div>`;
+                tAirCard.innerHTML = `<div class="sensor-label">Temp. aire</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneTAirName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneTAirAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneTAirLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneTAir${zoneNum}">--</div><div class="sensor-unit">°C</div><div class="chart-wrap"><canvas id="zoneTAirChart${zoneNum}"></canvas></div>`;
 
                 const hAirCard = document.createElement('div');
                 hAirCard.className = 'sensor-card metric-neutral accent accent-indigo';
-                hAirCard.innerHTML = `<div class="sensor-label">Humedad aire</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneHAirName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneHAirAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneHAirLast${zoneNum}">Actualizado: --</div></div><div class="sensor-value" id="zoneHAir${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap"><canvas id="zoneHAirChart${zoneNum}"></canvas></div>`;
+                hAirCard.innerHTML = `<div class="sensor-label">Humedad aire</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneHAirName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneHAirAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneHAirLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneHAir${zoneNum}">--</div><div class="sensor-unit">%</div><div class="chart-wrap"><canvas id="zoneHAirChart${zoneNum}"></canvas></div>`;
 
                 const phCard = document.createElement('div');
                 phCard.className = 'sensor-card metric-neutral accent accent-amber';
-                phCard.innerHTML = `<div class="sensor-label">pH tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zonePHName${zoneNum}">—</div><div class="sensor-meta-avg" id="zonePHAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zonePHLast${zoneNum}">Actualizado: --</div></div><div class="sensor-value" id="zonePH${zoneNum}">--</div><div class="sensor-unit">pH</div><div class="chart-wrap"><canvas id="zonePHChart${zoneNum}"></canvas></div>`;
+                phCard.innerHTML = `<div class="sensor-label">pH tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zonePHName${zoneNum}">—</div><div class="sensor-meta-avg" id="zonePHAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zonePHLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zonePH${zoneNum}">--</div><div class="sensor-unit">pH</div><div class="chart-wrap"><canvas id="zonePHChart${zoneNum}"></canvas></div>`;
 
                 const ecCard = document.createElement('div');
                 ecCard.className = 'sensor-card metric-neutral accent accent-cyan';
-                ecCard.innerHTML = `<div class="sensor-label">EC tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneECName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneECAvg${zoneNum}">Media: --</div></div><div class="sensor-meta-last" id="zoneECLast${zoneNum}">Actualizado: --</div></div><div class="sensor-value" id="zoneEC${zoneNum}">--</div><div class="sensor-unit">mS/cm</div><div class="chart-wrap"><canvas id="zoneECChart${zoneNum}"></canvas></div>`;
+                ecCard.innerHTML = `<div class="sensor-label">EC tierra</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneECName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneECAvg${zoneNum}"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneECLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneEC${zoneNum}">--</div><div class="sensor-unit">mS/cm</div><div class="chart-wrap"><canvas id="zoneECChart${zoneNum}"></canvas></div>`;
 
                 const valveCard = document.createElement('div');
                 valveCard.className = 'sensor-card metric-neutral accent accent-red';
-                valveCard.innerHTML = `<div class="sensor-label">Válvula (zona)</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneValveName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneValveAvg${zoneNum}">ON: --</div></div><div class="sensor-meta-last" id="zoneValveLast${zoneNum}">Actualizado: --</div></div><div class="sensor-value" id="zoneValve${zoneNum}">--</div><div class="valve-indicator"><div class="valve-dot" id="zoneValveDot${zoneNum}"></div><div class="valve-text" id="zoneValveText${zoneNum}">--</div></div><div class="chart-wrap"><canvas id="zoneValveChart${zoneNum}"></canvas></div>`;
+                valveCard.innerHTML = `<div class="sensor-label">Válvula (zona)</div><div class="sensor-meta"><div class="sensor-meta-top"><div class="sensor-meta-name" id="zoneValveName${zoneNum}">—</div><div class="sensor-meta-avg" id="zoneValveAvg${zoneNum}"><span class="meta-label">ON:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-meta-last" id="zoneValveLast${zoneNum}"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div></div><div class="sensor-value" id="zoneValve${zoneNum}">--</div><div class="valve-indicator"><div class="valve-dot" id="zoneValveDot${zoneNum}"></div><div class="valve-text" id="zoneValveText${zoneNum}">--</div></div><div class="chart-wrap"><canvas id="zoneValveChart${zoneNum}"></canvas></div>`;
 
                 const statusCard = document.createElement('div');
                 statusCard.className = 'sensor-card metric-neutral accent accent-cyan';
@@ -1573,13 +1613,14 @@
                         <div class="v" id="zoneTotalValveOn${zoneNum}">--</div>
                     </div>`;
 
+                // Pedido: la válvula justo debajo de la humedad
                 grid.appendChild(humCard);
+                grid.appendChild(valveCard);
                 grid.appendChild(tSoilCard);
                 grid.appendChild(tAirCard);
                 grid.appendChild(hAirCard);
                 grid.appendChild(phCard);
                 grid.appendChild(ecCard);
-                grid.appendChild(valveCard);
                 grid.appendChild(statusCard);
 
                 sec.appendChild(zoneSummary);
@@ -2297,6 +2338,8 @@
 
                 const humSel = document.getElementById('humChannelSelect');
                 const valveSel = document.getElementById('valveChannelSelect');
+                const cmpSel3 = document.getElementById('cmpChannelSelect3');
+                const cmpSel4 = document.getElementById('cmpChannelSelect4');
                 humSel.innerHTML = '';
                 valveSel.innerHTML = '';
 
@@ -2321,6 +2364,21 @@
 
                 humSel.onchange = () => { humChannelId = humSel.value || null; scheduleChartsRebuild(); };
                 valveSel.onchange = () => { valveChannelId = valveSel.value || null; scheduleChartsRebuild(); };
+
+                // Comparador (máx 4): poblar y restaurar selección
+                populateCompareSelect(cmpSel3);
+                populateCompareSelect(cmpSel4);
+
+                cmpChannelId3 = getSavedCmpChannel(3) || null;
+                cmpChannelId4 = getSavedCmpChannel(4) || null;
+                if (cmpSel3) cmpSel3.value = cmpChannelId3 || '';
+                if (cmpSel4) cmpSel4.value = cmpChannelId4 || '';
+
+                if (cmpSel3) cmpSel3.onchange = () => { cmpChannelId3 = cmpSel3.value || null; saveCmpChannel(3, cmpChannelId3 || ''); scheduleChartsRebuild(); };
+                if (cmpSel4) cmpSel4.onchange = () => { cmpChannelId4 = cmpSel4.value || null; saveCmpChannel(4, cmpChannelId4 || ''); scheduleChartsRebuild(); };
+
+                showCmpBox(3, getCmpVisible(3) || !!cmpChannelId3);
+                showCmpBox(4, getCmpVisible(4) || !!cmpChannelId4);
 
                 const renameHumBtn = document.getElementById('btnRenameHum');
                 const renameValveBtn = document.getElementById('btnRenameValve');
@@ -2910,6 +2968,56 @@
             }
         });
 
+        // --- Comparador (2 gráficas extra opcionales: 3 y 4) ---
+        let cmpChannelId3 = null;
+        let cmpChannelId4 = null;
+
+        const cmp3Labels = [];
+        const cmp3Series = [];
+        const cmp4Labels = [];
+        const cmp4Series = [];
+
+        function createCompareChart(canvasId, labels, series, { border, fill } = {}) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return null;
+            return new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: '',
+                        data: series,
+                        borderColor: border || '#60a5fa',
+                        backgroundColor: fill || 'rgba(96,165,250,0.14)',
+                        fill: true,
+                        tension: 0.25,
+                        pointRadius: 0,
+                        stepped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: {
+                            min: 0,
+                            ticks: { color: '#fff' },
+                            grid: { color: 'rgba(255,255,255,0.06)' }
+                        },
+                        x: {
+                            ticks: { color: '#fff', maxTicksLimit: 12 },
+                            grid: { color: 'rgba(255,255,255,0.04)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        const cmpChart3 = createCompareChart('cmpChart3', cmp3Labels, cmp3Series, { border: '#60a5fa', fill: 'rgba(96,165,250,0.14)' });
+        const cmpChart4 = createCompareChart('cmpChart4', cmp4Labels, cmp4Series, { border: '#a78bfa', fill: 'rgba(167,139,250,0.14)' });
+
         // --- Mini charts por planta (por tarjeta) ---
         const zoneMiniCharts = new Map();
 
@@ -2965,6 +3073,129 @@
             const el = document.getElementById(id);
             if (!el) return;
             el.textContent = text;
+        }
+
+        function setMetaValue(id, valueText, { muted = false } = {}) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const v = el.querySelector('span[data-role="value"]');
+            if (!v) {
+                el.textContent = String(valueText ?? '');
+                return;
+            }
+            v.textContent = String(valueText ?? '');
+            v.classList.toggle('meta-muted', !!muted);
+        }
+
+        function withDiaPrefixLabel(label) {
+            const s = (label == null) ? '' : String(label).trim();
+            if (!s) return s;
+            if (/^d[ií]a\b/i.test(s)) return s;
+            // Formato típico: "31 15:52" o "31 15:52:10"
+            if (/^\d{1,2}\s+\d{1,2}:\d{2}/.test(s)) return `día ${s}`;
+            return s;
+        }
+
+        function tickEvery5Minutes(value) {
+            try {
+                const label = this && typeof this.getLabelForValue === 'function'
+                    ? this.getLabelForValue(value)
+                    : String(value);
+                const m = String(label).match(/(\d{1,2}):(\d{2})/);
+                if (!m) return label;
+                const min = Number(m[2]);
+                if (!Number.isFinite(min)) return label;
+                return (min % 5 === 0) ? label : '';
+            } catch {
+                return '';
+            }
+        }
+
+        function prettyKind(kind) {
+            const k = String(kind || '').toLowerCase();
+            if (k === 'soil_sensor') return 'Humedad suelo';
+            if (k === 'humidity_air') return 'Humedad aire';
+            if (k === 'temperature_air') return 'Temp. aire';
+            if (k === 'temperature_soil') return 'Temp. tierra';
+            if (k === 'ph_soil') return 'pH tierra';
+            if (k === 'ec_soil') return 'EC tierra';
+            if (k === 'valve') return 'Válvula';
+            return k || 'Sensor';
+        }
+
+        function cmpStorageKey(slot) { return `ui:cmp:${deviceCode}:${slot}`; }
+        function cmpVisibleKey(slot) { return `ui:cmpVisible:${deviceCode}:${slot}`; }
+        function getCmpVisible(slot) {
+            try { return localStorage.getItem(cmpVisibleKey(slot)) === '1'; } catch { return false; }
+        }
+        function setCmpVisible(slot, v) {
+            try { localStorage.setItem(cmpVisibleKey(slot), v ? '1' : '0'); } catch {}
+        }
+        function getSavedCmpChannel(slot) {
+            try { return localStorage.getItem(cmpStorageKey(slot)) || ''; } catch { return ''; }
+        }
+        function saveCmpChannel(slot, id) {
+            try { localStorage.setItem(cmpStorageKey(slot), id || ''); } catch {}
+        }
+
+        function showCmpBox(slot, show) {
+            const box = document.getElementById(`cmpBox${slot}`);
+            if (box) box.style.display = show ? '' : 'none';
+            setCmpVisible(slot, show);
+            try {
+                if (show && slot === 3) cmpChart3?.resize();
+                if (show && slot === 4) cmpChart4?.resize();
+            } catch {}
+        }
+
+        function populateCompareSelect(sel) {
+            if (!sel) return;
+            const allowed = new Set(['soil_sensor', 'valve', 'humidity_air', 'temperature_air', 'temperature_soil', 'ph_soil', 'ec_soil']);
+            const list = (channels || []).filter(c => c && allowed.has(String(c.kind || '').toLowerCase()));
+            sel.innerHTML = '';
+            const empty = document.createElement('option');
+            empty.value = '';
+            empty.textContent = '—';
+            sel.appendChild(empty);
+            for (const c of list) {
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = `${prettyKind(c.kind)} · ${c.name} (${c.channel_index})`;
+                sel.appendChild(opt);
+            }
+        }
+
+        function initCompareButtons() {
+            const addBtn = document.getElementById('cmpAddBtn');
+            const rm3 = document.getElementById('cmpRemove3');
+            const rm4 = document.getElementById('cmpRemove4');
+
+            if (rm3) rm3.addEventListener('click', () => {
+                cmpChannelId3 = null;
+                saveCmpChannel(3, '');
+                const sel = document.getElementById('cmpChannelSelect3');
+                if (sel) sel.value = '';
+                showCmpBox(3, false);
+                scheduleChartsRebuild();
+            });
+            if (rm4) rm4.addEventListener('click', () => {
+                cmpChannelId4 = null;
+                saveCmpChannel(4, '');
+                const sel = document.getElementById('cmpChannelSelect4');
+                if (sel) sel.value = '';
+                showCmpBox(4, false);
+                scheduleChartsRebuild();
+            });
+
+            if (addBtn) addBtn.addEventListener('click', () => {
+                const box3 = document.getElementById('cmpBox3');
+                const box4 = document.getElementById('cmpBox4');
+                const v3 = !!box3 && box3.style.display !== 'none';
+                const v4 = !!box4 && box4.style.display !== 'none';
+                if (!v3) { showCmpBox(3, true); return; }
+                if (!v4) { showCmpBox(4, true); return; }
+                alert('Máximo 4 gráficas.');
+            });
         }
 
         function sectionStorageKey(sec) {
@@ -3065,8 +3296,8 @@
 
                 if (d.idx == null) {
                     setText(nameElId, 'Sin asignar');
-                    setText(avgElId, d.isValve ? 'ON: --' : 'Media: --');
-                    setText(lastElId, 'Actualizado: --');
+                    setMetaValue(avgElId, '--', { muted: true });
+                    setMetaValue(lastElId, '--', { muted: true });
                     continue;
                 }
 
@@ -3075,14 +3306,14 @@
 
                 const entry = zoneMiniCharts.get(canvasId);
                 if (!entry || !entry.meta) {
-                    setText(avgElId, d.isValve ? 'ON: --' : 'Media: --');
-                    setText(lastElId, 'Actualizado: --');
+                    setMetaValue(avgElId, '--', { muted: true });
+                    setMetaValue(lastElId, '--', { muted: true });
                     continue;
                 }
 
                 if (d.isValve) {
                     const ms = Number(entry.meta.valveOnMs);
-                    setText(avgElId, Number.isFinite(ms) && ms > 0 ? `ON: ${formatDuration(ms)}` : 'ON: --');
+                    setMetaValue(avgElId, Number.isFinite(ms) && ms > 0 ? formatDuration(ms) : '--', { muted: !(Number.isFinite(ms) && ms > 0) });
                 } else {
                     const sum = Number(entry.meta.sum);
                     const cnt = Number(entry.meta.count);
@@ -3090,9 +3321,9 @@
                         const avg = sum / cnt;
                         const decimals = Number.isFinite(Number(d.decimals)) ? Number(d.decimals) : 2;
                         const unitTxt = !d.unit ? '' : ((d.unit === '%' || d.unit === '°C' || d.unit === 'pH') ? d.unit : ` ${d.unit}`);
-                        setText(avgElId, `Media: ${avg.toFixed(decimals)}${unitTxt}`);
+                        setMetaValue(avgElId, `${avg.toFixed(decimals)}${unitTxt}`);
                     } else {
-                        setText(avgElId, 'Media: --');
+                        setMetaValue(avgElId, '--', { muted: true });
                     }
                 }
 
@@ -3100,16 +3331,16 @@
                 if (Number.isFinite(lastMs) && lastMs > 0) {
                     // Siempre mostrar hora en tarjetas para verificar que el sensor “se mueve”
                     const txt = formatLastPointText('day', new Date(lastMs), entry.meta.lastLabel || '');
-                    setText(lastElId, `Actualizado: ${txt}`);
+                    setMetaValue(lastElId, txt);
                 } else {
-                    setText(lastElId, 'Actualizado: --');
+                    setMetaValue(lastElId, '--', { muted: true });
                 }
             }
         }
 
         function miniLabelForDate(d, mode) {
             const p = getMadridPartsFull(d);
-            if (mode === 'day') return `${p.h}:${p.mi}:${p.s}`;
+            if (mode === 'day') return `${p.h}:${p.mi}`;
             return `${p.h}:${p.mi}`;
         }
 
@@ -3128,6 +3359,11 @@
                         e.chart.options.scales.y.ticks.stepSize = yTickStep;
                         e.chart.options.scales.y.ticks.color = '#fff';
                         e.chart.options.scales.x.ticks.color = '#fff';
+                        e.chart.options.scales.x.ticks.autoSkip = mode !== 'day';
+                        e.chart.options.scales.x.ticks.callback = mode === 'day' ? tickEvery5Minutes : undefined;
+                        e.chart.options.scales.x.ticks.maxTicksLimit = mode === 'day' ? 24 : 6;
+                        e.chart.options.scales.x.ticks.maxRotation = 0;
+                        e.chart.options.scales.x.ticks.minRotation = 0;
                         e.mode = mode;
                     }
                 } catch {}
@@ -3175,7 +3411,14 @@
                             grid: { color: 'rgba(255,255,255,0.06)' }
                         },
                         x: {
-                            ticks: { color: '#fff', maxTicksLimit: 4 },
+                            ticks: {
+                                color: '#fff',
+                                maxTicksLimit: mode === 'day' ? 24 : 6,
+                                autoSkip: mode !== 'day',
+                                callback: mode === 'day' ? tickEvery5Minutes : undefined,
+                                maxRotation: 0,
+                                minRotation: 0
+                            },
                             grid: { color: 'rgba(255,255,255,0.04)' }
                         }
                     }
@@ -3232,7 +3475,7 @@
                     const tsMs = d.getTime();
                     lastTsMs = tsMs;
                     tsArr.push(tsMs);
-                    labels.push(row?.ts_madrid_label || miniLabelForDate(d, 'day'));
+                    labels.push(miniLabelForDate(d, 'day'));
 
                     if (kind === 'valve') {
                         const onNow = Number(row?.state || 0) >= 1;
@@ -3718,6 +3961,169 @@
             return `${p.y}-${p.mo}`;
         }
 
+        function applyCompareXAxisTicks(chart, mode) {
+            if (!chart || !chart.options || !chart.options.scales || !chart.options.scales.x) return;
+            const t = chart.options.scales.x.ticks || (chart.options.scales.x.ticks = {});
+            t.color = '#fff';
+            t.autoSkip = mode !== 'day';
+            t.callback = mode === 'day' ? tickEvery5Minutes : undefined;
+            t.maxRotation = 0;
+            t.minRotation = 0;
+            t.maxTicksLimit = mode === 'day' ? 24 : 12;
+        }
+
+        function applyCompareYScale(chart, kind) {
+            if (!chart || !chart.options || !chart.options.scales || !chart.options.scales.y) return;
+            const k = String(kind || '').toLowerCase();
+            if (k === 'soil_sensor' || k === 'humidity_air') {
+                chart.options.scales.y.min = 0;
+                chart.options.scales.y.max = 100;
+                chart.options.scales.y.ticks.stepSize = 5;
+                chart.options.scales.y.ticks.callback = (v) => `${v}%`;
+            } else if (k === 'temperature_air' || k === 'temperature_soil') {
+                chart.options.scales.y.min = 0;
+                chart.options.scales.y.max = 60;
+                chart.options.scales.y.ticks.stepSize = 10;
+                chart.options.scales.y.ticks.callback = undefined;
+            } else if (k === 'valve') {
+                chart.options.scales.y.min = 0;
+                chart.options.scales.y.max = 1;
+                chart.options.scales.y.ticks.stepSize = 1;
+                chart.options.scales.y.ticks.callback = (v) => (v >= 0.5 ? 'ON' : 'OFF');
+            } else {
+                chart.options.scales.y.min = 0;
+                chart.options.scales.y.max = undefined;
+                chart.options.scales.y.ticks.stepSize = undefined;
+                chart.options.scales.y.ticks.callback = undefined;
+            }
+        }
+
+        async function rebuildCompareSlot(slot) {
+            const box = document.getElementById(`cmpBox${slot}`);
+            if (!box || box.style.display === 'none') return;
+
+            const channelId = (slot === 3) ? cmpChannelId3 : cmpChannelId4;
+            const chart = (slot === 3) ? cmpChart3 : cmpChart4;
+            const labelsArr = (slot === 3) ? cmp3Labels : cmp4Labels;
+            const seriesArr = (slot === 3) ? cmp3Series : cmp4Series;
+            const titleEl = document.getElementById(`cmpTitle${slot}`);
+
+            if (!chart) return;
+            if (!channelId) {
+                if (titleEl) titleEl.textContent = `Comparación ${slot}`;
+                setSeries(labelsArr, seriesArr, [], []);
+                chart.update('none');
+                return;
+            }
+
+            const ch = (channels || []).find(c => c && String(c.id) === String(channelId));
+            if (!ch) return;
+            const kind = String(ch.kind || '').toLowerCase();
+
+            if (titleEl) titleEl.textContent = `${prettyKind(kind)} · ${ch.name} (${ch.channel_index})`;
+            chart.data.datasets[0].label = `${prettyKind(kind)} · ${ch.name}`;
+            chart.data.datasets[0].stepped = (kind === 'valve');
+            chart.data.datasets[0].tension = (kind === 'valve') ? 0 : 0.25;
+            applyCompareYScale(chart, kind);
+            applyCompareXAxisTicks(chart, viewMode);
+
+            let step;
+            let limit;
+            if (viewMode === 'day') { step = 'raw'; limit = 1500; }
+            else if (viewMode === 'month') { step = '1h'; limit = 2000; }
+            else { step = '1h'; limit = 4000; }
+
+            const range = rangeForMode(viewMode);
+            const rangeQs = (range && range.from && range.to)
+                ? `&from=${encodeURIComponent(range.from.toISOString())}&to=${encodeURIComponent(range.to.toISOString())}`
+                : '';
+
+            const url = `/api/channel/history/${encodeURIComponent(deviceCode)}/${encodeURIComponent(channelId)}?step=${encodeURIComponent(step)}&limit=${limit}${rangeQs}`;
+            const r = await fetch(url);
+            if (!r.ok) return;
+            const payload = await r.json().catch(() => null);
+            const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+
+            const labels = [];
+            const series = [];
+
+            if (viewMode === 'day') {
+                for (const row of rows) {
+                    const raw = row?.ts_madrid_label || row?.ts_madrid || row?.ts || '';
+                    labels.push(withDiaPrefixLabel(raw));
+                    if (kind === 'valve') {
+                        const onNow = Number(row?.state || 0) >= 1;
+                        series.push(onNow ? 1 : 0);
+                    } else {
+                        const v = row?.value == null ? null : Number(row.value);
+                        series.push(v == null || Number.isNaN(v) ? null : Number(v.toFixed(2)));
+                    }
+                }
+            } else if (viewMode === 'month') {
+                const byDay = {};
+                for (const row of rows) {
+                    const key = row?.ts_madrid_day_key || dayKeyForTs(row?.ts);
+                    const b = byDay[key] || (byDay[key] = (kind === 'valve' ? { on: 0, cnt: 0 } : { sum: 0, cnt: 0 }));
+                    if (kind === 'valve') {
+                        const s = Number(row?.state || 0) >= 1 ? 1 : 0;
+                        b.on += s;
+                        b.cnt += 1;
+                    } else {
+                        const v = row?.value == null ? null : Number(row.value);
+                        if (v != null && !Number.isNaN(v)) { b.sum += v; b.cnt += 1; }
+                    }
+                }
+                const keys = Object.keys(byDay).sort();
+                for (const key of keys) {
+                    labels.push(key.slice(8, 10));
+                    const b = byDay[key];
+                    if (kind === 'valve') {
+                        const onHours = b && b.cnt ? (b.on / b.cnt) * 24 : null;
+                        series.push(onHours == null ? null : Number(onHours.toFixed(2)));
+                    } else {
+                        const avg = b && b.cnt ? (b.sum / b.cnt) : null;
+                        series.push(avg == null ? null : Number(avg.toFixed(2)));
+                    }
+                }
+            } else {
+                const byMonth = {};
+                for (const row of rows) {
+                    const key = row?.ts_madrid_month_key || monthKeyForTs(row?.ts);
+                    const b = byMonth[key] || (byMonth[key] = (kind === 'valve' ? { on: 0, cnt: 0 } : { sum: 0, cnt: 0 }));
+                    if (kind === 'valve') {
+                        const s = Number(row?.state || 0) >= 1 ? 1 : 0;
+                        b.on += s;
+                        b.cnt += 1;
+                    } else {
+                        const v = row?.value == null ? null : Number(row.value);
+                        if (v != null && !Number.isNaN(v)) { b.sum += v; b.cnt += 1; }
+                    }
+                }
+                const keys = Object.keys(byMonth).sort();
+                for (const key of keys) {
+                    labels.push(key.slice(5, 7));
+                    const b = byMonth[key];
+                    if (kind === 'valve') {
+                        const onHours = b && b.cnt ? (b.on / b.cnt) * (30 * 24) : null;
+                        series.push(onHours == null ? null : Number(onHours.toFixed(1)));
+                    } else {
+                        const avg = b && b.cnt ? (b.sum / b.cnt) : null;
+                        series.push(avg == null ? null : Number(avg.toFixed(2)));
+                    }
+                }
+            }
+
+            setSeries(labelsArr, seriesArr, labels, series);
+            chart.update('none');
+        }
+
+        function rebuildCompareExtraCharts() {
+            return Promise.all([
+                rebuildCompareSlot(3).catch(() => {}),
+                rebuildCompareSlot(4).catch(() => {})
+            ]);
+        }
+
         async function rebuildChartsFromServer() {
             // Para rendimiento: limitar puntos en DÍA (raw) y usar canales
             if (!humChannelId && !valveChannelId) throw new Error('no channels');
@@ -3782,7 +4188,10 @@
                     document.getElementById('periodValue').textContent = `${fmtDateEs.format(rangeTo)} (últimas 24h, histórico)`;
 
                     const labelSource = humRows2.length ? humRows2 : valveRows2;
-                    for (const r of labelSource) labels.push(r.ts_madrid_label || (r.ts_madrid || String(r.ts || '')));
+                    for (const r of labelSource) {
+                        const raw = r.ts_madrid_label || (r.ts_madrid || String(r.ts || ''));
+                        labels.push(withDiaPrefixLabel(raw));
+                    }
 
                     for (const r of humRows2) {
                         const v = r.value == null ? null : Number(r.value);
@@ -3910,6 +4319,14 @@
 
                 setSeries(humLabels, humSeries, labels, hum);
                 setSeries(valveLabels, valveSeries, labels, valve);
+                try {
+                    humChart.options.scales.x.ticks.autoSkip = viewMode !== 'day';
+                    humChart.options.scales.x.ticks.callback = viewMode === 'day' ? tickEvery5Minutes : undefined;
+                    humChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 24 : 12;
+                    valveChart.options.scales.x.ticks.autoSkip = viewMode !== 'day';
+                    valveChart.options.scales.x.ticks.callback = viewMode === 'day' ? tickEvery5Minutes : undefined;
+                    valveChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 24 : 12;
+                } catch {}
                 humChart.update('none');
                 valveChart.update('none');
             }
@@ -3956,7 +4373,8 @@
                 // Unificar labels por timestamp: usamos los del sensor si existen, si no los de válvula.
                 const labelSource = humRows.length ? humRows : valveRows;
                 for (const r of labelSource) {
-                    labels.push(r.ts_madrid_label || (r.ts_madrid || String(r.ts || '')));
+                    const raw = r.ts_madrid_label || (r.ts_madrid || String(r.ts || ''));
+                    labels.push(withDiaPrefixLabel(raw));
                 }
 
                 // Serie humedad
@@ -4106,13 +4524,27 @@
 
             setSeries(humLabels, humSeries, labels, hum);
             setSeries(valveLabels, valveSeries, labels, valve);
+            try {
+                humChart.options.scales.x.ticks.autoSkip = viewMode !== 'day';
+                humChart.options.scales.x.ticks.callback = viewMode === 'day' ? tickEvery5Minutes : undefined;
+                humChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 24 : 12;
+                valveChart.options.scales.x.ticks.autoSkip = viewMode !== 'day';
+                valveChart.options.scales.x.ticks.callback = viewMode === 'day' ? tickEvery5Minutes : undefined;
+                valveChart.options.scales.x.ticks.maxTicksLimit = viewMode === 'day' ? 24 : 12;
+            } catch {}
             humChart.update('none');
             valveChart.update('none');
         }
 
         function rebuildCharts(storeOpt) {
-            if (storeOpt) return rebuildChartsFromStore(storeOpt);
-            rebuildChartsFromServer().catch(() => rebuildChartsFromStore());
+            if (storeOpt) {
+                rebuildChartsFromStore(storeOpt);
+                rebuildCompareExtraCharts().catch(() => {});
+                return;
+            }
+            rebuildChartsFromServer()
+                .catch(() => rebuildChartsFromStore())
+                .finally(() => { rebuildCompareExtraCharts().catch(() => {}); });
         }
 
         function tickClock() {
@@ -4504,6 +4936,7 @@
 
         async function boot() {
             initCollapsibles();
+            try { initCompareButtons(); } catch {}
             const ok = await loadDevices();
             if (!ok) return;
             if (!hasDevices) return;
