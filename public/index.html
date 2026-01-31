@@ -63,6 +63,7 @@
         .zone-row .control-row { margin-bottom: 0; flex: 1 1 320px; }
         .zone-mini { font-size: 11px; color:#8fa3bf; }
         .mini-btn.tiny { padding: 6px 10px; font-size: 11px; border-radius: 10px; box-shadow: 0 10px 22px rgba(0,0,0,0.18); }
+        .sensor-value.small { font-size: 16px; color: #e9eef7; font-weight: 800; word-break: break-word; }
         .valve-indicator { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
         .valve-dot { width: 14px; height: 14px; border-radius: 50%; background: #666; box-shadow: 0 0 10px #000; }
         .valve-dot.on { background: #33cc33; box-shadow: 0 0 18px #33cc33; }
@@ -231,6 +232,9 @@
             .sensor-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
             .sensor-card { padding: 12px; }
             .btn-grid { grid-template-columns: repeat(2, 1fr); }
+            /* Zonas: evitar overflow horizontal en móvil */
+            .zone-row { gap: 8px; }
+            .zone-row .control-row { flex: 1 1 100%; }
         }
     </style>
 </head>
@@ -330,26 +334,28 @@
             <!-- Mantener el ID para compatibilidad (JS lo actualiza si existe), pero oculto -->
             <span class="hidden" id="topNowEs">--</span>
         </div>
-        <div class="section">
-            <h2> SENSORES EN TIEMPO REAL</h2>
+        <div class="section" id="connectedSection">
+            <h2> DISPOSITIVO CONECTADO</h2>
             <div class="sensor-grid">
-                <div class="sensor-card">
-                    <div class="sensor-label">Temperatura</div>
-                    <div class="sensor-value" id="temp">--</div>
-                    <div class="sensor-unit">C</div>
+                <div class="sensor-card metric-neutral">
+                    <div class="sensor-label">Último dato</div>
+                    <div class="sensor-value small" id="lastSeen">--</div>
+                    <div class="sensor-unit" id="lastSeenAge">--</div>
                 </div>
-                <div class="sensor-card">
-                    <div class="sensor-label">Humedad</div>
-                    <div class="sensor-value" id="humidity">--</div>
-                    <div class="sensor-unit">%</div>
+                <div class="sensor-card metric-neutral">
+                    <div class="sensor-label">Tiempo encendido</div>
+                    <div class="sensor-value small" id="uptime">--</div>
+                    <div class="sensor-unit">uptime</div>
                 </div>
-                <div class="sensor-card">
-                    <div class="sensor-label">Válvula</div>
-                    <div class="sensor-value" id="valve">--</div>
-                    <div class="valve-indicator">
-                        <div class="valve-dot" id="valveDot"></div>
-                        <div class="valve-text" id="valveText">--</div>
-                    </div>
+                <div class="sensor-card metric-neutral">
+                    <div class="sensor-label">IP</div>
+                    <div class="sensor-value small" id="ip">--</div>
+                    <div class="sensor-unit">red</div>
+                </div>
+                <div class="sensor-card metric-neutral">
+                    <div class="sensor-label">Memoria libre</div>
+                    <div class="sensor-value" id="heap">--</div>
+                    <div class="sensor-unit">KB</div>
                 </div>
                 <div class="sensor-card">
                     <div class="sensor-label">Voltaje</div>
@@ -360,11 +366,6 @@
                     <div class="sensor-label">WiFi RSSI</div>
                     <div class="sensor-value" id="rssi">--</div>
                     <div class="sensor-unit">dBm</div>
-                </div>
-                <div class="sensor-card">
-                    <div class="sensor-label">Umbral Humedad Baja</div>
-                    <div class="sensor-value" id="uptime">--</div>
-                    <div class="sensor-unit">%</div>
                 </div>
                 <div class="sensor-card">
                     <div class="sensor-label">Reinicios</div>
@@ -638,33 +639,15 @@
                 .slice()
                 .sort((a, b) => Number(a.channel_index) - Number(b.channel_index));
 
-            // Auto-asignar: si una planta está sin asignar y existe el canal con el mismo índice,
-            // lo asignamos (sin reutilizar canales ya usados por otras plantas).
-            function autoAssignIfPossible() {
-                const usedSoil = new Set((zonesState || []).map(z => z?.soil_channel_index).filter(v => v != null).map(v => Number(v)));
-                const usedValve = new Set((zonesState || []).map(z => z?.valve_channel_index).filter(v => v != null).map(v => Number(v)));
-                for (let i = 0; i < 8; i++) {
-                    const desiredIdx = i + 1;
-                    const z = zonesState[i];
-                    if (!z) continue;
-                    if (z.soil_channel_index == null) {
-                        const exists = soil.some(x => Number(x.channel_index) === desiredIdx);
-                        if (exists && !usedSoil.has(desiredIdx)) {
-                            z.soil_channel_index = desiredIdx;
-                            usedSoil.add(desiredIdx);
-                        }
-                    }
-                    if (z.valve_channel_index == null) {
-                        const exists = valves.some(x => Number(x.channel_index) === desiredIdx);
-                        if (exists && !usedValve.has(desiredIdx)) {
-                            z.valve_channel_index = desiredIdx;
-                            usedValve.add(desiredIdx);
-                        }
-                    }
+            // Importante: NO auto-asignar plantas 2..8.
+            // Solo intentamos auto-asignar PLANTA 1 si está sin asignar.
+            try {
+                const z0 = zonesState?.[0];
+                if (z0) {
+                    if (z0.soil_channel_index == null && soil.some(x => Number(x.channel_index) === 1)) z0.soil_channel_index = 1;
+                    if (z0.valve_channel_index == null && valves.some(x => Number(x.channel_index) === 1)) z0.valve_channel_index = 1;
                 }
-            }
-
-            autoAssignIfPossible();
+            } catch {}
 
             function usedSetFor(kind, excludeIdx) {
                 const s = new Set();
@@ -982,6 +965,32 @@
             }
 
             const STALE_MIN = 10;
+
+            // Heurística anti-datos-falsos:
+            // Si solo hay 1 sensor y 1 válvula con datos recientes, mantenemos solo PLANTA 1 asignada.
+            // Esto es local (no guarda nada en servidor).
+            try {
+                const presentSoil = new Set();
+                const presentValve = new Set();
+                for (const c of ch) {
+                    const kind = String(c?.kind || '');
+                    const idx = Number(c?.channel_index);
+                    if (!Number.isFinite(idx)) continue;
+                    const age = c?.latest?.age_minutes;
+                    const okAge = (age == null) || (Number(age) <= STALE_MIN);
+                    if (!okAge) continue;
+                    if (kind === 'soil_sensor' && c?.latest?.value != null) presentSoil.add(idx);
+                    if (kind === 'valve' && c?.latest?.state != null) presentValve.add(idx);
+                }
+                if (presentSoil.size <= 1 && presentValve.size <= 1) {
+                    for (let i = 1; i < 8; i++) {
+                        const z = zonesState[i];
+                        if (!z) continue;
+                        z.soil_channel_index = null;
+                        z.valve_channel_index = null;
+                    }
+                }
+            } catch {}
 
             for (let i = 0; i < 8; i++) {
                 const zoneNum = i + 1;
@@ -1751,6 +1760,37 @@
             }
         }
 
+        function updateConnectedDeviceCards(data) {
+            const createdAt = parseTsToDate(data?.created_at);
+            const createdAtLabel = (data && data.created_at_madrid)
+                ? String(data.created_at_madrid)
+                : (createdAt ? createdAt.toLocaleString('es-ES', { timeZone: TZ, hour12: false }) : '--');
+
+            const lastSeenEl = document.getElementById('lastSeen');
+            const lastSeenAgeEl = document.getElementById('lastSeenAge');
+            if (lastSeenEl) lastSeenEl.textContent = createdAtLabel;
+            if (lastSeenAgeEl) {
+                const ageMin = createdAt ? Math.max(0, Math.round((nowAdjusted().getTime() - createdAt.getTime()) / 60000)) : null;
+                lastSeenAgeEl.textContent = ageMin == null ? '--' : `hace ${ageMin} min`;
+            }
+
+            const uptimeEl = document.getElementById('uptime');
+            if (uptimeEl) uptimeEl.textContent = formatUptimeSeconds(data?.uptime_s);
+
+            const ipEl = document.getElementById('ip');
+            if (ipEl) {
+                const ip = (data && data.ip != null) ? String(data.ip).trim() : '';
+                ipEl.textContent = ip || '--';
+            }
+
+            const heapEl = document.getElementById('heap');
+            if (heapEl) {
+                const hb = (data?.heap_free == null ? null : Number(data.heap_free));
+                const kb = (hb == null || Number.isNaN(hb)) ? null : Math.max(0, Math.round(hb / 1024));
+                heapEl.textContent = kb == null ? '--' : String(kb);
+            }
+        }
+
         // --- Persistencia ("datos que va recibiendo") ---
         const STORE_KEY = 'riego_stats_v1';
         function loadStore() {
@@ -2446,8 +2486,6 @@
                 colorBuenaEl.value = config.colorB;
                 colorBajaEl.value = config.colorG;
 
-                updateThresholdCard();
-
                 // Campos avanzados
                 document.getElementById('wetV').value = (cfg.wet_v == null ? String(DEFAULT_AUTO_CONFIG.wet_v) : cfg.wet_v);
                 document.getElementById('dryV').value = (cfg.dry_v == null ? String(DEFAULT_AUTO_CONFIG.dry_v) : cfg.dry_v);
@@ -2491,7 +2529,6 @@
         document.getElementById('threshold').addEventListener('input', (e) => {
             config.threshold = parseInt(e.target.value);
             document.getElementById('thresholdValue').textContent = config.threshold + '%';
-            updateThresholdCard();
         });
 
         document.getElementById('colorBuena').addEventListener('change', (e) => {
@@ -2602,8 +2639,7 @@
                     }
                 }
                 
-                document.getElementById('temp').textContent = parseFloat(data.temperature).toFixed(1);
-                document.getElementById('humidity').textContent = parseFloat(data.humidity).toFixed(1);
+                updateConnectedDeviceCards(data);
 
                 const v = (data.voltage == null ? null : Number(data.voltage));
                 document.getElementById('voltage').textContent = (v == null || Number.isNaN(v) ? '--' : v.toFixed(2));
@@ -2643,8 +2679,7 @@
                     setMetricStateById('rssi', st);
                 }
 
-                // Tarjeta "uptime" ahora muestra el umbral configurado
-                updateThresholdCard();
+                // Ya no mostramos el umbral en la sección "DISPOSITIVO CONECTADO"
 
                 if (rbShown == null) {
                     setMetricStateById('reboots', 'metric-neutral');
@@ -2656,26 +2691,6 @@
                 const rawValve = (data.valve_state || '').toString().toUpperCase();
                 const isOn = rawValve === 'ON' || rawValve === '1' || rawValve === 'TRUE';
                 const isOff = rawValve === 'OFF' || rawValve === '0' || rawValve === 'FALSE';
-                const valveDot = document.getElementById('valveDot');
-                const valveText = document.getElementById('valveText');
-                const valveValue = document.getElementById('valve');
-
-                if (isOn) {
-                    valveDot.className = 'valve-dot on';
-                    valveText.textContent = 'ENCENDIDA';
-                    valveValue.textContent = 'ON';
-                    valveValue.style.color = '#33cc33';
-                } else if (isOff) {
-                    valveDot.className = 'valve-dot off';
-                    valveText.textContent = 'APAGADA';
-                    valveValue.textContent = 'OFF';
-                    valveValue.style.color = '#ff3333';
-                } else {
-                    valveDot.className = 'valve-dot';
-                    valveText.textContent = 'SIN DATOS';
-                    valveValue.textContent = '--';
-                    valveValue.style.color = '#aaa';
-                }
 
                 const valveDotChart = document.getElementById('valveDotChart');
                 const valveTextChart = document.getElementById('valveTextChart');
@@ -2805,7 +2820,6 @@
             if (!hasDevices) return;
 
             await cargarConfig();
-            updateThresholdCard();
             await loadChannels();
             renderZonesUI();
             scheduleChartsRebuild();
