@@ -6658,15 +6658,17 @@
 
                 const valveDotChart = document.getElementById('valveDotChart');
                 const valveTextChart = document.getElementById('valveTextChart');
-                if (isOn) {
-                    valveDotChart.className = 'valve-dot on';
-                    valveTextChart.textContent = 'ENCENDIDA';
-                } else if (isOff) {
-                    valveDotChart.className = 'valve-dot off';
-                    valveTextChart.textContent = 'APAGADA';
-                } else {
-                    valveDotChart.className = 'valve-dot';
-                    valveTextChart.textContent = 'SIN DATOS';
+                if (valveDotChart && valveTextChart) {
+                    if (isOn) {
+                        valveDotChart.className = 'valve-dot on';
+                        valveTextChart.textContent = 'ENCENDIDA';
+                    } else if (isOff) {
+                        valveDotChart.className = 'valve-dot off';
+                        valveTextChart.textContent = 'APAGADA';
+                    } else {
+                        valveDotChart.className = 'valve-dot';
+                        valveTextChart.textContent = 'SIN DATOS';
+                    }
                 }
 
                 // --- Mantener el histórico local como fallback y refrescar gráficas del servidor ---
