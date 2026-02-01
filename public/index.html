@@ -3288,11 +3288,26 @@
             document.getElementById('btnAno').classList.toggle('active', mode === 'year');
             try { renderGlobalMonthYearControls(); } catch {}
         }
+        function syncZoneViewModeFromGlobal(mode) {
+            try {
+                for (let z = 1; z <= 8; z++) {
+                    zoneViewMode.set(z, mode);
+                    try { setActiveZoneModeButtons(z, mode); } catch {}
+                    if (mode === 'month' || mode === 'year') {
+                        try { setZoneMonthSelection(z, getGlobalMonthSel()); } catch {}
+                        try { setActiveZoneMonthButtons(z, getZoneMonthSelection(z)); } catch {}
+                        try { setZoneYearLabel(z, String(getZoneMonthSelection(z).y)); } catch {}
+                    }
+                    forceZoneMiniHistoryReload(z);
+                }
+                scheduleZoneChartsRebuild();
+            } catch {}
+        }
         setActiveModeButtons(viewMode);
 
-        document.getElementById('btnDia').addEventListener('click', () => { viewMode = 'day'; setActiveModeButtons(viewMode); rebuildCharts(); });
-        document.getElementById('btnMes').addEventListener('click', () => { viewMode = 'month'; setActiveModeButtons(viewMode); rebuildCharts(); });
-        document.getElementById('btnAno').addEventListener('click', () => { viewMode = 'year'; setActiveModeButtons(viewMode); rebuildCharts(); });
+        document.getElementById('btnDia').addEventListener('click', () => { viewMode = 'day'; setActiveModeButtons(viewMode); syncZoneViewModeFromGlobal(viewMode); rebuildCharts(); });
+        document.getElementById('btnMes').addEventListener('click', () => { viewMode = 'month'; setActiveModeButtons(viewMode); syncZoneViewModeFromGlobal(viewMode); rebuildCharts(); });
+        document.getElementById('btnAno').addEventListener('click', () => { viewMode = 'year'; setActiveModeButtons(viewMode); syncZoneViewModeFromGlobal(viewMode); rebuildCharts(); });
 
         // --- Datos para Chart.js ---
         const humLabels = [];
