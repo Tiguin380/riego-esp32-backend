@@ -476,16 +476,18 @@
 
         /* Compacto en móvil */
         @media (max-width: 640px) {
-            body { padding: 10px; }
-            .section { padding: 14px; margin-bottom: 14px; }
+            /* Full-bleed en móvil para ganar ancho real */
+            body { padding: 0; }
+            .section { padding: 10px; margin-bottom: 10px; border-radius: 0; }
             #deviceSection { top: auto; }
             .sensor-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
             .sensor-card { padding: 12px; }
 
-            /* En móvil, las mini-gráficas de ZONAS lo más anchas posible */
-            body { padding: 6px; }
-            .section { padding: 10px; }
+            /* ZONAS: 1 tarjeta por fila + padding mínimo (mini-gráficas más anchas) */
+            #zonesSection { padding-left: 8px; padding-right: 8px; }
+            #zonesContainer .sensor-grid { grid-template-columns: 1fr; gap: 10px; }
             #zonesContainer .sensor-card { padding-left: 8px; padding-right: 8px; }
+            #zonesContainer .sensor-card.accent::after { left: 8px; right: 8px; }
             .btn-grid { grid-template-columns: repeat(2, 1fr); }
             .device-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             /* Zonas: evitar overflow horizontal en móvil */
@@ -537,7 +539,7 @@
               onerror="this.style.display='none'"
             />
         </div>
-        <div class="status" style="margin-bottom: 12px;">UI 2026-02-01a</div>
+        <div class="status" style="margin-bottom: 12px;">UI 2026-02-01b</div>
 
         <div class="top-nav">
             <button class="mini-btn active" id="navDevices" type="button">Dispositivos</button>
