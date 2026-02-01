@@ -57,7 +57,7 @@
         .metric-neutral { border-color: rgba(255,255,255,0.08); }
 
         /* Colores por tarjeta (accent): aplica a tarjetas sin “color” propio */
-        .sensor-card.accent { position: relative; overflow: hidden; border-color: rgba(255,255,255,0.10); box-shadow: 0 12px 28px rgba(0,0,0,0.25), inset 0 0 0 1px var(--accent-soft); }
+        .sensor-card.accent { position: relative; overflow: hidden; border-color: rgba(255,255,255,0.10); box-shadow: 0 12px 28px rgba(0,0,0,0.25), inset 0 0 0 1px var(--accent-soft);margin-bottom: 15px;}
         .sensor-card.accent::before {
             content: "";
             position: absolute;
@@ -3179,6 +3179,18 @@
             if (!/^\d{2}$/.test(mm)) return;
             globalMonthSel = { y: yy, mo: mm };
         }
+        function syncZoneMonthSelectionFromGlobal() {
+            try {
+                const sel = getGlobalMonthSel();
+                for (let z = 1; z <= 8; z++) {
+                    setZoneMonthSelection(z, { y: sel.y, mo: sel.mo });
+                    try { setActiveZoneMonthButtons(z, getZoneMonthSelection(z)); } catch {}
+                    try { setZoneYearLabel(z, String(getZoneMonthSelection(z).y)); } catch {}
+                    forceZoneMiniHistoryReload(z);
+                }
+                scheduleZoneChartsRebuild();
+            } catch {}
+        }
         function renderGlobalMonthYearControls() {
             const host = document.getElementById('globalMonthYearControls');
             if (!host) return;
@@ -3200,6 +3212,7 @@
                 const yy = Math.max(2000, (Number(cur.y) || new Date().getFullYear()) - 1);
                 setGlobalMonthSel({ y: String(yy), mo: cur.mo });
                 renderGlobalMonthYearControls();
+                syncZoneMonthSelectionFromGlobal();
                 rebuildReadsChart().catch(() => {});
             });
 
@@ -3218,6 +3231,7 @@
                 const yy = Math.min(2100, (Number(cur.y) || new Date().getFullYear()) + 1);
                 setGlobalMonthSel({ y: String(yy), mo: cur.mo });
                 renderGlobalMonthYearControls();
+                syncZoneMonthSelectionFromGlobal();
                 rebuildReadsChart().catch(() => {});
             });
 
@@ -3240,6 +3254,7 @@
                     const cur = getGlobalMonthSel();
                     setGlobalMonthSel({ y: cur.y, mo: m.mo });
                     renderGlobalMonthYearControls();
+                    syncZoneMonthSelectionFromGlobal();
                     rebuildReadsChart().catch(() => {});
                 });
                 monthRow.appendChild(b);
