@@ -3376,6 +3376,7 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
     const result = await pool.query(
       `SELECT
          ${trunc} AS ts,
+         COUNT(*)::int AS cnt,
          AVG(temperature) AS temperature,
          AVG(humidity) AS humidity,
          AVG(voltage) AS voltage,
