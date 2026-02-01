@@ -5232,8 +5232,8 @@
                     }
 
                     const e = ensureMiniChart(canvasId, { stepped: def.stepped, yMin, yMax, yTickCb, yTickStep, mode });
-                    // En móvil: si se restauró desde cache, NO recargar histórico al refrescar (evita “cambios” visuales).
-                    const skipHistory = !!(e && e._restored && isSmallViewport() && !forceReload);
+                    // En móvil: solo evitamos recargar en modo DÍA (para no “saltar” la ventana).
+                    const skipHistory = !!(e && e._restored && isSmallViewport() && !forceReload && mode === 'day');
                     if (!skipHistory) {
                         await loadMiniChartHistory(canvasId, channelId, { kind: def.kind === 'valve' ? 'valve' : 'value', mode, sel });
                     }
