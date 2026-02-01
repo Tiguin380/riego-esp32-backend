@@ -1837,22 +1837,6 @@
                 statusCard.className = 'sensor-card metric-neutral accent accent-cyan';
                 statusCard.innerHTML = `<div class="sensor-label">Estado</div><div class="sensor-value" id="zoneState${zoneNum}">--</div><div class="sensor-unit zone-mini" id="zoneAge${zoneNum}"></div>`;
 
-                const zoneSummary = document.createElement('div');
-                zoneSummary.className = 'summary';
-                zoneSummary.style.marginTop = '10px';
-                zoneSummary.innerHTML = `
-                    <div>
-                        <div class="k">Humedad Media</div>
-                        <div class="v" id="zoneAvgHumidity${zoneNum}">--</div>
-                    </div>
-                    <div>
-                        <div class="k">Último punto</div>
-                        <div class="v" id="zoneLastPoint${zoneNum}">--</div>
-                    </div>
-                    <div>
-                        <div class="k">Tiempo Válvula ON</div>
-                        <div class="v" id="zoneTotalValveOn${zoneNum}">--</div>
-                    </div>`;
 
                 // Pedido: la válvula justo debajo de la humedad
                 grid.appendChild(humCard);
@@ -1864,7 +1848,6 @@
                 grid.appendChild(ecCard);
                 grid.appendChild(statusCard);
 
-                sec.appendChild(zoneSummary);
                 sec.appendChild(grid);
                 container.appendChild(sec);
 
