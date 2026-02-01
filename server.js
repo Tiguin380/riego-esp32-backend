@@ -3030,7 +3030,7 @@ app.get('/api/channel/history/:device_code/:channel_id', async (req, res) => {
       const r = await pool.query(
         `SELECT (ts AT TIME ZONE current_setting('TIMEZONE')) AS ts, value, state
          FROM channel_samples
-         WHERE channel_id = $1 AND ts >= $2 AND ts <= $3
+         WHERE channel_id = $1 AND ts >= $2 AND ts < $3
          ORDER BY ts DESC
          LIMIT $4`,
         [channel_id, from, to, limit]
@@ -3047,12 +3047,12 @@ app.get('/api/channel/history/:device_code/:channel_id', async (req, res) => {
       });
     }
 
-    // Truncado en UTC para que los buckets sean consistentes, independientemente de la TZ del servidor/DB.
-    // Primero convertimos el TIMESTAMP (sin TZ) a timestamptz usando la TZ de la sesión, luego a UTC.
+    // Buckets alineados a Europe/Madrid para que DÍA/MES/AÑO cuadren con el frontend.
+    // Nota: (ts AT TIME ZONE 'Europe/Madrid') devuelve timestamp local; luego AT TIME ZONE convierte a timestamptz (UTC).
     let trunc;
-    if (step === '1m') trunc = "date_trunc('minute', (ts AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'";
-    else if (step === '1h') trunc = "date_trunc('hour', (ts AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'";
-    else if (step === '1d') trunc = "date_trunc('day', (ts AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'";
+    if (step === '1m') trunc = "date_trunc('minute', ts AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
+    else if (step === '1h') trunc = "date_trunc('hour', ts AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
+    else if (step === '1d') trunc = "date_trunc('day', ts AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
     else return res.status(400).json({ error: 'step inválido (raw|1m|1h|1d)' });
 
     const r = await pool.query(
@@ -3061,7 +3061,7 @@ app.get('/api/channel/history/:device_code/:channel_id', async (req, res) => {
          AVG(value) AS value,
          MAX(COALESCE(state, 0))::int AS state
        FROM channel_samples
-       WHERE channel_id = $1 AND ts >= $2 AND ts <= $3
+       WHERE channel_id = $1 AND ts >= $2 AND ts < $3
        GROUP BY ts
        ORDER BY ts ASC
        LIMIT $4`,
@@ -3352,7 +3352,7 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
            GREATEST(0, COALESCE(reboot_count, 0) - COALESCE(dc.reboot_count_offset, 0))::int AS reboot_count_display
          FROM sensor_data sd
          LEFT JOIN device_config dc ON dc.device_id = sd.device_id
-         WHERE sd.device_id = $1 AND sd.created_at >= $2 AND sd.created_at <= $3
+         WHERE sd.device_id = $1 AND sd.created_at >= $2 AND sd.created_at < $3
          ORDER BY sd.created_at DESC
          LIMIT $4`,
         [device_id, from, to, limit]
@@ -3367,10 +3367,11 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
       });
     }
 
+    // Buckets alineados a Europe/Madrid para que los días/meses cuadren con el frontend.
     let trunc;
-    if (step === '1m') trunc = "date_trunc('minute', (created_at AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'";
-    else if (step === '1h') trunc = "date_trunc('hour', (created_at AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'";
-    else if (step === '1d') trunc = "date_trunc('day', (created_at AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'";
+    if (step === '1m') trunc = "date_trunc('minute', created_at AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
+    else if (step === '1h') trunc = "date_trunc('hour', created_at AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
+    else if (step === '1d') trunc = "date_trunc('day', created_at AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
     else return res.status(400).json({ error: 'step inválido (raw|1m|1h|1d)' });
 
     const result = await pool.query(
@@ -3383,7 +3384,7 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
          AVG(wifi_rssi) AS wifi_rssi,
          MAX(CASE WHEN valve_state = 'ON' THEN 1 ELSE 0 END)::int AS valve_on
        FROM sensor_data
-       WHERE device_id = $1 AND created_at >= $2 AND created_at <= $3
+       WHERE device_id = $1 AND created_at >= $2 AND created_at < $3
        GROUP BY ts
        ORDER BY ts ASC
        LIMIT $4`,

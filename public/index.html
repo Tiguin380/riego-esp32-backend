@@ -4910,7 +4910,9 @@
                         const k = `${pSel.y}-${pad2(m)}`;
                         labels.push(pad2(m));
                         const b = byMonth[k] || null;
-                        const onHours = b && b.cnt ? (b.on / b.cnt) * (30 * 24) : null; // aprox
+                        const dim = daysInMadridMonthFromParts({ y: pSel.y, mo: pad2(m) });
+                        const hoursInMonth = dim * 24;
+                        const onHours = b && b.cnt ? (b.on / b.cnt) * hoursInMonth : null;
                         series.push(onHours == null ? null : Number(onHours.toFixed(1)));
                         if (b && b.cnt) totalValveOnMs += (onHours * 3600000);
                     }
@@ -4975,10 +4977,8 @@
                 entry.meta.lastLabel = labels.length ? String(labels[labels.length - 1]) : '';
             }
 
-                try { applyMobileDayWindowToChart(entry.chart, mode); } catch {}
-                        const dim = daysInMadridMonthFromParts({ y: pSel.y, mo: pad2(m) });
-                        const hoursInMonth = dim * 24;
-                        const onHours = b && b.cnt ? (b.on / b.cnt) * hoursInMonth : null;
+            try { applyMobileDayWindowToChart(entry.chart, mode); } catch {}
+            try { entry.chart.update('none'); } catch {}
 
             try {
                 const m = String(canvasId).match(/^zone(Hum|Valve)Chart(\d+)$/);
