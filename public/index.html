@@ -539,7 +539,7 @@
               onerror="this.style.display='none'"
             />
         </div>
-        <div class="status" style="margin-bottom: 12px;">UI 2026-02-01b</div>
+        <div class="status" style="margin-bottom: 12px;">UI 2026-02-01c</div>
 
         <div class="top-nav">
             <button class="mini-btn active" id="navDevices" type="button">Dispositivos</button>
@@ -3165,7 +3165,7 @@
                             stepSize: viewMode === 'day' ? (isSmallViewport() ? 60 : 120) : undefined,
                             maxTicksLimit: viewMode === 'day' ? (isSmallViewport() ? 25 : 13) : 8,
                             includeBounds: viewMode === 'day' ? true : undefined,
-                            callback: viewMode === 'day' ? (v) => minuteIndexToHHMM(v) : undefined,
+                            callback: viewMode === 'day' ? dayTickLabelCallback(dayTicksLikeMini().stepSize) : undefined,
                             maxRotation: 0,
                             minRotation: 0,
                             backdropColor: 'rgba(0,0,0,0)',
@@ -3232,7 +3232,7 @@
                             stepSize: viewMode === 'day' ? (isSmallViewport() ? 60 : 120) : undefined,
                             maxTicksLimit: viewMode === 'day' ? (isSmallViewport() ? 25 : 13) : 8,
                             includeBounds: viewMode === 'day' ? true : undefined,
-                            callback: viewMode === 'day' ? (v) => minuteIndexToHHMM(v) : undefined,
+                            callback: viewMode === 'day' ? dayTickLabelCallback(dayTicksLikeMini().stepSize) : undefined,
                             maxRotation: 0,
                             minRotation: 0,
                             backdropColor: 'rgba(0,0,0,0)',
@@ -3322,7 +3322,7 @@
                                 stepSize: viewMode === 'day' ? (isSmallViewport() ? 60 : 120) : undefined,
                                 maxTicksLimit: viewMode === 'day' ? (isSmallViewport() ? 25 : 13) : 8,
                                 includeBounds: viewMode === 'day' ? true : undefined,
-                                callback: viewMode === 'day' ? (v) => minuteIndexToHHMM(v) : undefined,
+                                callback: viewMode === 'day' ? dayTickLabelCallback(dayTicksLikeMini().stepSize) : undefined,
                                 maxRotation: 0,
                                 minRotation: 0,
                                 backdropColor: 'rgba(0,0,0,0)',
@@ -3451,10 +3451,25 @@
         }
 
         function dayTicksLikeMini() {
-            // EXACTAMENTE igual que en ensureMiniChart() en modo DÍA.
-            return {
-                stepSize: (isSmallViewport() ? 60 : 120),
-                maxTicksLimit: (isSmallViewport() ? 25 : 13)
+            // En móvil, demasiadas etiquetas se amontonan: usamos menos marcas.
+            // Nota: mantenemos el eje lineal 0..1439; solo reducimos etiquetas visibles.
+            const w = (() => { try { return Number(window.innerWidth) || 9999; } catch { return 9999; } })();
+            if (w <= 420) return { stepSize: 240, maxTicksLimit: 7, fontSize: 9 };   // cada 4h
+            if (w <= 640) return { stepSize: 180, maxTicksLimit: 9, fontSize: 10 };  // cada 3h
+            if (isSmallViewport()) return { stepSize: 120, maxTicksLimit: 13, fontSize: 11 }; // cada 2h
+            return { stepSize: 120, maxTicksLimit: 13, fontSize: 12 };
+        }
+
+        function dayTickLabelCallback(stepSize) {
+            const step = Number(stepSize);
+            return function (v) {
+                const n = Math.round(Number(v));
+                if (!Number.isFinite(n)) return '';
+                if (n <= 0) return '00:00';
+                if (n >= 1439) return '23:59';
+                if (!Number.isFinite(step) || step <= 0) return minuteIndexToHHMM(n);
+                if (n % step !== 0) return '';
+                return minuteIndexToHHMM(n);
             };
         }
 
@@ -4082,10 +4097,14 @@
                             e.chart.options.scales.x.type = 'linear';
                             try { applyMobileDayWindowToChart(e.chart, 'day'); } catch {}
                             e.chart.options.scales.x.ticks.autoSkip = false;
-                            e.chart.options.scales.x.ticks.stepSize = (isSmallViewport() ? 60 : 120);
-                            e.chart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
+                            {
+                                const cfg = dayTicksLikeMini();
+                                e.chart.options.scales.x.ticks.stepSize = cfg.stepSize;
+                                e.chart.options.scales.x.ticks.maxTicksLimit = cfg.maxTicksLimit;
+                                e.chart.options.scales.x.ticks.font = { size: cfg.fontSize };
+                            }
                             e.chart.options.scales.x.ticks.includeBounds = true;
-                            e.chart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
+                            e.chart.options.scales.x.ticks.callback = dayTickLabelCallback(dayTicksLikeMini().stepSize);
                         } else {
                             e.chart.options.scales.x.type = 'category';
                             e.chart.options.scales.x.reverse = false;
@@ -4132,6 +4151,8 @@
             const labels = [];
             const series = [];
             const ts = [];
+
+            const dayCfg = (mode === 'day') ? dayTicksLikeMini() : null;
 
             const chart = new Chart(canvas, {
                 type: 'line',
@@ -4206,10 +4227,11 @@
                             ticks: {
                                 color: '#fff',
                                 autoSkip: mode === 'day' ? false : true,
-                                stepSize: mode === 'day' ? (isSmallViewport() ? 60 : 120) : undefined,
-                                maxTicksLimit: mode === 'day' ? (isSmallViewport() ? 25 : 13) : 8,
+                                stepSize: mode === 'day' ? (dayCfg ? dayCfg.stepSize : 120) : undefined,
+                                maxTicksLimit: mode === 'day' ? (dayCfg ? dayCfg.maxTicksLimit : 13) : 8,
+                                font: mode === 'day' ? { size: (dayCfg ? dayCfg.fontSize : 12) } : undefined,
                                 includeBounds: mode === 'day' ? true : undefined,
-                                callback: mode === 'day' ? (v) => minuteIndexToHHMM(v) : undefined,
+                                callback: mode === 'day' ? dayTickLabelCallback(dayCfg ? dayCfg.stepSize : 120) : undefined,
                                 maxRotation: 0,
                                 minRotation: 0,
                                 backdropColor: 'rgba(0,0,0,0)',
@@ -4900,8 +4922,8 @@
                     }
                     humChart.options.scales.x.ticks.includeBounds = true;
                     valveChart.options.scales.x.ticks.includeBounds = true;
-                    humChart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
-                    valveChart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
+                    humChart.options.scales.x.ticks.callback = dayTickLabelCallback(dayTicksLikeMini().stepSize);
+                    valveChart.options.scales.x.ticks.callback = dayTickLabelCallback(dayTicksLikeMini().stepSize);
 
                     const nowIdx = getNowMinuteIndexMadrid();
                     if (isMobileDayWindow('day') && nowIdx != null) {
@@ -5416,8 +5438,8 @@
                         valveChart.options.scales.x.ticks.maxTicksLimit = (isSmallViewport() ? 25 : 13);
                         humChart.options.scales.x.ticks.includeBounds = true;
                         valveChart.options.scales.x.ticks.includeBounds = true;
-                        humChart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
-                        valveChart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
+                        humChart.options.scales.x.ticks.callback = dayTickLabelCallback(dayTicksLikeMini().stepSize);
+                        valveChart.options.scales.x.ticks.callback = dayTickLabelCallback(dayTicksLikeMini().stepSize);
 
                         const nowIdx = getNowMinuteIndexMadrid();
                         if (isMobileDayWindow('day') && nowIdx != null) {
@@ -5703,8 +5725,8 @@
                     }
                     humChart.options.scales.x.ticks.includeBounds = true;
                     valveChart.options.scales.x.ticks.includeBounds = true;
-                    humChart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
-                    valveChart.options.scales.x.ticks.callback = (v) => minuteIndexToHHMM(v);
+                    humChart.options.scales.x.ticks.callback = dayTickLabelCallback(dayTicksLikeMini().stepSize);
+                    valveChart.options.scales.x.ticks.callback = dayTickLabelCallback(dayTicksLikeMini().stepSize);
 
                     // Bounds: en escritorio día completo; en móvil ventana (igual que mini)
                     humChart.options.scales.x.min = 0;
@@ -5822,8 +5844,10 @@
                             try {
                                 humChart.options.scales.x.ticks.stepSize = cfg.stepSize;
                                 humChart.options.scales.x.ticks.maxTicksLimit = cfg.maxTicksLimit;
+                                humChart.options.scales.x.ticks.font = { size: cfg.fontSize };
                                 valveChart.options.scales.x.ticks.stepSize = cfg.stepSize;
                                 valveChart.options.scales.x.ticks.maxTicksLimit = cfg.maxTicksLimit;
+                                valveChart.options.scales.x.ticks.font = { size: cfg.fontSize };
                                 humChart.update('none');
                                 valveChart.update('none');
                             } catch {}
