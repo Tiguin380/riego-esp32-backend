@@ -481,6 +481,11 @@
             #deviceSection { top: auto; }
             .sensor-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
             .sensor-card { padding: 12px; }
+
+            /* En móvil, las mini-gráficas de ZONAS lo más anchas posible */
+            body { padding: 6px; }
+            .section { padding: 10px; }
+            #zonesContainer .sensor-card { padding-left: 8px; padding-right: 8px; }
             .btn-grid { grid-template-columns: repeat(2, 1fr); }
             .device-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             /* Zonas: evitar overflow horizontal en móvil */
@@ -532,7 +537,7 @@
               onerror="this.style.display='none'"
             />
         </div>
-        <div class="status" style="margin-bottom: 12px;">UI 2026-01-31e</div>
+        <div class="status" style="margin-bottom: 12px;">UI 2026-02-01a</div>
 
         <div class="top-nav">
             <button class="mini-btn active" id="navDevices" type="button">Dispositivos</button>
@@ -4049,10 +4054,6 @@
             const canvas = document.getElementById(canvasId);
             if (!canvas) return null;
 
-            // Scroll horizontal en móvil/tablet (modo DÍA)
-            applyTimelineScrollForCanvas(canvas, mode);
-            scrollCanvasToNowIfFollowing(canvas, mode);
-
             if (zoneMiniCharts.has(canvasId)) {
                 const e = zoneMiniCharts.get(canvasId);
                 try {
@@ -4102,7 +4103,7 @@
                         e.mode = mode;
                         try {
                             const pNow = getMadridParts(nowAdjusted());
-                            restoreMiniCache(canvasId, e, { mode, pNow });
+                            e._restored = !!restoreMiniCache(canvasId, e, { mode, pNow });
                         } catch {}
                         try { applyMobileDayWindowToChart(e.chart, mode); } catch {}
                         try { e.chart.update('none'); } catch {}
@@ -4218,10 +4219,6 @@
                 }
             });
 
-            // Reaplicar scroll (por si el canvas se reparentó en el DOM)
-            applyTimelineScrollForCanvas(canvas, mode);
-            scrollCanvasToNowIfFollowing(canvas, mode);
-
             const entry = {
                 chart,
                 labels,
@@ -4241,7 +4238,7 @@
             zoneMiniCharts.set(canvasId, entry);
 
             // Restaurar estado (para refresh/offline). En modo DÍA se restaura tras init del eje.
-            try { restoreMiniCache(canvasId, entry, { mode, pNow }); } catch {}
+            try { entry._restored = !!restoreMiniCache(canvasId, entry, { mode, pNow }); } catch { entry._restored = false; }
             try { applyMobileDayWindowToChart(entry.chart, mode); entry.chart.update('none'); } catch {}
 
             try {
@@ -4673,8 +4670,12 @@
                         }
                     }
 
-                    ensureMiniChart(canvasId, { stepped: def.stepped, yMin, yMax, yTickCb, yTickStep, mode });
-                    await loadMiniChartHistory(canvasId, channelId, { kind: def.kind === 'valve' ? 'valve' : 'value', mode });
+                    const e = ensureMiniChart(canvasId, { stepped: def.stepped, yMin, yMax, yTickCb, yTickStep, mode });
+                    // En móvil: si se restauró desde cache, NO recargar histórico al refrescar (evita “cambios” visuales).
+                    const skipHistory = !!(e && e._restored && isSmallViewport());
+                    if (!skipHistory) {
+                        await loadMiniChartHistory(canvasId, channelId, { kind: def.kind === 'valve' ? 'valve' : 'value', mode });
+                    }
                 }
 
                 try { updateZoneSummary(zoneNum); } catch {}
@@ -5813,10 +5814,6 @@
                         applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
                         applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
                         for (const slot of CMP_SLOTS) applyTimelineScrollForCanvas(document.getElementById(`cmpChart${slot}`), viewMode);
-                        for (const [canvasId, entry] of zoneMiniCharts.entries()) {
-                            if (!entry) continue;
-                            applyTimelineScrollForCanvas(document.getElementById(canvasId), entry.mode || 'day');
-                        }
 
                         if (viewMode === 'day') {
                             const cfg = dayTicksLikeMini();
