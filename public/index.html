@@ -3374,6 +3374,11 @@
 
         async function rebuildReadsChart() {
             if (!readsChart) return;
+            try {
+                readsChart.options.scales.y.min = 0;
+                readsChart.options.scales.y.max = 200;
+                readsChart.options.scales.y.ticks.stepSize = 20;
+            } catch {}
             const sel = (viewMode === 'month' || viewMode === 'year') ? getGlobalMonthSel() : null;
             const range = (viewMode === 'month' || viewMode === 'year')
                 ? rangeForMini(viewMode, sel || undefined)
@@ -4555,10 +4560,9 @@
                             e.chart.options.scales.x.ticks.autoSkip = true;
                             e.chart.options.scales.x.ticks.maxTicksLimit = (mode === 'month') ? 30 : 12;
                             e.chart.options.scales.x.ticks.font = { size: 10 };
-                            e.chart.options.scales.x.ticks.callback = (v) => {
+                            e.chart.options.scales.x.ticks.callback = function (v) {
                                 try {
-                                    if (mode === 'month') return String(Number(v));
-                                    return String(v);
+                                    return this.getLabelForValue(v);
                                 } catch { return String(v); }
                             };
                             delete e.chart.options.scales.x.ticks.stepSize;
@@ -4681,10 +4685,9 @@
                                 includeBounds: mode === 'day' ? true : undefined,
                                 callback: mode === 'day'
                                     ? dayTickLabelCallback(dayCfg ? dayCfg.stepSize : 120)
-                                    : ((v) => {
+                                    : (function (v) {
                                         try {
-                                            if (mode === 'month') return String(Number(v));
-                                            return String(v);
+                                            return this.getLabelForValue(v);
                                         } catch { return String(v); }
                                     }),
                                 maxRotation: 0,
