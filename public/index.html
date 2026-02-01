@@ -497,7 +497,7 @@
             /* ZONAS: 1 tarjeta por fila + padding mínimo (mini-gráficas más anchas) */
             #zonesSection { padding-left: 8px; padding-right: 8px; }
             #zonesContainer .sensor-grid { grid-template-columns: 1fr; gap: 10px; }
-            #zonesContainer .sensor-card { padding-left: 8px; padding-right: 8px; }
+            #zonesContainer .sensor-card { padding-left: 8px; padding-right: 8px;margin-bottom: 15px; }
             #zonesContainer .sensor-card.accent::after { left: 8px; right: 8px; }
             .btn-grid { grid-template-columns: repeat(2, 1fr); }
             .device-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -3886,7 +3886,7 @@
         // - se vea la línea de tiempo
         // - no se cambie el orden natural de horas
         // - el eje izquierdo permanezca visible
-        const MOBILE_DAY_WINDOW_MINUTES = 12 * 60; // minutos visibles en móvil/tablet (ajustable)
+        const MOBILE_DAY_WINDOW_MINUTES = 24 * 60; // mostrar día completo en móvil/tablet
 
         function getNowMinuteIndexMadrid() {
             try {
