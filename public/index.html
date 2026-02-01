@@ -539,7 +539,7 @@
               onerror="this.style.display='none'"
             />
         </div>
-        <div class="status" style="margin-bottom: 12px;">UI 2026-02-01c</div>
+        <div class="status" style="margin-bottom: 12px;">UI 2026-02-01d</div>
 
         <div class="top-nav">
             <button class="mini-btn active" id="navDevices" type="button">Dispositivos</button>
@@ -3461,14 +3461,11 @@
         }
 
         function dayTickLabelCallback(stepSize) {
-            const step = Number(stepSize);
             return function (v) {
                 const n = Math.round(Number(v));
                 if (!Number.isFinite(n)) return '';
                 if (n <= 0) return '00:00';
                 if (n >= 1439) return '23:59';
-                if (!Number.isFinite(step) || step <= 0) return minuteIndexToHHMM(n);
-                if (n % step !== 0) return '';
                 return minuteIndexToHHMM(n);
             };
         }
