@@ -294,6 +294,23 @@
         }
         .cmp-controls .cmp-select:hover { filter: brightness(1.05); }
         .cmp-controls .cmp-select:focus { outline: 2px solid rgba(56,189,248,0.40); outline-offset: 2px; }
+        .cmp-controls .cmp-select option,
+        .modal .cmp-select option {
+            background: #0f3460;
+            color: #e9eef7;
+        }
+
+        .cmp-section .cmp-header { display:flex; align-items:center; justify-content:space-between; gap: 12px; flex-wrap: wrap; margin: 4px 0 8px; }
+        .cmp-section .cmp-actions { display:flex; gap: 10px; align-items:center; flex-wrap: wrap; justify-content:flex-end; }
+
+        @media (max-width: 900px) {
+            .cmp-section .cmp-header { flex-direction: column; align-items: stretch; gap: 10px; }
+            .cmp-section .cmp-header > div { width: 100%; }
+            .cmp-section .cmp-actions { justify-content: flex-start; }
+            .cmp-controls { padding: 10px; }
+            .cmp-controls .control-row { flex-direction: column; align-items: stretch; }
+            .cmp-controls label { margin-bottom: 4px; }
+        }
 
         .cmp-add-row .mini-btn.tiny {
             background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(15,23,42,0.55));
@@ -780,9 +797,9 @@
             <div id="zonesContainer"></div>
         </div>
 
-        <div class="section">
+        <div class="section cmp-section">
             <h2> COMPARADOR DE GRÁFICAS</h2>
-            <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; flex-wrap: wrap; margin: 4px 0 8px;">
+            <div class="cmp-header">
                 <div>
                     <div class="sensor-label">FECHA / HORA </div>
                     <div style="font-size: 18px; font-weight: bold; color: #ddd;" id="nowEs">--</div>
@@ -791,7 +808,7 @@
                         <span id="connText">--</span>
                     </div>
                 </div>
-                <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap; justify-content:flex-end;">
+                <div class="cmp-actions">
                     <button class="mini-btn zone-mode-btn zone-mode-day" id="btnDia" type="button">DÍA</button>
                     <button class="mini-btn zone-mode-btn zone-mode-month" id="btnMes" type="button">MES</button>
                     <button class="mini-btn zone-mode-btn zone-mode-year" id="btnAno" type="button">AÑO</button>
@@ -7123,7 +7140,7 @@
                         <div class="muted" style="margin-top:-6px; margin-bottom: 10px; font-size:12px; color:#8fa3bf; line-height:1.35;">
                             Elige la planta y el sensor para crear una nueva gráfica en tiempo real (máx. 8).
                         </div>
-                        <div class="cmp-controls" style="margin: 0;">
+                        <div class="cmp-controls cmp-modal-controls" style="margin: 0;">
                             <div class="control-row" style="margin: 0 0 10px;">
                                 <label style="flex: 0 0 auto; min-width: 84px;">Planta:</label>
                                 <select class="cmp-select" id="cmpModalZone" title="Seleccionar planta"></select>
