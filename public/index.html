@@ -2816,7 +2816,22 @@
             const yy = Number(y);
             const mm = Number(mo);
             if (!Number.isFinite(yy) || !Number.isFinite(mm)) return 31;
-            return new Date(Date.UTC(yy, mm, 0)).getUTCDate();
+            const isLeap = (yy % 4 === 0) && ((yy % 100 !== 0) || (yy % 400 === 0));
+            switch (mm) {
+                case 1: return 31; // Enero
+                case 2: return isLeap ? 29 : 28; // Febrero
+                case 3: return 31; // Marzo
+                case 4: return 30; // Abril
+                case 5: return 31; // Mayo
+                case 6: return 30; // Junio
+                case 7: return 31; // Julio
+                case 8: return 31; // Agosto
+                case 9: return 30; // Septiembre
+                case 10: return 31; // Octubre
+                case 11: return 30; // Noviembre
+                case 12: return 31; // Diciembre
+                default: return 31;
+            }
         }
 
         function madridDayKeyFromParts({ y, mo, d }) {
