@@ -4533,6 +4533,7 @@
 
                         e.chart.data.datasets[0].stepped = !!stepped;
                         e.chart.data.datasets[0].tension = stepped ? 0 : 0.25;
+                        e.chart.data.datasets[0].spanGaps = true;
                         if (yMin == null) delete e.chart.options.scales.y.min;
                         else e.chart.options.scales.y.min = yMin;
                         if (yMax == null) delete e.chart.options.scales.y.max;
@@ -4620,6 +4621,7 @@
                         fill: true,
                         stepped: !!stepped,
                         tension: stepped ? 0 : 0.25,
+                        spanGaps: true,
                         pointRadius: 0
                     }]
                 },
