@@ -1850,7 +1850,7 @@
 
                     function bumpThreshold(delta) {
                         const cur = Number(rng.value);
-                        const next = Math.max(1, Math.min(100, (Number.isFinite(cur) ? cur : Number(zonesState[i].humidity_low_threshold ?? 25)) + delta)));
+                        const next = Math.max(1, Math.min(100, (Number.isFinite(cur) ? cur : Number(zonesState[i].humidity_low_threshold ?? 25)) + delta));
                         rng.value = String(next);
                         zonesState[i].humidity_low_threshold = next;
                         val.textContent = `${Math.round(Number(zonesState[i].humidity_low_threshold ?? 25))}%`;
