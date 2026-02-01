@@ -768,6 +768,7 @@
                     <button class="btn btn-azul" id="btnMes" type="button">MES</button>
                     <button class="btn btn-azul" id="btnAno" type="button">AÑO</button>
                 </div>
+                <div id="globalMonthYearControls" class="hidden" style="width:100%; margin-top: 10px;"></div>
             </div>
 
             <div class="channel-cards">
@@ -798,34 +799,6 @@
                 <div class="v" id="periodValue">--</div>
             </div>
             <div class="charts-grid">
-                <div class="sensor-card chart-box accent accent-green">
-                    <div class="sensor-label">Humedad del suelo (%)</div>
-                    <div class="sensor-meta">
-                        <div class="sensor-meta-top">
-                            <div class="sensor-meta-avg" id="avgHumidity"><span class="meta-label">Media:</span> <span class="meta-value" data-role="value">--</span></div>
-                            <div class="sensor-meta-last" id="lastPoint"><span class="meta-label">Actualizado:</span> <span class="meta-value" data-role="value">--</span></div>
-                        </div>
-                    </div>
-                    <div class="chart-wrap">
-                        <canvas id="humChart"></canvas>
-                    </div>
-                </div>
-                <div class="sensor-card chart-box accent accent-red">
-                    <div class="sensor-label">Válvula (ON/OFF) + tiempo activa</div>
-                    <div class="sensor-meta" style="margin-top: 6px;">
-                        <div class="sensor-meta-top">
-                            <div class="valve-indicator" style="margin-top: 0; justify-content:flex-start;">
-                                <div class="valve-dot" id="valveDotChart"></div>
-                                <div class="valve-text" id="valveTextChart">--</div>
-                            </div>
-                            <div class="sensor-meta-avg" id="valveOnTime"><span class="meta-label">Tiempo ON:</span> <span class="meta-value" data-role="value">--</span></div>
-                        </div>
-                    </div>
-                    <div class="chart-wrap">
-                        <canvas id="valveChart"></canvas>
-                    </div>
-                </div>
-
                 <div class="sensor-card chart-box accent accent-indigo" id="cmpBox3" style="display:none;">
                     <div style="display:flex; justify-content:space-between; align-items:center; gap: 10px;">
                         <div class="sensor-label" id="cmpTitle3">Comparación 3</div>
@@ -3202,10 +3175,105 @@
 
         // --- Modo de visualización ---
         let viewMode = 'day'; // day | month | year
+
+        // Selector global MES/AÑO (para que Enero y cualquier mes/año se pueda ver en las gráficas globales)
+        const MONTHS_ES = [
+            { mo: '01', name: 'ENERO' }, { mo: '02', name: 'FEBRERO' }, { mo: '03', name: 'MARZO' }, { mo: '04', name: 'ABRIL' },
+            { mo: '05', name: 'MAYO' }, { mo: '06', name: 'JUNIO' }, { mo: '07', name: 'JULIO' }, { mo: '08', name: 'AGOSTO' },
+            { mo: '09', name: 'SEPTIEMBRE' }, { mo: '10', name: 'OCTUBRE' }, { mo: '11', name: 'NOVIEMBRE' }, { mo: '12', name: 'DICIEMBRE' }
+        ];
+        let globalMonthSel = null; // { y:'YYYY', mo:'MM' }
+        function getGlobalMonthSel() {
+            if (globalMonthSel && globalMonthSel.y && globalMonthSel.mo) return globalMonthSel;
+            const pNow = getMadridParts(nowAdjusted());
+            globalMonthSel = { y: String(pNow.y), mo: String(pNow.mo) };
+            return globalMonthSel;
+        }
+        function setGlobalMonthSel({ y, mo } = {}) {
+            const yy = String(y || '');
+            const mm = String(mo || '');
+            if (!/^\d{4}$/.test(yy)) return;
+            if (!/^\d{2}$/.test(mm)) return;
+            globalMonthSel = { y: yy, mo: mm };
+        }
+        function renderGlobalMonthYearControls() {
+            const host = document.getElementById('globalMonthYearControls');
+            if (!host) return;
+            host.innerHTML = '';
+
+            const sel = getGlobalMonthSel();
+
+            const yearRow = document.createElement('div');
+            yearRow.className = 'zone-year-pill';
+            yearRow.id = 'globalYearRow';
+
+            const bPrev = document.createElement('button');
+            bPrev.type = 'button';
+            bPrev.className = 'mini-btn';
+            bPrev.textContent = '◀';
+            bPrev.title = 'Año anterior';
+            bPrev.addEventListener('click', () => {
+                const cur = getGlobalMonthSel();
+                const yy = Math.max(2000, (Number(cur.y) || new Date().getFullYear()) - 1);
+                setGlobalMonthSel({ y: String(yy), mo: cur.mo });
+                renderGlobalMonthYearControls();
+                rebuildReadsChart().catch(() => {});
+            });
+
+            const label = document.createElement('div');
+            label.className = 'zone-year-label';
+            label.id = 'globalYearLabel';
+            label.textContent = sel.y;
+
+            const bNext = document.createElement('button');
+            bNext.type = 'button';
+            bNext.className = 'mini-btn';
+            bNext.textContent = '▶';
+            bNext.title = 'Año siguiente';
+            bNext.addEventListener('click', () => {
+                const cur = getGlobalMonthSel();
+                const yy = Math.min(2100, (Number(cur.y) || new Date().getFullYear()) + 1);
+                setGlobalMonthSel({ y: String(yy), mo: cur.mo });
+                renderGlobalMonthYearControls();
+                rebuildReadsChart().catch(() => {});
+            });
+
+            yearRow.appendChild(bPrev);
+            yearRow.appendChild(label);
+            yearRow.appendChild(bNext);
+            host.appendChild(yearRow);
+
+            const monthRow = document.createElement('div');
+            monthRow.className = 'zone-month-row';
+            monthRow.id = 'globalMonthRow';
+            for (const m of MONTHS_ES) {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'mini-btn zone-month-btn';
+                b.textContent = m.name;
+                b.id = `globalBtnMonth_${m.mo}`;
+                b.classList.toggle('active', m.mo === sel.mo);
+                b.addEventListener('click', () => {
+                    const cur = getGlobalMonthSel();
+                    setGlobalMonthSel({ y: cur.y, mo: m.mo });
+                    renderGlobalMonthYearControls();
+                    rebuildReadsChart().catch(() => {});
+                });
+                monthRow.appendChild(b);
+            }
+            host.appendChild(monthRow);
+
+            // Visibilidad según modo
+            host.classList.toggle('hidden', !(viewMode === 'month' || viewMode === 'year'));
+            monthRow.style.display = (viewMode === 'month') ? 'flex' : 'none';
+            yearRow.style.display = (viewMode === 'month' || viewMode === 'year') ? 'inline-flex' : 'none';
+        }
+
         function setActiveModeButtons(mode) {
             document.getElementById('btnDia').classList.toggle('active', mode === 'day');
             document.getElementById('btnMes').classList.toggle('active', mode === 'month');
             document.getElementById('btnAno').classList.toggle('active', mode === 'year');
+            try { renderGlobalMonthYearControls(); } catch {}
         }
         setActiveModeButtons(viewMode);
 
@@ -3236,8 +3304,14 @@
         }
 
         // Preparar wrappers de scroll (móvil/tablet modo DÍA)
-        applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
-        applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
+        try {
+            const hc = document.getElementById('humChart');
+            if (hc) applyTimelineScrollForCanvas(hc, viewMode);
+        } catch {}
+        try {
+            const vc = document.getElementById('valveChart');
+            if (vc) applyTimelineScrollForCanvas(vc, viewMode);
+        } catch {}
 
         // --- Gráfica de conexiones (lecturas por bucket) ---
         const readsLabels = [];
@@ -3300,7 +3374,10 @@
 
         async function rebuildReadsChart() {
             if (!readsChart) return;
-            const range = rangeForMode(viewMode);
+            const sel = (viewMode === 'month' || viewMode === 'year') ? getGlobalMonthSel() : null;
+            const range = (viewMode === 'month' || viewMode === 'year')
+                ? rangeForMini(viewMode, sel || undefined)
+                : rangeForMode(viewMode);
             const rangeQs = (range && range.from && range.to)
                 ? `&from=${encodeURIComponent(range.from.toISOString())}&to=${encodeURIComponent(range.to.toISOString())}`
                 : '';
@@ -3337,8 +3414,8 @@
                 }
                 readsChart.options.scales.x.ticks.maxTicksLimit = 24;
             } else if (viewMode === 'month') {
-                const pNow = getMadridParts(nowAdjusted());
-                const daysInMonth = daysInMadridMonthFromParts({ y: pNow.y, mo: pNow.mo });
+                const pSel = sel && sel.y && sel.mo ? { y: String(sel.y), mo: String(sel.mo) } : getMadridParts(nowAdjusted());
+                const daysInMonth = daysInMadridMonthFromParts({ y: pSel.y, mo: pSel.mo });
                 const byDay = {};
                 for (const row of rows) {
                     const key = row?.ts_madrid_day_key || dayKeyForTs(row?.ts);
@@ -3347,7 +3424,7 @@
                     byDay[key] = Math.max(0, Math.trunc(c));
                 }
                 for (let day = 1; day <= daysInMonth; day++) {
-                    const key = `${pNow.y}-${pNow.mo}-${pad2(day)}`;
+                    const key = `${pSel.y}-${pSel.mo}-${pad2(day)}`;
                     const c = Math.max(0, Math.trunc(byDay[key] || 0));
                     labels.push(pad2(day));
                     series.push(c);
@@ -3355,7 +3432,7 @@
                 }
                 readsChart.options.scales.x.ticks.maxTicksLimit = 30;
             } else {
-                const pNow = getMadridParts(nowAdjusted());
+                const pSel = sel && sel.y ? { y: String(sel.y) } : getMadridParts(nowAdjusted());
                 const byMonth = {};
                 for (const row of rows) {
                     const key = row?.ts_madrid_month_key || monthKeyForTs(row?.ts);
@@ -3363,22 +3440,38 @@
                     if (!key || !Number.isFinite(c)) continue;
                     byMonth[key] = (byMonth[key] || 0) + Math.max(0, Math.trunc(c));
                 }
+                let daysYear = 0;
                 for (let mo = 1; mo <= 12; mo++) {
-                    const key = `${pNow.y}-${pad2(mo)}`;
-                    const c = Math.max(0, Math.trunc(byMonth[key] || 0));
+                    const key = `${pSel.y}-${pad2(mo)}`;
+                    const monthTotal = Math.max(0, Math.trunc(byMonth[key] || 0));
+                    const dim = daysInMadridMonthFromParts({ y: pSel.y, mo: pad2(mo) });
+                    daysYear += dim;
+                    // Para que la escala 0..200 tenga sentido: media diaria del mes (no suma mensual)
+                    const c = dim ? (monthTotal / dim) : 0;
                     labels.push(pad2(mo));
-                    series.push(c);
-                    total += c;
+                    series.push(Number(c.toFixed(0)));
+                    total += monthTotal;
                 }
                 readsChart.options.scales.x.ticks.maxTicksLimit = 12;
+                // En AÑO mostramos media diaria del año (para que quede en 0..200 aprox)
+                total = daysYear ? (total / daysYear) : 0;
             }
 
             setSeries(readsLabels, readsSeries, labels, series);
-            setReadsMetaTotal(total, { label: viewMode === 'day' ? 'Hoy (por hora)' : (viewMode === 'month' ? 'Este mes (por día)' : 'Este año (por mes)') });
+            if (viewMode === 'year') {
+                const s = sel && sel.y ? sel : getGlobalMonthSel();
+                setReadsMetaTotal(total, { label: `${s.y} (media diaria)` });
+            } else if (viewMode === 'month') {
+                const s = sel && sel.y && sel.mo ? sel : getGlobalMonthSel();
+                setReadsMetaTotal(total, { label: `${s.mo}/${s.y} (por día)` });
+            } else {
+                setReadsMetaTotal(total, { label: 'Hoy (por hora)' });
+            }
             readsChart.update('none');
         }
 
-        const humChart = new Chart(document.getElementById('humChart'), {
+        const humChartEl = document.getElementById('humChart');
+        const humChart = humChartEl ? new Chart(humChartEl, {
             type: 'line',
             data: {
                 labels: humLabels,
@@ -3430,11 +3523,12 @@
                     }
                 }
             }
-        });
+        }) : null;
 
         // Ventana móvil (si aplica). Diferido para evitar TDZ (const aún no inicializadas).
         setTimeout(() => {
             try {
+                if (!humChart) return;
                 if (viewMode === 'day') {
                     const cfg = dayTicksLikeMini();
                     humChart.options.scales.x.ticks.stepSize = cfg.stepSize;
@@ -3447,7 +3541,8 @@
             } catch {}
         }, 0);
 
-        const valveChart = new Chart(document.getElementById('valveChart'), {
+        const valveChartEl = document.getElementById('valveChart');
+        const valveChart = valveChartEl ? new Chart(valveChartEl, {
             type: 'line',
             data: {
                 labels: valveLabels,
@@ -3500,11 +3595,12 @@
                     }
                 }
             }
-        });
+        }) : null;
 
         // Ventana móvil (si aplica). Diferido para evitar TDZ (const aún no inicializadas).
         setTimeout(() => {
             try {
+                if (!valveChart) return;
                 if (viewMode === 'day') {
                     const cfg = dayTicksLikeMini();
                     valveChart.options.scales.x.ticks.stepSize = cfg.stepSize;
@@ -4685,6 +4781,13 @@
             const entry = zoneMiniCharts.get(canvasId);
             if (!entry) return;
 
+            // Si el usuario ha cambiado MES/AÑO, permitimos cargar histórico aunque sea “más antiguo” que el cache.
+            let allowOlderIncoming = false;
+            try {
+                const mZ = String(canvasId).match(/^zone(?:[A-Za-z]+)Chart(\d+)$/);
+                if (mZ) allowOlderIncoming = consumeForceZoneMiniHistoryReload(Number(mZ[1]));
+            } catch {}
+
             const labels = [];
             const series = [];
             const tsArr = [];
@@ -4842,7 +4945,7 @@
                 const existingLast = entry.lastTsMs;
                 const hasExisting = existingLast != null && Number.isFinite(Number(existingLast));
                 const hasIncoming = lastTsMs != null && Number.isFinite(Number(lastTsMs));
-                if (hasExisting && (!hasIncoming || Number(lastTsMs) < Number(existingLast))) {
+                if (!allowOlderIncoming && hasExisting && (!hasIncoming || Number(lastTsMs) < Number(existingLast))) {
                     try { applyMobileDayWindowToChart(entry.chart, mode); } catch {}
                     try { entry.chart.update('none'); } catch {}
                     return;
@@ -4873,7 +4976,9 @@
             }
 
                 try { applyMobileDayWindowToChart(entry.chart, mode); } catch {}
-                entry.chart.update('none');
+                        const dim = daysInMadridMonthFromParts({ y: pSel.y, mo: pad2(m) });
+                        const hoursInMonth = dim * 24;
+                        const onHours = b && b.cnt ? (b.on / b.cnt) * hoursInMonth : null;
 
             try {
                 const m = String(canvasId).match(/^zone(Hum|Valve)Chart(\d+)$/);
@@ -5214,11 +5319,13 @@
                     totalValveOnMs += v.valveOnMs || 0;
                 }
 
-                valveChart.options.scales.y.min = 0;
-                valveChart.options.scales.y.max = 1;
-                valveChart.options.scales.y.ticks.callback = (v) => (v >= 0.5 ? 'ON' : 'OFF');
-                valveChart.options.scales.y.ticks.stepSize = 1;
-                valveChart.data.datasets[0].label = 'Válvula (duty 0..1)';
+                if (valveChart) {
+                    valveChart.options.scales.y.min = 0;
+                    valveChart.options.scales.y.max = 1;
+                    valveChart.options.scales.y.ticks.callback = (v) => (v >= 0.5 ? 'ON' : 'OFF');
+                    valveChart.options.scales.y.ticks.stepSize = 1;
+                    valveChart.data.datasets[0].label = 'Válvula (duty 0..1)';
+                }
 
             } else if (viewMode === 'month') {
                 const monthKey = `${p.y}-${p.mo}`;
@@ -5245,11 +5352,13 @@
                     }
                 }
 
-                valveChart.options.scales.y.min = 0;
-                valveChart.options.scales.y.max = undefined;
-                valveChart.options.scales.y.ticks.callback = undefined;
-                valveChart.options.scales.y.ticks.stepSize = undefined;
-                valveChart.data.datasets[0].label = 'Válvula (horas ON/día)';
+                if (valveChart) {
+                    valveChart.options.scales.y.min = 0;
+                    valveChart.options.scales.y.max = undefined;
+                    valveChart.options.scales.y.ticks.callback = undefined;
+                    valveChart.options.scales.y.ticks.stepSize = undefined;
+                    valveChart.data.datasets[0].label = 'Válvula (horas ON/día)';
+                }
 
             } else {
                 const yearKey = `${p.y}-`;
@@ -5270,11 +5379,13 @@
                     totalValveOnMs += v.valveOnMs || 0;
                 }
 
-                valveChart.options.scales.y.min = 0;
-                valveChart.options.scales.y.max = undefined;
-                valveChart.options.scales.y.ticks.callback = undefined;
-                valveChart.options.scales.y.ticks.stepSize = undefined;
-                valveChart.data.datasets[0].label = 'Válvula (horas ON/mes)';
+                if (valveChart) {
+                    valveChart.options.scales.y.min = 0;
+                    valveChart.options.scales.y.max = undefined;
+                    valveChart.options.scales.y.ticks.callback = undefined;
+                    valveChart.options.scales.y.ticks.stepSize = undefined;
+                    valveChart.data.datasets[0].label = 'Válvula (horas ON/mes)';
+                }
             }
 
             const avgHum = totalHumCount ? (totalHumSum / totalHumCount) : null;
@@ -5291,79 +5402,81 @@
 
             setSeries(humLabels, humSeries, labels, hum);
             setSeries(valveLabels, valveSeries, labels, valve);
-            if (viewMode === 'day') {
-                try {
-                    setDayPoints(humDayPoints, hum);
-                    setDayPoints(valveDayPoints, valve);
 
-                    humChart.data.labels = [];
-                    valveChart.data.labels = [];
-                    humChart.data.datasets[0].data = humDayPoints;
-                    valveChart.data.datasets[0].data = valveDayPoints;
+            // Si las gráficas principales están eliminadas (humChart/valveChart == null), no intentamos renderizarlas.
+            if (humChart && valveChart) {
+                if (viewMode === 'day') {
+                    try {
+                        setDayPoints(humDayPoints, hum);
+                        setDayPoints(valveDayPoints, valve);
 
-                    humChart.options.scales.x.type = 'linear';
-                    valveChart.options.scales.x.type = 'linear';
-                    humChart.options.scales.x.reverse = false;
-                    valveChart.options.scales.x.reverse = false;
+                        humChart.data.labels = [];
+                        valveChart.data.labels = [];
+                        humChart.data.datasets[0].data = humDayPoints;
+                        valveChart.data.datasets[0].data = valveDayPoints;
 
-                    humChart.options.scales.x.ticks.autoSkip = false;
-                    valveChart.options.scales.x.ticks.autoSkip = false;
-                    // En móvil, en principales mostramos menos etiquetas para que no se amontonen.
-                    // (Mini-gráficas mantienen su propio stepSize.)
-                    {
-                        const cfg = dayTicksLikeMini();
-                        humChart.options.scales.x.ticks.stepSize = cfg.stepSize;
-                        valveChart.options.scales.x.ticks.stepSize = cfg.stepSize;
-                        humChart.options.scales.x.ticks.maxTicksLimit = cfg.maxTicksLimit;
-                        valveChart.options.scales.x.ticks.maxTicksLimit = cfg.maxTicksLimit;
-                        humChart.options.scales.x.ticks.font = { size: cfg.fontSize };
-                        valveChart.options.scales.x.ticks.font = { size: cfg.fontSize };
-                        humChart.options.scales.x.ticks.callback = dayTickLabelCallback(cfg.stepSize);
-                        valveChart.options.scales.x.ticks.callback = dayTickLabelCallback(cfg.stepSize);
-                    }
-                    humChart.options.scales.x.ticks.includeBounds = true;
-                    valveChart.options.scales.x.ticks.includeBounds = true;
+                        humChart.options.scales.x.type = 'linear';
+                        valveChart.options.scales.x.type = 'linear';
+                        humChart.options.scales.x.reverse = false;
+                        valveChart.options.scales.x.reverse = false;
 
-                    const nowIdx = getNowMinuteIndexMadrid();
-                    if (isMobileDayWindow('day') && nowIdx != null) {
-                        const win = computeMobileDayWindow(nowIdx);
-                        humChart.options.scales.x.min = win ? win.minIdx : 0;
-                        humChart.options.scales.x.max = win ? win.maxIdx : 1439;
-                        valveChart.options.scales.x.min = win ? win.minIdx : 0;
-                        valveChart.options.scales.x.max = win ? win.maxIdx : 1439;
-                    } else {
-                        humChart.options.scales.x.min = 0;
-                        humChart.options.scales.x.max = 1439;
-                        valveChart.options.scales.x.min = 0;
-                        valveChart.options.scales.x.max = 1439;
-                    }
-                } catch {}
-            } else {
-                try {
-                    humChart.data.labels = humLabels;
-                    valveChart.data.labels = valveLabels;
-                    humChart.data.datasets[0].data = humSeries;
-                    valveChart.data.datasets[0].data = valveSeries;
-                    humChart.options.scales.x.type = 'category';
-                    valveChart.options.scales.x.type = 'category';
-                    delete humChart.options.scales.x.min;
-                    delete humChart.options.scales.x.max;
-                    delete valveChart.options.scales.x.min;
-                    delete valveChart.options.scales.x.max;
-                    humChart.options.scales.x.ticks.autoSkip = true;
-                    valveChart.options.scales.x.ticks.autoSkip = true;
-                    humChart.options.scales.x.ticks.maxTicksLimit = 8;
-                    valveChart.options.scales.x.ticks.maxTicksLimit = 8;
-                    humChart.options.scales.x.ticks.callback = undefined;
-                    valveChart.options.scales.x.ticks.callback = undefined;
-                    delete humChart.options.scales.x.ticks.stepSize;
-                    delete valveChart.options.scales.x.ticks.stepSize;
-                    delete humChart.options.scales.x.ticks.includeBounds;
-                    delete valveChart.options.scales.x.ticks.includeBounds;
-                } catch {}
+                        humChart.options.scales.x.ticks.autoSkip = false;
+                        valveChart.options.scales.x.ticks.autoSkip = false;
+                        {
+                            const cfg = dayTicksLikeMini();
+                            humChart.options.scales.x.ticks.stepSize = cfg.stepSize;
+                            valveChart.options.scales.x.ticks.stepSize = cfg.stepSize;
+                            humChart.options.scales.x.ticks.maxTicksLimit = cfg.maxTicksLimit;
+                            valveChart.options.scales.x.ticks.maxTicksLimit = cfg.maxTicksLimit;
+                            humChart.options.scales.x.ticks.font = { size: cfg.fontSize };
+                            valveChart.options.scales.x.ticks.font = { size: cfg.fontSize };
+                            humChart.options.scales.x.ticks.callback = dayTickLabelCallback(cfg.stepSize);
+                            valveChart.options.scales.x.ticks.callback = dayTickLabelCallback(cfg.stepSize);
+                        }
+                        humChart.options.scales.x.ticks.includeBounds = true;
+                        valveChart.options.scales.x.ticks.includeBounds = true;
+
+                        const nowIdx = getNowMinuteIndexMadrid();
+                        if (isMobileDayWindow('day') && nowIdx != null) {
+                            const win = computeMobileDayWindow(nowIdx);
+                            humChart.options.scales.x.min = win ? win.minIdx : 0;
+                            humChart.options.scales.x.max = win ? win.maxIdx : 1439;
+                            valveChart.options.scales.x.min = win ? win.minIdx : 0;
+                            valveChart.options.scales.x.max = win ? win.maxIdx : 1439;
+                        } else {
+                            humChart.options.scales.x.min = 0;
+                            humChart.options.scales.x.max = 1439;
+                            valveChart.options.scales.x.min = 0;
+                            valveChart.options.scales.x.max = 1439;
+                        }
+                    } catch {}
+                } else {
+                    try {
+                        humChart.data.labels = humLabels;
+                        valveChart.data.labels = valveLabels;
+                        humChart.data.datasets[0].data = humSeries;
+                        valveChart.data.datasets[0].data = valveSeries;
+                        humChart.options.scales.x.type = 'category';
+                        valveChart.options.scales.x.type = 'category';
+                        delete humChart.options.scales.x.min;
+                        delete humChart.options.scales.x.max;
+                        delete valveChart.options.scales.x.min;
+                        delete valveChart.options.scales.x.max;
+                        humChart.options.scales.x.ticks.autoSkip = true;
+                        valveChart.options.scales.x.ticks.autoSkip = true;
+                        humChart.options.scales.x.ticks.maxTicksLimit = 8;
+                        valveChart.options.scales.x.ticks.maxTicksLimit = 8;
+                        humChart.options.scales.x.ticks.callback = undefined;
+                        valveChart.options.scales.x.ticks.callback = undefined;
+                        delete humChart.options.scales.x.ticks.stepSize;
+                        delete valveChart.options.scales.x.ticks.stepSize;
+                        delete humChart.options.scales.x.ticks.includeBounds;
+                        delete valveChart.options.scales.x.ticks.includeBounds;
+                    } catch {}
+                }
+                humChart.update('none');
+                valveChart.update('none');
             }
-            humChart.update('none');
-            valveChart.update('none');
             try {
                 applyTimelineScrollForCanvas(document.getElementById('humChart'), viewMode);
                 applyTimelineScrollForCanvas(document.getElementById('valveChart'), viewMode);
@@ -5373,15 +5486,17 @@
 
             const valveDotChart = document.getElementById('valveDotChart');
             const valveTextChart = document.getElementById('valveTextChart');
-            if (store.last && store.last.on) {
-                valveDotChart.className = 'valve-dot on';
-                valveTextChart.textContent = 'ENCENDIDA';
-            } else if (store.last) {
-                valveDotChart.className = 'valve-dot off';
-                valveTextChart.textContent = 'APAGADA';
-            } else {
-                valveDotChart.className = 'valve-dot';
-                valveTextChart.textContent = 'SIN DATOS';
+            if (valveDotChart && valveTextChart) {
+                if (store.last && store.last.on) {
+                    valveDotChart.className = 'valve-dot on';
+                    valveTextChart.textContent = 'ENCENDIDA';
+                } else if (store.last) {
+                    valveDotChart.className = 'valve-dot off';
+                    valveTextChart.textContent = 'APAGADA';
+                } else {
+                    valveDotChart.className = 'valve-dot';
+                    valveTextChart.textContent = 'SIN DATOS';
+                }
             }
         }
 
