@@ -5195,9 +5195,9 @@
                             yTickStep = 1;
                         } else {
                             yMin = 0;
-                            yMax = undefined;
+                            yMax = 200;
                             yTickCb = undefined;
-                            yTickStep = undefined;
+                            yTickStep = 20;
                         }
                     }
 
@@ -5654,10 +5654,10 @@
                         const v = row?.value == null ? null : Number(row.value);
                         sArr[idx].y = (v == null || Number.isNaN(v)) ? null : Number(v.toFixed(2));
                     }
-                }
-
-                // Igual que mini: labels vacío y serie de puntos {x,y}
-                for (const p of sArr) series.push(p);
+                            yMin = 0;
+                            yMax = 200;
+                            yTickCb = undefined;
+                            yTickStep = 20;
             } else if (viewMode === 'month') {
                 const byDay = {};
                 for (const row of rows) {
