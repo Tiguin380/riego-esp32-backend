@@ -1413,50 +1413,6 @@
                 }
             }
 
-            async function setManualValveState(state, btnEl) {
-                const desired = String(state || '').toUpperCase();
-                if (!['ON', 'OFF', 'AUTO'].includes(desired)) return;
-                const headersBase = { 'Content-Type': 'application/json' };
-                const saved = (getSavedToken(deviceCode) || '').trim();
-                const headers1 = { ...headersBase };
-                if (saved) headers1['X-Device-Token'] = saved;
-
-                async function doSave(headers, body) {
-                    return fetch(`/api/config/${encodeURIComponent(deviceCode)}`, {
-                        method: 'POST',
-                        headers,
-                        credentials: 'include',
-                        body: JSON.stringify(body)
-                    });
-                }
-
-                const oldText = btnEl ? btnEl.textContent : '';
-                if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Enviando…'; }
-                try {
-                    let res = await doSave(headers1, { manual_valve_state: desired });
-                    if (res.status === 401 || res.status === 403) {
-                        const msg = saved
-                            ? 'Token guardado inválido o caducado. Pega el token correcto:'
-                            : 'Este dispositivo requiere token para guardar. Pégalo aquí:';
-                        const t = (prompt(msg) || '').trim();
-                        if (t) {
-                            saveToken(deviceCode, t);
-                            const headers2 = { ...headersBase, 'X-Device-Token': t };
-                            res = await doSave(headers2, { manual_valve_state: desired });
-                        }
-                    }
-                    if (!res.ok) throw new Error('Error guardando');
-                    if (btnEl) btnEl.textContent = 'OK';
-                    setTimeout(() => {
-                        if (btnEl) btnEl.textContent = oldText || btnEl.textContent;
-                    }, 900);
-                } catch (e) {
-                    try { alert('No se pudo cambiar la válvula. Revisa el token o la conexión.'); } catch {}
-                } finally {
-                    if (btnEl) { btnEl.disabled = false; }
-                }
-            }
-
             try { destroyZoneMiniCharts(); } catch {}
             container.innerHTML = '';
 
@@ -1903,31 +1859,6 @@
                         await saveZoneConfig(zoneNum, btn);
                     });
 
-                    const valveRow = document.createElement('div');
-                    valveRow.className = 'control-row';
-                    valveRow.style.marginTop = '8px';
-                    valveRow.classList.add('zone-threshold-valve-row');
-
-                    const valveOnBtn = document.createElement('button');
-                    valveOnBtn.type = 'button';
-                    valveOnBtn.className = 'mini-btn zone-controls-btn tiny';
-                    valveOnBtn.textContent = 'Encender válvula';
-
-                    const valveOffBtn = document.createElement('button');
-                    valveOffBtn.type = 'button';
-                    valveOffBtn.className = 'mini-btn danger tiny';
-                    valveOffBtn.textContent = 'Apagar válvula';
-
-                    valveRow.appendChild(valveOnBtn);
-                    valveRow.appendChild(valveOffBtn);
-                    thrCard.appendChild(valveRow);
-
-                    valveOnBtn.addEventListener('click', async () => {
-                        await setManualValveState('ON', valveOnBtn);
-                    });
-                    valveOffBtn.addEventListener('click', async () => {
-                        await setManualValveState('OFF', valveOffBtn);
-                    });
                 }
 
                 const grid = document.createElement('div');
