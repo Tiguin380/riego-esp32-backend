@@ -192,11 +192,24 @@
             flex-wrap: wrap;
         }
 
+        .zone-threshold-row-top {
+            justify-content: space-between;
+        }
+
+        .zone-threshold-row-bottom {
+            justify-content: flex-end;
+        }
+
         @media (max-width: 900px) {
             .zone-threshold-card .zone-threshold-row { gap: 8px; }
             .zone-threshold-card .zone-threshold-row .mini-btn { min-width: 44px; }
             .zone-threshold-card .zone-threshold-row .sensor-value.small { min-width: 56px; }
             .zone-threshold-card .zone-threshold-valve-row .mini-btn { flex: 1 1 140px; }
+            .zone-threshold-row-top { flex-wrap: nowrap; }
+            .zone-threshold-row-top input[type="range"] { flex: 1 1 auto; }
+            .zone-threshold-row-bottom { flex-wrap: wrap; }
+            .zone-threshold-row-bottom .sensor-value.small { flex: 1 1 auto; text-align: left; }
+            .zone-threshold-row-bottom .mini-btn { flex: 1 1 140px; }
         }
 
         .sensor-meta { margin-top: 6px; margin-bottom: 8px; display:flex; flex-direction: column; gap: 4px; }
@@ -1814,10 +1827,9 @@
                     metaLine.textContent = 'Se guarda solo en esta planta';
                     meta.appendChild(metaLine);
 
-                    const row = document.createElement('div');
-                    row.className = 'control-row';
-                    row.style.marginBottom = '0';
-                    row.classList.add('zone-threshold-row');
+                    const rowTop = document.createElement('div');
+                    rowTop.className = 'control-row zone-threshold-row zone-threshold-row-top';
+                    rowTop.style.marginBottom = '0';
 
                     const btnDec = document.createElement('button');
                     btnDec.type = 'button';
@@ -1853,15 +1865,20 @@
                     btn.textContent = 'Guardar';
                     btn.title = 'Guardar umbral (y asignación) solo de esta planta';
 
-                    row.appendChild(btnDec);
-                    row.appendChild(rng);
-                    row.appendChild(btnInc);
-                    row.appendChild(val);
-                    row.appendChild(btn);
+                    rowTop.appendChild(btnDec);
+                    rowTop.appendChild(rng);
+                    rowTop.appendChild(btnInc);
+
+                    const rowBottom = document.createElement('div');
+                    rowBottom.className = 'control-row zone-threshold-row zone-threshold-row-bottom';
+                    rowBottom.style.marginTop = '8px';
+                    rowBottom.appendChild(val);
+                    rowBottom.appendChild(btn);
 
                     thrCard.appendChild(label);
                     thrCard.appendChild(meta);
-                    thrCard.appendChild(row);
+                    thrCard.appendChild(rowTop);
+                    thrCard.appendChild(rowBottom);
                     sec.appendChild(thrCard);
 
                     rng.addEventListener('input', () => {
