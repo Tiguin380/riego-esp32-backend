@@ -783,6 +783,7 @@ const DeviceConfigSchema = z
     humidity_good_color: z.string().min(1).max(30).optional(),
     led_mode: z.string().min(1).max(10).optional(),
     led_manual_color: z.string().min(1).max(30).optional(),
+    manual_valve_state: z.enum(['ON', 'OFF', 'AUTO']).optional(),
     wet_v: z.coerce.number().optional(),
     dry_v: z.coerce.number().optional(),
     alert_humidity_low_minutes: z.coerce.number().int().min(0).max(1440).optional(),
@@ -925,6 +926,7 @@ async function initDB() {
         humidity_good_color VARCHAR(20) DEFAULT 'Verde',
         led_mode VARCHAR(10) DEFAULT 'auto',
         led_manual_color VARCHAR(20) DEFAULT 'Off',
+        manual_valve_state VARCHAR(10) DEFAULT 'AUTO',
         wet_v DECIMAL(6,3),
         dry_v DECIMAL(6,3),
         reboot_count_offset INTEGER DEFAULT 0,
@@ -988,6 +990,7 @@ async function initDB() {
     // Migraciones idempotentes (aseguran columnas nuevas en instalaciones existentes)
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS led_mode VARCHAR(10) DEFAULT 'auto'`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS led_manual_color VARCHAR(20) DEFAULT 'Off'`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS manual_valve_state VARCHAR(10) DEFAULT 'AUTO'`);
     await pool.query(`ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS valve_state VARCHAR(10)`);
 
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS location VARCHAR(120)`);
@@ -1497,6 +1500,7 @@ async function ensureDeviceConfigSchema() {
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS wet_v DECIMAL(6,3)`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS dry_v DECIMAL(6,3)`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS reboot_count_offset INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS manual_valve_state VARCHAR(10) DEFAULT 'AUTO'`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_humidity_low_minutes INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_valve_on_max_minutes INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE device_config ADD COLUMN IF NOT EXISTS alert_sensor_dead_minutes INTEGER DEFAULT 0`);
@@ -3598,6 +3602,7 @@ app.get('/api/config/:device_code', async (req, res) => {
       humidity_good_color: 'Verde',
       led_mode: 'auto',
       led_manual_color: 'Off',
+      manual_valve_state: 'AUTO',
       wet_v: null,
       dry_v: null,
       alert_humidity_low_minutes: 0,
@@ -3637,6 +3642,7 @@ app.get('/api/config/:device_code', async (req, res) => {
         humidity_good_color: 'Verde',
         led_mode: 'auto',
         led_manual_color: 'Off',
+        manual_valve_state: 'AUTO',
         wet_v: null,
         dry_v: null,
         alert_humidity_low_minutes: 0,
@@ -3694,6 +3700,7 @@ app.get('/api/config/:device_code', async (req, res) => {
       humidity_good_color: 'Verde',
       led_mode: 'auto',
       led_manual_color: 'Off',
+      manual_valve_state: 'AUTO',
       wet_v: null,
       dry_v: null,
       alert_humidity_low_minutes: 0,
@@ -3951,13 +3958,14 @@ app.post('/api/config/:device_code', async (req, res) => {
              id, device_id,
              humidity_low_threshold, humidity_low_color, humidity_good_color,
              led_mode, led_manual_color,
+             manual_valve_state,
              wet_v, dry_v,
              alert_humidity_low_minutes, alert_valve_on_max_minutes, alert_sensor_dead_minutes,
              alert_voltage_min, alert_voltage_max,
              notify_webhook_url, notify_telegram_chat_id,
              zones_json
            )
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb)`,
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18::jsonb)`,
           [
             config_id,
             device_id,
@@ -3966,6 +3974,7 @@ app.post('/api/config/:device_code', async (req, res) => {
             parsed.data.humidity_good_color,
             parsed.data.led_mode,
             parsed.data.led_manual_color,
+            parsed.data.manual_valve_state,
             parsed.data.wet_v,
             parsed.data.dry_v,
             parsed.data.alert_humidity_low_minutes,
@@ -3988,24 +3997,26 @@ app.post('/api/config/:device_code', async (req, res) => {
              humidity_good_color = COALESCE($3, humidity_good_color),
              led_mode = COALESCE($4, led_mode),
              led_manual_color = COALESCE($5, led_manual_color),
-             wet_v = COALESCE($6, wet_v),
-             dry_v = COALESCE($7, dry_v),
-             alert_humidity_low_minutes = COALESCE($8, alert_humidity_low_minutes),
-             alert_valve_on_max_minutes = COALESCE($9, alert_valve_on_max_minutes),
-             alert_sensor_dead_minutes = COALESCE($10, alert_sensor_dead_minutes),
-             alert_voltage_min = COALESCE($11, alert_voltage_min),
-             alert_voltage_max = COALESCE($12, alert_voltage_max),
-             notify_webhook_url = COALESCE($13, notify_webhook_url),
-             notify_telegram_chat_id = COALESCE($14, notify_telegram_chat_id),
-             zones_json = COALESCE($15::jsonb, zones_json),
+             manual_valve_state = COALESCE($6, manual_valve_state),
+             wet_v = COALESCE($7, wet_v),
+             dry_v = COALESCE($8, dry_v),
+             alert_humidity_low_minutes = COALESCE($9, alert_humidity_low_minutes),
+             alert_valve_on_max_minutes = COALESCE($10, alert_valve_on_max_minutes),
+             alert_sensor_dead_minutes = COALESCE($11, alert_sensor_dead_minutes),
+             alert_voltage_min = COALESCE($12, alert_voltage_min),
+             alert_voltage_max = COALESCE($13, alert_voltage_max),
+             notify_webhook_url = COALESCE($14, notify_webhook_url),
+             notify_telegram_chat_id = COALESCE($15, notify_telegram_chat_id),
+             zones_json = COALESCE($16::jsonb, zones_json),
              updated_at = CURRENT_TIMESTAMP
-           WHERE device_id = $16`,
+           WHERE device_id = $17`,
           [
             parsed.data.humidity_low_threshold,
             parsed.data.humidity_low_color,
             parsed.data.humidity_good_color,
             parsed.data.led_mode,
             parsed.data.led_manual_color,
+            parsed.data.manual_valve_state,
             parsed.data.wet_v,
             parsed.data.dry_v,
             parsed.data.alert_humidity_low_minutes,

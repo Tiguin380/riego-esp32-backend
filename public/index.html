@@ -56,7 +56,7 @@
         .metric-bad  { border-color: rgba(255,77,77,0.30); box-shadow: 0 12px 28px rgba(255,77,77,0.10), 0 10px 26px rgba(0,0,0,0.25); }
         .metric-neutral { border-color: rgba(255,255,255,0.08); }
 
-        /* Colores por tarjeta (accent): aplica a tarjetas sin “color” propio */
+        /*Colores por tarjeta (accent): aplica a tarjetas sin “color” propio */
         .sensor-card.accent { position: relative; overflow: hidden; border-color: rgba(255,255,255,0.10); box-shadow: 0 12px 28px rgba(0,0,0,0.25), inset 0 0 0 1px var(--accent-soft);margin-bottom: 15px;}
         .sensor-card.accent::before {
             content: "";
@@ -764,9 +764,9 @@
                     </div>
                 </div>
                 <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap; justify-content:flex-end;">
-                    <button class="btn btn-azul" id="btnDia" type="button">DÍA</button>
-                    <button class="btn btn-azul" id="btnMes" type="button">MES</button>
-                    <button class="btn btn-azul" id="btnAno" type="button">AÑO</button>
+                    <button class="mini-btn zone-mode-btn zone-mode-day" id="btnDia" type="button">DÍA</button>
+                    <button class="mini-btn zone-mode-btn zone-mode-month" id="btnMes" type="button">MES</button>
+                    <button class="mini-btn zone-mode-btn zone-mode-year" id="btnAno" type="button">AÑO</button>
                 </div>
                 <div id="globalMonthYearControls" class="hidden" style="width:100%; margin-top: 10px;"></div>
             </div>
@@ -774,21 +774,23 @@
             <div class="channel-cards">
                 <div class="channel-card accent accent-green">
                     <div class="channel-title">
-                        <div class="sensor-label">Sensor de humedad (gráfica)</div>
+                        <div class="sensor-label">Selecciona Gráfica</div>
                     </div>
                     <select id="humChannelSelect" title="Seleccionar sensor de humedad"></select>
                     <div class="channel-actions">
                         <button class="mini-btn" id="btnRenameHum" type="button">Renombrar</button>
+                        <button class="mini-btn" id="cmpAddBtnHum" type="button">Añadir gráfica</button>
                         <button class="mini-btn danger" id="btnDeleteHum" type="button" title="Eliminar sensores añadidos">Eliminar</button>
                     </div>
                 </div>
                 <div class="channel-card accent accent-red">
                     <div class="channel-title">
-                        <div class="sensor-label">Válvula (gráfica)</div>
+                        <div class="sensor-label">Selecciona Gráfica</div>
                     </div>
                     <select id="valveChannelSelect" title="Seleccionar válvula"></select>
                     <div class="channel-actions">
                         <button class="mini-btn" id="btnRenameValve" type="button">Renombrar</button>
+                        <button class="mini-btn" id="cmpAddBtnValve" type="button">Añadir gráfica</button>
                         <button class="mini-btn danger" id="btnDeleteValve" type="button" title="Eliminar válvulas añadidas">Eliminar</button>
                     </div>
                 </div>
@@ -920,9 +922,6 @@
                 </div>
             </div>
 
-            <div class="cmp-add-row" style="display:flex; justify-content:flex-end; margin-top: 10px; gap: 10px; flex-wrap: wrap;">
-                <button class="mini-btn zones-global-btn" id="cmpAddBtn" type="button">Añadir gráfica (máx 8)</button>
-            </div>
         </div>
 
         <div class="section">
@@ -1386,6 +1385,44 @@
                 }
             }
 
+            async function setManualValveState(state, btnEl) {
+                const desired = String(state || '').toUpperCase();
+                if (!['ON', 'OFF', 'AUTO'].includes(desired)) return;
+                const headersBase = { 'Content-Type': 'application/json' };
+                const saved = (getSavedToken(deviceCode) || '').trim();
+                const headers1 = { ...headersBase };
+                if (saved) headers1['X-Device-Token'] = saved;
+
+                async function doSave(headers, body) {
+                    return fetch(`/api/config/${encodeURIComponent(deviceCode)}`, {
+                        method: 'POST',
+                        headers,
+                        credentials: 'include',
+                        body: JSON.stringify(body)
+                    });
+                }
+
+                const oldText = btnEl ? btnEl.textContent : '';
+                if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Enviando…'; }
+                try {
+                    let res = await doSave(headers1, { manual_valve_state: desired });
+                    if (res.status === 401 || res.status === 403) {
+                        const msg = saved
+                            ? 'Token guardado inválido o caducado. Pega el token correcto:'
+                            : 'Este dispositivo requiere token para guardar. Pégalo aquí:';
+                        const t = (prompt(msg) || '').trim();
+                        if (t) {
+                            saveToken(deviceCode, t);
+                            const headers2 = { ...headersBase, 'X-Device-Token': t };
+                            res = await doSave(headers2, { manual_valve_state: desired });
+                        }
+                    }
+                    if (!res.ok) throw new Error('Error guardando');
+                } finally {
+                    if (btnEl) { btnEl.disabled = false; btnEl.textContent = oldText || btnEl.textContent; }
+                }
+            }
+
             try { destroyZoneMiniCharts(); } catch {}
             container.innerHTML = '';
 
@@ -1759,6 +1796,12 @@
                     row.className = 'control-row';
                     row.style.marginBottom = '0';
 
+                    const btnDec = document.createElement('button');
+                    btnDec.type = 'button';
+                    btnDec.className = 'mini-btn zone-controls-btn tiny';
+                    btnDec.textContent = '−';
+                    btnDec.title = 'Bajar umbral';
+
                     const rng = document.createElement('input');
                     rng.type = 'range';
                     rng.min = '1';
@@ -1766,6 +1809,12 @@
                     rng.id = `zoneThr${zoneNum}`;
                     rng.title = 'Umbral de humedad baja (zona)';
                     rng.style.flex = '1';
+
+                    const btnInc = document.createElement('button');
+                    btnInc.type = 'button';
+                    btnInc.className = 'mini-btn zone-controls-btn tiny';
+                    btnInc.textContent = '+';
+                    btnInc.title = 'Subir umbral';
 
                     const val = document.createElement('div');
                     val.id = `zoneThrVal${zoneNum}`;
@@ -1781,7 +1830,9 @@
                     btn.textContent = 'Guardar';
                     btn.title = 'Guardar umbral (y asignación) solo de esta planta';
 
+                    row.appendChild(btnDec);
                     row.appendChild(rng);
+                    row.appendChild(btnInc);
                     row.appendChild(val);
                     row.appendChild(btn);
 
@@ -1797,8 +1848,44 @@
                         updateZoneSubtitles();
                     });
 
+                    function bumpThreshold(delta) {
+                        const cur = Number(rng.value);
+                        const next = Math.max(1, Math.min(100, (Number.isFinite(cur) ? cur : Number(zonesState[i].humidity_low_threshold ?? 25)) + delta)));
+                        rng.value = String(next);
+                        zonesState[i].humidity_low_threshold = next;
+                        val.textContent = `${Math.round(Number(zonesState[i].humidity_low_threshold ?? 25))}%`;
+                        updateZoneSubtitles();
+                    }
+                    btnDec.addEventListener('click', () => bumpThreshold(-1));
+                    btnInc.addEventListener('click', () => bumpThreshold(1));
+
                     btn.addEventListener('click', async () => {
                         await saveZoneConfig(zoneNum, btn);
+                    });
+
+                    const valveRow = document.createElement('div');
+                    valveRow.className = 'control-row';
+                    valveRow.style.marginTop = '8px';
+
+                    const valveOnBtn = document.createElement('button');
+                    valveOnBtn.type = 'button';
+                    valveOnBtn.className = 'mini-btn zone-controls-btn tiny';
+                    valveOnBtn.textContent = 'Encender válvula';
+
+                    const valveOffBtn = document.createElement('button');
+                    valveOffBtn.type = 'button';
+                    valveOffBtn.className = 'mini-btn danger tiny';
+                    valveOffBtn.textContent = 'Apagar válvula';
+
+                    valveRow.appendChild(valveOnBtn);
+                    valveRow.appendChild(valveOffBtn);
+                    thrCard.appendChild(valveRow);
+
+                    valveOnBtn.addEventListener('click', async () => {
+                        await setManualValveState('ON', valveOnBtn);
+                    });
+                    valveOffBtn.addEventListener('click', async () => {
+                        await setManualValveState('OFF', valveOffBtn);
                     });
                 }
 
@@ -4227,6 +4314,8 @@
 
         function initCompareButtons() {
             const addBtn = document.getElementById('cmpAddBtn');
+            const addBtnHum = document.getElementById('cmpAddBtnHum');
+            const addBtnValve = document.getElementById('cmpAddBtnValve');
 
             for (const slot of CMP_SLOTS) {
                 const rm = document.getElementById(`cmpRemove${slot}`);
@@ -4279,6 +4368,8 @@
             }
 
             if (addBtn) addBtn.addEventListener('click', () => { addCompareChartByModal(); });
+            if (addBtnHum) addBtnHum.addEventListener('click', () => { addCompareChartByModal(); });
+            if (addBtnValve) addBtnValve.addEventListener('click', () => { addCompareChartByModal(); });
         }
 
         function sectionStorageKey(sec) {
