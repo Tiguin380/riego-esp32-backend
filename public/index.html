@@ -5654,10 +5654,8 @@
                         const v = row?.value == null ? null : Number(row.value);
                         sArr[idx].y = (v == null || Number.isNaN(v)) ? null : Number(v.toFixed(2));
                     }
-                            yMin = 0;
-                            yMax = 200;
-                            yTickCb = undefined;
-                            yTickStep = 20;
+                }
+                for (const y of sArr) series.push(y);
             } else if (viewMode === 'month') {
                 const byDay = {};
                 for (const row of rows) {
