@@ -184,6 +184,21 @@
         .zone-year-pill .mini-btn { padding: 6px 10px; font-size: 11px; border-radius: 10px; }
         .zone-year-label { padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: rgba(233,238,247,0.92); font-size: 12px; }
 
+        .zone-threshold-card .zone-threshold-row,
+        .zone-threshold-card .zone-threshold-valve-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 900px) {
+            .zone-threshold-card .zone-threshold-row { gap: 8px; }
+            .zone-threshold-card .zone-threshold-row .mini-btn { min-width: 44px; }
+            .zone-threshold-card .zone-threshold-row .sensor-value.small { min-width: 56px; }
+            .zone-threshold-card .zone-threshold-valve-row .mini-btn { flex: 1 1 140px; }
+        }
+
         .sensor-meta { margin-top: 6px; margin-bottom: 8px; display:flex; flex-direction: column; gap: 4px; }
         .sensor-meta-top { display:flex; align-items: center; justify-content: space-between; gap: 8px; }
         .sensor-meta-name { font-size: 11px; color: #33cc33; font-weight: 900; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 0 14px rgba(51,204,51,0.18); }
@@ -1418,8 +1433,14 @@
                         }
                     }
                     if (!res.ok) throw new Error('Error guardando');
+                    if (btnEl) btnEl.textContent = 'OK';
+                    setTimeout(() => {
+                        if (btnEl) btnEl.textContent = oldText || btnEl.textContent;
+                    }, 900);
+                } catch (e) {
+                    try { alert('No se pudo cambiar la válvula. Revisa el token o la conexión.'); } catch {}
                 } finally {
-                    if (btnEl) { btnEl.disabled = false; btnEl.textContent = oldText || btnEl.textContent; }
+                    if (btnEl) { btnEl.disabled = false; }
                 }
             }
 
@@ -1780,6 +1801,7 @@
                 {
                     const thrCard = document.createElement('div');
                     thrCard.className = 'sensor-card metric-neutral accent accent-green';
+                    thrCard.classList.add('zone-threshold-card');
 
                     const label = document.createElement('div');
                     label.className = 'sensor-label';
@@ -1795,6 +1817,7 @@
                     const row = document.createElement('div');
                     row.className = 'control-row';
                     row.style.marginBottom = '0';
+                    row.classList.add('zone-threshold-row');
 
                     const btnDec = document.createElement('button');
                     btnDec.type = 'button';
@@ -1866,6 +1889,7 @@
                     const valveRow = document.createElement('div');
                     valveRow.className = 'control-row';
                     valveRow.style.marginTop = '8px';
+                    valveRow.classList.add('zone-threshold-valve-row');
 
                     const valveOnBtn = document.createElement('button');
                     valveOnBtn.type = 'button';
