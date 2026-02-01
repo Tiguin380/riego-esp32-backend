@@ -173,6 +173,13 @@
         .zone-mode-btn.zone-mode-month { background: linear-gradient(180deg, rgba(59,130,246,0.26), rgba(15,23,42,0.70)); border-color: rgba(59,130,246,0.25); }
         .zone-mode-btn.zone-mode-year { background: linear-gradient(180deg, rgba(167,139,250,0.26), rgba(15,23,42,0.70)); border-color: rgba(167,139,250,0.25); }
 
+        .zone-month-row { display:flex; gap: 8px; margin: 0 0 10px; overflow-x: auto; padding-bottom: 4px; }
+        .zone-month-row::-webkit-scrollbar { height: 6px; }
+        .zone-month-row::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 10px; }
+        .zone-month-btn { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: rgba(233,238,247,0.92); }
+        .zone-month-btn.active { border-color: rgba(255,255,255,0.22); filter: brightness(1.08); }
+        .zone-month-row .mini-btn { padding: 7px 10px; font-size: 11px; border-radius: 10px; white-space: nowrap; }
+
         .sensor-meta { margin-top: 6px; margin-bottom: 8px; display:flex; flex-direction: column; gap: 4px; }
         .sensor-meta-top { display:flex; align-items: center; justify-content: space-between; gap: 8px; }
         .sensor-meta-name { font-size: 11px; color: #33cc33; font-weight: 900; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 0 14px rgba(51,204,51,0.18); }
@@ -539,7 +546,7 @@
               onerror="this.style.display='none'"
             />
         </div>
-        <div class="status" style="margin-bottom: 12px;">UI 2026-02-01e</div>
+        <div class="status" style="margin-bottom: 12px;">UI 2026-02-01f</div>
 
         <div class="top-nav">
             <button class="mini-btn active" id="navDevices" type="button">Dispositivos</button>
@@ -1471,7 +1478,49 @@
                     topBar.appendChild(modeRow);
                     sec.appendChild(topBar);
 
+                    // Selector de mes (solo visible en modo MES)
+                    {
+                        const monthRow = document.createElement('div');
+                        monthRow.className = 'zone-month-row';
+                        monthRow.id = `zoneMonthRow${zoneNum}`;
+
+                        const months = [
+                            { mo: '01', label: 'ENERO' },
+                            { mo: '02', label: 'FEBRERO' },
+                            { mo: '03', label: 'MARZO' },
+                            { mo: '04', label: 'ABRIL' },
+                            { mo: '05', label: 'MAYO' },
+                            { mo: '06', label: 'JUNIO' },
+                            { mo: '07', label: 'JULIO' },
+                            { mo: '08', label: 'AGOSTO' },
+                            { mo: '09', label: 'SEPTIEMBRE' },
+                            { mo: '10', label: 'OCTUBRE' },
+                            { mo: '11', label: 'NOVIEMBRE' },
+                            { mo: '12', label: 'DICIEMBRE' }
+                        ];
+
+                        for (const m of months) {
+                            const b = document.createElement('button');
+                            b.type = 'button';
+                            b.className = 'mini-btn zone-month-btn';
+                            b.id = `zoneBtnMonth${zoneNum}_${m.mo}`;
+                            b.textContent = m.label;
+                            b.addEventListener('click', () => {
+                                const cur = getZoneMonthSelection(zoneNum);
+                                setZoneMonthSelection(zoneNum, { y: cur.y, mo: m.mo });
+                                setActiveZoneMonthButtons(zoneNum, getZoneMonthSelection(zoneNum));
+                                forceZoneMiniHistoryReload(zoneNum);
+                                scheduleZoneChartsRebuild(zoneNum);
+                                try { updateZoneSummary(zoneNum); } catch {}
+                            });
+                            monthRow.appendChild(b);
+                        }
+
+                        sec.appendChild(monthRow);
+                    }
+
                     setActiveZoneModeButtons(zoneNum, getZoneViewMode(zoneNum));
+                    try { setActiveZoneMonthButtons(zoneNum, getZoneMonthSelection(zoneNum)); } catch {}
 
                     // Controles ocultos por defecto
                     const open = getZoneControlsOpen(zoneNum);
@@ -3362,6 +3411,51 @@
 
         // Modo de visualización por planta (independiente)
         const zoneViewMode = new Map();
+
+        // Mes seleccionado por planta (para modo MES)
+        const zoneMonthSelection = new Map();
+        function getZoneMonthSelection(zoneNum) {
+            const z = Number(zoneNum);
+            const cur = zoneMonthSelection.get(z);
+            if (cur && cur.y && cur.mo) return cur;
+            const pNow = getMadridParts(nowAdjusted());
+            const def = { y: String(pNow.y), mo: String(pNow.mo) };
+            zoneMonthSelection.set(z, def);
+            return def;
+        }
+        function setZoneMonthSelection(zoneNum, { y, mo } = {}) {
+            const z = Number(zoneNum);
+            const yy = String(y || '');
+            const mm = String(mo || '');
+            if (!Number.isFinite(z) || z < 1 || z > 8) return;
+            if (!/^\d{4}$/.test(yy) || !/^\d{2}$/.test(mm)) return;
+            zoneMonthSelection.set(z, { y: yy, mo: mm });
+        }
+        function setActiveZoneMonthButtons(zoneNum, sel) {
+            const z = Number(zoneNum);
+            const row = document.getElementById(`zoneMonthRow${z}`);
+            if (!row) return;
+            const mo = sel && sel.mo ? String(sel.mo) : '';
+            for (let i = 1; i <= 12; i++) {
+                const mm = pad2(i);
+                const b = document.getElementById(`zoneBtnMonth${z}_${mm}`);
+                if (b) b.classList.toggle('active', mm === mo);
+            }
+        }
+
+        // Forzar recarga de histórico (evita que el “restore cache” bloquee cambios de MES/AÑO en móvil)
+        const forceMiniHistoryReloadZones = new Set();
+        function forceZoneMiniHistoryReload(zoneNum) {
+            const z = Number(zoneNum);
+            if (Number.isFinite(z)) forceMiniHistoryReloadZones.add(z);
+        }
+        function consumeForceZoneMiniHistoryReload(zoneNum) {
+            const z = Number(zoneNum);
+            const had = forceMiniHistoryReloadZones.has(z);
+            if (had) forceMiniHistoryReloadZones.delete(z);
+            return had;
+        }
+
         function getZoneViewMode(zoneNum) {
             const m = zoneViewMode.get(Number(zoneNum));
             return (m === 'day' || m === 'month' || m === 'year') ? m : 'day';
@@ -3374,6 +3468,12 @@
             if (bD) bD.classList.toggle('active', mode === 'day');
             if (bM) bM.classList.toggle('active', mode === 'month');
             if (bY) bY.classList.toggle('active', mode === 'year');
+
+            const monthRow = document.getElementById(`zoneMonthRow${z}`);
+            if (monthRow) monthRow.style.display = (mode === 'month') ? 'flex' : 'none';
+            if (mode === 'month') {
+                try { setActiveZoneMonthButtons(z, getZoneMonthSelection(z)); } catch {}
+            }
         }
         function setZoneViewMode(zoneNum, mode) {
             const z = Number(zoneNum);
@@ -3381,6 +3481,7 @@
             if (mode !== 'day' && mode !== 'month' && mode !== 'year') return;
             zoneViewMode.set(z, mode);
             setActiveZoneModeButtons(z, mode);
+            forceZoneMiniHistoryReload(z);
             scheduleZoneChartsRebuild(z);
             try { updateZoneSummary(z); } catch {}
         }
@@ -3976,8 +4077,31 @@
             }
         }
 
+        function miniCacheExtraKeyForCanvas(canvasId, mode) {
+            try {
+                const m = String(canvasId || '').match(/Chart(\d+)$/);
+                const zoneNum = m ? Number(m[1]) : null;
+                if (!Number.isFinite(zoneNum)) return '';
+                if (mode === 'month') {
+                    const sel = getZoneMonthSelection(zoneNum);
+                    return sel && sel.y && sel.mo ? `${sel.y}-${sel.mo}` : '';
+                }
+                if (mode === 'year') {
+                    const sel = getZoneMonthSelection(zoneNum);
+                    return sel && sel.y ? `${sel.y}` : '';
+                }
+                return '';
+            } catch {
+                return '';
+            }
+        }
+
         function miniCacheKey(canvasId, mode) {
-            try { return `ui:miniCache:${deviceCode}:${canvasId}:${mode}`; } catch { return null; }
+            try {
+                const extra = miniCacheExtraKeyForCanvas(canvasId, mode);
+                const suffix = extra ? `:${extra}` : '';
+                return `ui:miniCache:${deviceCode}:${canvasId}:${mode}${suffix}`;
+            } catch { return null; }
         }
 
         function saveMiniCache(canvasId, entry) {
@@ -4115,9 +4239,14 @@
                             delete e.chart.options.scales.x.min;
                             delete e.chart.options.scales.x.max;
                             e.chart.options.scales.x.ticks.autoSkip = true;
-                            e.chart.options.scales.x.ticks.maxTicksLimit = 8;
-                            e.chart.options.scales.x.ticks.callback = undefined;
-                            delete e.chart.options.scales.x.ticks.font;
+                            e.chart.options.scales.x.ticks.maxTicksLimit = (mode === 'month') ? 30 : 12;
+                            e.chart.options.scales.x.ticks.font = { size: 10 };
+                            e.chart.options.scales.x.ticks.callback = (v) => {
+                                try {
+                                    if (mode === 'month') return String(Number(v));
+                                    return String(v);
+                                } catch { return String(v); }
+                            };
                             delete e.chart.options.scales.x.ticks.stepSize;
                             delete e.chart.options.scales.x.ticks.includeBounds;
                         }
@@ -4233,10 +4362,17 @@
                                 color: '#fff',
                                 autoSkip: mode === 'day' ? false : true,
                                 stepSize: mode === 'day' ? (dayCfg ? dayCfg.stepSize : 120) : undefined,
-                                maxTicksLimit: mode === 'day' ? (dayCfg ? dayCfg.maxTicksLimit : 13) : 8,
-                                font: mode === 'day' ? { size: (dayCfg ? dayCfg.fontSize : 12) } : undefined,
+                                maxTicksLimit: mode === 'day' ? (dayCfg ? dayCfg.maxTicksLimit : 13) : (mode === 'month' ? 30 : 12),
+                                font: mode === 'day' ? { size: (dayCfg ? dayCfg.fontSize : 12) } : { size: 10 },
                                 includeBounds: mode === 'day' ? true : undefined,
-                                callback: mode === 'day' ? dayTickLabelCallback(dayCfg ? dayCfg.stepSize : 120) : undefined,
+                                callback: mode === 'day'
+                                    ? dayTickLabelCallback(dayCfg ? dayCfg.stepSize : 120)
+                                    : ((v) => {
+                                        try {
+                                            if (mode === 'month') return String(Number(v));
+                                            return String(v);
+                                        } catch { return String(v); }
+                                    }),
                                 maxRotation: 0,
                                 minRotation: 0,
                                 backdropColor: 'rgba(0,0,0,0)',
@@ -4281,15 +4417,43 @@
             return entry;
         }
 
-        async function loadMiniChartHistory(canvasId, channelId, { kind, mode = 'day' } = {}) {
+        function rangeForMini(mode, { y, mo } = {}) {
+            const now = nowAdjusted();
+            const pNow = getMadridParts(now);
+            const yy = (y && /^\d{4}$/.test(String(y))) ? String(y) : String(pNow.y);
+            const mm = (mo && /^\d{2}$/.test(String(mo))) ? String(mo) : String(pNow.mo);
+
+            if (mode === 'day') {
+                const from = madridZonedTimeToUtcDate({ y: pNow.y, mo: pNow.mo, d: pNow.d, h: 0, mi: 0, s: 0 });
+                return { from, to: now };
+            }
+            if (mode === 'month') {
+                const from = madridZonedTimeToUtcDate({ y: yy, mo: mm, d: 1, h: 0, mi: 0, s: 0 });
+                // to: primer día del mes siguiente (00:00 Madrid)
+                let nY = Number(yy);
+                let nM = Number(mm);
+                nM += 1;
+                if (nM > 12) { nM = 1; nY += 1; }
+                const to = madridZonedTimeToUtcDate({ y: String(nY), mo: pad2(nM), d: 1, h: 0, mi: 0, s: 0 });
+                return { from, to };
+            }
+            // year
+            const from = madridZonedTimeToUtcDate({ y: yy, mo: 1, d: 1, h: 0, mi: 0, s: 0 });
+            const to = madridZonedTimeToUtcDate({ y: String(Number(yy) + 1), mo: 1, d: 1, h: 0, mi: 0, s: 0 });
+            return { from, to };
+        }
+
+        async function loadMiniChartHistory(canvasId, channelId, { kind, mode = 'day', sel = null } = {}) {
             if (!channelId) return;
 
             let step = 'raw';
             let limit = 900;
             if (mode === 'day') { step = '1m'; limit = 2000; }
-            else { step = '1h'; limit = 2500; }
+            else if (mode === 'month') { step = '1h'; limit = 2500; }
+            else { step = '1h'; limit = 12000; }
 
-            const range = rangeForMode(mode);
+            const sel2 = (mode === 'month' || mode === 'year') ? (sel || null) : null;
+            const range = (mode === 'month' || mode === 'year') ? rangeForMini(mode, sel2 || undefined) : rangeForMode(mode);
             const rangeQs = (range && range.from && range.to)
                 ? `&from=${encodeURIComponent(range.from.toISOString())}&to=${encodeURIComponent(range.to.toISOString())}`
                 : '';
@@ -4362,24 +4526,73 @@
                 for (const t of tArr) entry.ts.push(t);
             } else if (mode === 'month') {
                 // Agrupar por día
+                const pSel = sel2 && sel2.y && sel2.mo ? { y: String(sel2.y), mo: String(sel2.mo) } : getMadridParts(nowAdjusted());
                 if (kind === 'valve') {
-                    const byDay = {};
-                    for (const row of rows) {
-                        const k = row?.ts_madrid_day_key || dayKeyForTs(row?.ts);
-                        const b = byDay[k] || (byDay[k] = { on: 0, cnt: 0 });
-                        const on = Number(row?.state || 0) >= 1 ? 1 : 0;
-                        b.on += on;
-                        b.cnt += 1;
+                    // Calcular horas ON por día usando deltas reales entre puntos (no promedios)
+                    const byDayMs = {};
+                    const seenDay = new Set();
+
+                    const parsed = rows
+                        .map(r => ({ r, t: (parseTsToDate(r?.ts) || null) }))
+                        .filter(x => x.t && !Number.isNaN(x.t.getTime()))
+                        .map(x => ({ r: x.r, ms: x.t.getTime() }))
+                        .sort((a, b) => a.ms - b.ms);
+
+                    for (const x of parsed) {
+                        const k = x.r?.ts_madrid_day_key || dayKeyForTs(x.r?.ts);
+                        if (k) seenDay.add(String(k));
                     }
-                    const pNow = getMadridParts(nowAdjusted());
-                    const daysInMonth = daysInMadridMonthFromParts({ y: pNow.y, mo: pNow.mo });
+
+                    function nextDayPartsFromParts(p) {
+                        let yy = Number(p.y);
+                        let mm = Number(p.mo);
+                        let dd = Number(p.d);
+                        const dim = daysInMadridMonthFromParts({ y: yy, mo: mm });
+                        dd += 1;
+                        if (dd > dim) {
+                            dd = 1;
+                            mm += 1;
+                            if (mm > 12) { mm = 1; yy += 1; }
+                        }
+                        return { y: String(yy), mo: pad2(mm), d: pad2(dd) };
+                    }
+
+                    function addOnMsSplitByDay(startMs, endMs) {
+                        let cur = startMs;
+                        while (cur < endMs) {
+                            const p = getMadridPartsFull(new Date(cur));
+                            const nextP = nextDayPartsFromParts(p);
+                            const boundary = madridZonedTimeToUtcDate({ y: nextP.y, mo: nextP.mo, d: nextP.d, h: 0, mi: 0, s: 0 }).getTime();
+                            const chunkEnd = Math.min(endMs, boundary);
+                            const k = `${p.y}-${p.mo}-${p.d}`;
+                            byDayMs[k] = (byDayMs[k] || 0) + Math.max(0, chunkEnd - cur);
+                            cur = chunkEnd;
+                        }
+                    }
+
+                    for (let i = 0; i < parsed.length - 1; i++) {
+                        const cur = parsed[i];
+                        const next = parsed[i + 1];
+                        const onNow = Number(cur.r?.state || 0) >= 1;
+                        if (!onNow) continue;
+                        const dt = Math.max(0, next.ms - cur.ms);
+                        if (dt <= 0) continue;
+                        addOnMsSplitByDay(cur.ms, next.ms);
+                    }
+
+                    const daysInMonth = daysInMadridMonthFromParts(pSel);
                     for (let day = 1; day <= daysInMonth; day++) {
-                        const k = `${pNow.y}-${pNow.mo}-${pad2(day)}`;
+                        const k = `${pSel.y}-${pSel.mo}-${pad2(day)}`;
                         labels.push(pad2(day));
-                        const b = byDay[k] || null;
-                        const onHours = b && b.cnt ? (b.on / b.cnt) * 24 : null;
-                        series.push(onHours == null ? null : Number(onHours.toFixed(2)));
-                        if (onHours != null) totalValveOnMs += onHours * 3600000;
+                        const ms = Number(byDayMs[k] || 0);
+                        const hasAny = seenDay.has(k);
+                        if (!hasAny) {
+                            series.push(null);
+                        } else {
+                            const h = ms / 3600000;
+                            series.push(Number(h.toFixed(2)));
+                            totalValveOnMs += ms;
+                        }
                     }
                 } else {
                     const byDay = {};
@@ -4393,10 +4606,9 @@
                         totalSum += v;
                         totalCount += 1;
                     }
-                    const pNow = getMadridParts(nowAdjusted());
-                    const daysInMonth = daysInMadridMonthFromParts({ y: pNow.y, mo: pNow.mo });
+                    const daysInMonth = daysInMadridMonthFromParts(pSel);
                     for (let day = 1; day <= daysInMonth; day++) {
-                        const k = `${pNow.y}-${pNow.mo}-${pad2(day)}`;
+                        const k = `${pSel.y}-${pSel.mo}-${pad2(day)}`;
                         labels.push(pad2(day));
                         const b = byDay[k] || null;
                         const avg = b && b.cnt ? (b.sum / b.cnt) : null;
@@ -4409,22 +4621,66 @@
                 lastTsMs = dLast ? dLast.getTime() : null;
             } else {
                 // year: agrupar por mes
+                const pSel = sel2 && sel2.y ? { y: String(sel2.y) } : getMadridParts(nowAdjusted());
                 if (kind === 'valve') {
-                    const byMonth = {};
-                    for (const row of rows) {
-                        const k = row?.ts_madrid_month_key || monthKeyForTs(row?.ts);
-                        const b = byMonth[k] || (byMonth[k] = { on: 0, cnt: 0 });
-                        const on = Number(row?.state || 0) >= 1 ? 1 : 0;
-                        b.on += on;
-                        b.cnt += 1;
+                    // Calcular horas ON por mes usando deltas reales
+                    const byMonthMs = {};
+                    const seenMonth = new Set();
+
+                    const parsed = rows
+                        .map(r => ({ r, t: (parseTsToDate(r?.ts) || null) }))
+                        .filter(x => x.t && !Number.isNaN(x.t.getTime()))
+                        .map(x => ({ r: x.r, ms: x.t.getTime() }))
+                        .sort((a, b) => a.ms - b.ms);
+
+                    for (const x of parsed) {
+                        const k = x.r?.ts_madrid_month_key || monthKeyForTs(x.r?.ts);
+                        if (k) seenMonth.add(String(k));
                     }
-                    const keys = Object.keys(byMonth).sort();
-                    for (const k of keys) {
-                        labels.push(k.slice(5, 7));
-                        const b = byMonth[k];
-                        const onHours = b && b.cnt ? (b.on / b.cnt) * (30 * 24) : 0;
-                        series.push(Number(onHours.toFixed(1)));
-                        totalValveOnMs += onHours * 3600000;
+
+                    function nextMonthPartsFromParts(p) {
+                        let yy = Number(p.y);
+                        let mm = Number(p.mo);
+                        mm += 1;
+                        if (mm > 12) { mm = 1; yy += 1; }
+                        return { y: String(yy), mo: pad2(mm), d: '01' };
+                    }
+
+                    function addOnMsSplitByMonth(startMs, endMs) {
+                        let cur = startMs;
+                        while (cur < endMs) {
+                            const p = getMadridPartsFull(new Date(cur));
+                            const nextP = nextMonthPartsFromParts(p);
+                            const boundary = madridZonedTimeToUtcDate({ y: nextP.y, mo: nextP.mo, d: 1, h: 0, mi: 0, s: 0 }).getTime();
+                            const chunkEnd = Math.min(endMs, boundary);
+                            const k = `${p.y}-${p.mo}`;
+                            byMonthMs[k] = (byMonthMs[k] || 0) + Math.max(0, chunkEnd - cur);
+                            cur = chunkEnd;
+                        }
+                    }
+
+                    for (let i = 0; i < parsed.length - 1; i++) {
+                        const cur = parsed[i];
+                        const next = parsed[i + 1];
+                        const onNow = Number(cur.r?.state || 0) >= 1;
+                        if (!onNow) continue;
+                        const dt = Math.max(0, next.ms - cur.ms);
+                        if (dt <= 0) continue;
+                        addOnMsSplitByMonth(cur.ms, next.ms);
+                    }
+
+                    for (let m = 1; m <= 12; m++) {
+                        const k = `${pSel.y}-${pad2(m)}`;
+                        labels.push(pad2(m));
+                        const hasAny = seenMonth.has(k);
+                        if (!hasAny) {
+                            series.push(null);
+                        } else {
+                            const ms = Number(byMonthMs[k] || 0);
+                            const h = ms / 3600000;
+                            series.push(Number(h.toFixed(1)));
+                            totalValveOnMs += ms;
+                        }
                     }
                 } else {
                     const byMonth = {};
@@ -4438,10 +4694,10 @@
                         totalSum += v;
                         totalCount += 1;
                     }
-                    const keys = Object.keys(byMonth).sort();
-                    for (const k of keys) {
-                        labels.push(k.slice(5, 7));
-                        const b = byMonth[k];
+                    for (let m = 1; m <= 12; m++) {
+                        const k = `${pSel.y}-${pad2(m)}`;
+                        labels.push(pad2(m));
+                        const b = byMonth[k] || null;
                         const avg = b && b.cnt ? (b.sum / b.cnt) : null;
                         series.push(avg == null ? null : Number(avg.toFixed(2)));
                     }
@@ -4631,6 +4887,8 @@
                 if (!Number.isFinite(zoneNum) || zoneNum < 1 || zoneNum > 8) continue;
                 const i = zoneNum - 1;
 
+                const forceReload = consumeForceZoneMiniHistoryReload(zoneNum);
+
                 const sec = document.getElementById(`zoneSec${zoneNum}`);
                 if (sec && sec.classList.contains('collapsed')) continue;
 
@@ -4639,6 +4897,11 @@
 
                 const mode = getZoneViewMode(zoneNum);
                 setActiveZoneModeButtons(zoneNum, mode);
+                if (mode === 'month') {
+                    try { setActiveZoneMonthButtons(zoneNum, getZoneMonthSelection(zoneNum)); } catch {}
+                }
+
+                const sel = (mode === 'month' || mode === 'year') ? getZoneMonthSelection(zoneNum) : null;
 
                 for (const def of defs) {
                     const canvasId = def.canvas(zoneNum);
@@ -4701,9 +4964,9 @@
 
                     const e = ensureMiniChart(canvasId, { stepped: def.stepped, yMin, yMax, yTickCb, yTickStep, mode });
                     // En móvil: si se restauró desde cache, NO recargar histórico al refrescar (evita “cambios” visuales).
-                    const skipHistory = !!(e && e._restored && isSmallViewport());
+                    const skipHistory = !!(e && e._restored && isSmallViewport() && !forceReload);
                     if (!skipHistory) {
-                        await loadMiniChartHistory(canvasId, channelId, { kind: def.kind === 'valve' ? 'valve' : 'value', mode });
+                        await loadMiniChartHistory(canvasId, channelId, { kind: def.kind === 'valve' ? 'valve' : 'value', mode, sel });
                     }
                 }
 
