@@ -3052,11 +3052,12 @@ app.get('/api/channel/history/:device_code/:channel_id', async (req, res) => {
     }
 
     // Buckets alineados a Europe/Madrid para que DÍA/MES/AÑO cuadren con el frontend.
-    // Nota: (ts AT TIME ZONE 'Europe/Madrid') devuelve timestamp local; luego AT TIME ZONE convierte a timestamptz (UTC).
+    // Importante: nuestras columnas `ts` son TIMESTAMP (sin zona) pero las tratamos como UTC.
+    // Por eso convertimos primero desde UTC -> Europe/Madrid, truncamos en hora local y luego devolvemos a timestamptz.
     let trunc;
-    if (step === '1m') trunc = "date_trunc('minute', ts AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
-    else if (step === '1h') trunc = "date_trunc('hour', ts AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
-    else if (step === '1d') trunc = "date_trunc('day', ts AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
+    if (step === '1m') trunc = "date_trunc('minute', (ts AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
+    else if (step === '1h') trunc = "date_trunc('hour', (ts AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
+    else if (step === '1d') trunc = "date_trunc('day', (ts AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
     else return res.status(400).json({ error: 'step inválido (raw|1m|1h|1d)' });
 
     const r = await pool.query(
@@ -3372,10 +3373,12 @@ app.get('/api/sensor/history/:device_code', async (req, res) => {
     }
 
     // Buckets alineados a Europe/Madrid para que los días/meses cuadren con el frontend.
+    // Importante: `created_at` es TIMESTAMP (sin zona) pero lo guardamos como UTC.
+    // Convertimos primero desde UTC -> Europe/Madrid, truncamos en hora local y luego devolvemos a timestamptz.
     let trunc;
-    if (step === '1m') trunc = "date_trunc('minute', created_at AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
-    else if (step === '1h') trunc = "date_trunc('hour', created_at AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
-    else if (step === '1d') trunc = "date_trunc('day', created_at AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
+    if (step === '1m') trunc = "date_trunc('minute', (created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
+    else if (step === '1h') trunc = "date_trunc('hour', (created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
+    else if (step === '1d') trunc = "date_trunc('day', (created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'";
     else return res.status(400).json({ error: 'step inválido (raw|1m|1h|1d)' });
 
     const result = await pool.query(
