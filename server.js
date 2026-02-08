@@ -9,6 +9,7 @@ const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
+const path = require('path');
 
 process.on('unhandledRejection', (reason) => {
   console.error('UNHANDLED_REJECTION', reason);
@@ -105,6 +106,12 @@ app.use(
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   next();
+});
+
+// Favicon: evita 404 usando el logo existente
+app.get('/favicon.ico', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public', 'logo.png'));
 });
 
 // Conexión a PostgreSQL
